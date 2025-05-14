@@ -9,4 +9,4 @@ python-dotenv==1.1.0
 pybaseball==2.2.7
 pandas==2.2.2
 numpy==1.26.4
-mlbstatsapi @ git+https://github.com/toddrob99/MLB-StatsAPI.git#egg=mlbstatsapi
+mlb-statsapi @ git+https://github.com/toddrob99/MLB-StatsAPI.git#egg=mlbstatsapi
