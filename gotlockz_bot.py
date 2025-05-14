@@ -77,16 +77,18 @@ async def postpick(ctx, units: float, channel_key: str):
     # 3) OCR the image
     raw_text = extract_text(tmp_path)
 
-    # 4) Parse out a simple pick string
-    #    e.g. "Chicago Cubs -1.5 Run Line -120 Miami Marlins at Chicago Cubs"
-    m = re.search(r"([A-Za-z ]+)\s+([-–]?\d+\.?\d*)\s+Run Line\s+([+-]?\d+)", raw_text)
-    if not m:
-        pick = raw_text.strip().replace("\n", " ")
-    else:
-        team, line, odds = m.groups()
-        mm = re.search(r"([A-Za-z ]+ at [A-Za-z ]+)", raw_text)
-        matchup = mm.group(1) if mm else ""
-        pick = f"{team.strip()} {line} ({odds})  {matchup}"
+# 4) Parse out a simple pick string (supports Run Line & Money Line)
+pattern = r"([A-Za-z .']+)\s+([+-]?\d+\.?\d*)\s+(?:Run Line|Money Line)\s+([+-]?\d+)"
+m = re.search(pattern, raw_text)
+if not m:
+    pick = raw_text.strip().replace("\n", " ")
+else:
+    team, line, odds = m.groups()
+    # try to capture “Team at Opponent” for the matchup
+    mm = re.search(r"([A-Za-z .']+)\s+at\s+([A-Za-z .']+)", raw_text)
+    matchup = f" at {mm.group(2)}" if mm else ""
+    pick = f"{team.strip()} {line} {odds}{matchup}"
+
 
     # ———————— 5) Resolve destination channel ————————
     raw = channel_key.strip().lower()
