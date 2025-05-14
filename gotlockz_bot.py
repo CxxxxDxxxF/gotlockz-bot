@@ -1,60 +1,56 @@
-import os
-import re
-import tempfile
 import aiohttp
+import tempfile
+import re
 import discord
 from discord.ext import commands
-import statsapi                  # MLB-StatsAPI
-from pybaseball import playerid_lookup
 from utils.ocr import extract_text
 from utils.sheets import init_sheets, log_pick, get_play_number
 
+# your CHANNEL_MAP up near the top of the file
 CHANNEL_MAP = {
-"🔒vip-plays": "🔒vip-plays",
-"🔒vip-plays": "🔒vip-plays",
-"vip-plays":    "🔒vip-plays",     # ← add this line
-
-"🏆free-plays": "🏆free-plays",
-"🏆free-plays": "🏆free-plays",
-"free-plays":   "🏆free-plays",    # ← and this line
- }
-
-# Load your Discord token
-TOKEN = os.getenv("DISCORD_TOKEN")
-
-# Configure Discord intents (required in discord.py v2.x)
-intents = discord.Intents.default()
-intents.message_content = True
-intents.guilds = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
-    init_sheets()
-
-
-@bot.command(name="player")
-async def fetch_player(ctx, first_name: str, last_name: str):
-    mlb_players = statsapi.lookup_player(f"{first_name} {last_name}")
-    pb_players = playerid_lookup(first_name, last_name)
-    await ctx.send(
-        f"StatsAPI results: {mlb_players}\n"
-        f"Pybaseball results: {pb_players.to_dict(orient='records')}"
-    )
-
-
-@bot.command(name="schedule")
-async def fetch_schedule(ctx, team_id: int, start: str, end: str):
-    schedule = statsapi.schedule(start_date=start, end_date=end, team=team_id)
-    await ctx.send(f"Schedule for team {team_id} from {start} to {end}: {schedule}")
-
+    "🔒vip-plays":  "vip-plays",
+    "🏆free-plays": "free-plays",
+}
 
 @bot.command(name="postpick")
 async def postpick(ctx, units: float, channel_key: str):
-    # … your OCR + parsing code above …
+    """
+    Usage in Discord:
+       !postpick 6 🔒vip-plays
+    (attach your bet slip image to the same message)
+    """
+
+    # 1) Ensure an image is attached
+    if not ctx.message.attachments:
+        return await ctx.send("✖ Please attach the bet‑slip image to your command message.")
+
+    attachment = ctx.message.attachments[0]
+
+    # 2) Download the attachment to a temp file
+    async with aiohttp.ClientSession() as sess:
+        resp = await sess.get(attachment.url)
+        data = await resp.read()
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+
+    # 3) OCR the image
+    raw_text = extract_text(tmp_path)
+
+    # 4) Parse out a simple pick string
+    #    e.g. "Chicago Cubs -1.5 Run Line -120 Miami Marlins at Chicago Cubs"
+    pattern = r"([A-Za-z .']+)\s+([+-]?\d+\.?\d*)\s+(?:Run Line|Money Line)\s+([+-]?\d+)"
+    m = re.search(pattern, raw_text)
+    if m:
+        team, line, odds = m.groups()
+        # try to capture “Team at Opponent”
+        mm = re.search(r"([A-Za-z .']+)\s+at\s+([A-Za-z .']+)", raw_text)
+        matchup = f" at {mm.group(2)}" if mm else ""
+        pick = f"{team.strip()} {line} {odds}{matchup}"
+    else:
+        # fallback to raw OCR text
+        pick = raw_text.strip().replace("\n", " ")
 
     # 5) Determine destination channel
     valid = ", ".join(CHANNEL_MAP.keys())
@@ -79,3 +75,4 @@ async def postpick(ctx, units: float, channel_key: str):
 
     # 8) Acknowledge in the command channel
     await ctx.send(f"✅ Posted pick #{play_num} to {dest.mention}")
+
