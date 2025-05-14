@@ -1,4 +1,4 @@
-import reimport re
+import re
 import time
 import discord
 import requests
