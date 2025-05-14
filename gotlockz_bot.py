@@ -10,17 +10,33 @@ import openai
 from dotenv import load_dotenv
 from datetime import date
 
-# Ensure MLBStatsAPI is installed (avoids ModuleNotFoundError on Render)
-import subprocess, sys
-try:
-    from mlbstatsapi import MLBStatsAPI
-except ModuleNotFoundError:
-    subprocess.check_call([
-        sys.executable, "-m", "pip",
-        "install", "git+https://github.com/toddrob99/MLB-StatsAPI.git"
-    ])
-    from mlbstatsapi import MLBStatsAPI
+from datetime import date
 
+ # Ensure MLBStatsAPI is installed (avoids ModuleNotFoundError on Render)
+ import subprocess, sys
+ # Ensure mlb_statsapi is installed (avoids ModuleNotFoundError on Render)
+ import subprocess, sys
+ try:
+ from mlb_statsapi import MLBStatsAPI
+ except ModuleNotFoundError:
+     subprocess.check_call([
+        sys.executable, "-m", "pip",
+         "install", "git+https://github.com/toddrob99/MLB-StatsAPI.git"
+     ])
+ from mlb_statsapi import MLBStatsAPI
+
+# ────────────────────────────────────────────────────────────
+ # Ensure mlb_statsapi is installed (avoids ModuleNotFoundError on Render)
+ import subprocess, sys
+ try:
+from mlb_statsapi import MLBStatsAPI
+ except ModuleNotFoundError:
+    subprocess.check_call([
+         sys.executable, "-m", "pip",
+         "install", "git+https://github.com/toddrob99/MLB-StatsAPI.git"
+    ])
+from mlb_statsapi import MLBStatsAPI
+ # ────────────────────────────────────────────────────────────
 from pybaseball import playerid_lookup, statcast_batter_vs_pitcher, cache
 from utils.sheets import log_pick, get_play_number
 
