@@ -61,14 +61,24 @@ async def postpick(ctx, units: float = None, channel: str = None):
     res = requests.get(ctx.message.attachments[0].url)
     img = Image.open(BytesIO(res.content))
     lines = extract_text(img)
+text = "\n".join(lines)
+print("🔍 OCR Output:\n", text)  # Add this line for debugging
+await ctx.send(f"🔍 OCR text:\n```{text[:1900]}```")  # Show preview in Discord
     text = "\n".join(lines)
 
     team = opp = od = pick = None
 
-    for pattern in [r'([+-]\d+)', r'(\d+\s*[+-]\d+)', r'odds?\s*[:=]?\s*([+-]\d+)']:
-        if match := re.search(pattern, text, re.I):
-            od = match.group(1)
-            break
+team_patterns = [
+    r'([A-Za-z\s]{3,})\s*(?:vs\.?|v\.?|@|at|-)\s*([A-Za-z\s]{3,})',
+    r'([A-Z]{2,4})\s*(?:vs\.?|@|-)\s*([A-Z]{2,4})'
+]
+
+text = text.lower()
+await ctx.send(f"🔍 OCR text:\n```{text[:1900]}```")
+for pattern in team_patterns:
+    if match := re.search(pattern, text, re.I):
+        team, opp = match.group(1).strip(), match.group(2).strip()
+        break
     if not od:
         od = "N/A"
 
