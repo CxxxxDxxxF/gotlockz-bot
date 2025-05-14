@@ -11,8 +11,8 @@ from utils.sheets import init_sheets, log_pick, get_play_number
 
 # Map your emoji keys to actual channel names
 CHANNEL_MAP = {
-    "🔒vip-plays": "vip-plays",
-    "🏆free-plays": "free-plays",
+    "🔒vip-plays": "🔒vip-plays",
+    "🏆free-plays": "🏆free-plays",
 }
 
 # Load your Discord token
