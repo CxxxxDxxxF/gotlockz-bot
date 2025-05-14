@@ -1,3 +1,4 @@
+from discord.ext import commands
 def chunk_text(text, limit=2000):
     chunks = []
     while text:
