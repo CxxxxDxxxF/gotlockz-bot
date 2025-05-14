@@ -1,175 +1,134 @@
 import discord
 from discord.ext import commands
-import requests
-import openai
-import re
 from io import BytesIO
+import pytesseract
 from PIL import Image
-from datetime import datetime
-from utils.ocr import extract_text
-from utils.sheets import init_sheets, log_pick, get_play_number
-from utils.stats import get_game_time, get_probable_pitchers
-from config import DISCORD_TOKEN, OPENAI_API_KEY, COMMAND_CHANNEL, VIP_CHANNEL_DEFAULT, FREE_CHANNEL_DEFAULT
+import re
+import openai
 
-def chunk_text(text, limit=2000):
-    chunks = []
-    while text:
-        cut = text.rfind("\n", 0, limit)
-        cut = cut if cut > 0 else limit
-        chunks.append(text[:cut])
-        text = text[cut:]
-    return chunks
+from utils.sheets import log_pick, get_play_number
 
-def generate_analysis(team, opp, tp, op, pick, odds):
-    prompt = f"""
-Write a hype‑driven, stat‑backed analysis:
-– The {team} are facing {opp}'s starter {op} today with {tp} on the mound.
-– Pick: {team} {pick} at {odds}
-Include:
-1) {tp}'s ERA, WHIP, K/9.
-2) {op}'s weaknesses.
-3) Team trends (home/away, vs RHP/LHP).
-4) Close with: make us some money tonight 💰
-"""
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    resp = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        timeout=15, max_tokens=650
-    )
-    return resp.choices[0].message.content.strip()
+# ------------------ CONFIG ------------------
+DISCORD_TOKEN = "YOUR_DISCORD_BOT_TOKEN"
+OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+openai.api_key = OPENAI_API_KEY
+# -------------------------------------------
 
-class BettingBot(commands.Bot):
-    def __init__(self):
-        intents = discord.Intents.all()
-        intents.message_content = True
-        intents.guilds = True
-        intents.messages = True
-        intents.members = True
-        super().__init__(command_prefix="!", intents=intents)
-        self.sheet = init_sheets()
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-    async def on_ready(self):
-        print(f"✅ Logged in as {self.user}")
+@bot.event
+async def on_ready():
+    print(f"✅ Bot is live as {bot.user}")
 
-bot = BettingBot()
+# ------------------ OCR PARSER ------------------
+def extract_text(image_bytes):
+    image = Image.open(image_bytes)
+    raw_text = pytesseract.image_to_string(image)
 
-@commands.command(name="postpick")
-async def postpick(self, ctx, units: float = None, channel: str = None):
-    if ctx.channel.name != COMMAND_CHANNEL:
-        return await ctx.send(f"⛔ Please run this in #{COMMAND_CHANNEL} only.")
-
-    if not ctx.message.attachments:
-        return await ctx.send("❌ Attach your bet slip image.")
-
-   # Load image bytes from Discord attachment
-attachment = ctx.message.attachments[0]
-img_bytes = await attachment.read()
-try:
-    img = Image.open(BytesIO(img_bytes))
-    lines = extract_text(img)
-    text = "\n".join(lines)
-    await ctx.send(f"📋 OCR text:\n```{text[:1900]}```")  # Optional preview
-except Exception as e:
-    return await ctx.send(f"❌ Error reading image: {e}")
-    
-    # OCR extract
-    try:
-        lines = extract_text(img)
-    except Exception as e:
-        return await ctx.send(f"❌ OCR failed: {e}")
-    text = "\n".join(lines)
-
-    # Send raw OCR output to Discord for debugging
-    await ctx.send(f"📋 OCR text:\n```{text[:1900]}```")
-
-    # Try to parse team matchup
-    team = opp = od = pick = None
-    team_patterns = [
-        r"([A-Za-z\s]{3,})\s*(?:vs\.?|@|at|-)\s*([A-Za-z\s]{3,})",
-        r"([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+at\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)"
-    ]
-
-    text_lower = text.lower()
-    for pattern in team_patterns:
-        match = re.search(pattern, text_lower, re.I)
-        if match:
-            team, opp = match.group(1).strip(), match.group(2).strip()
-            break
-
-    if not (team and opp):
-        return await ctx.send("❌ Could not parse teams—please check image quality or try again.")
-
-    # Parse odds
-    for pattern in [r'([+-]\d+)', r'odds?\s*[:=]?\s*([+-]\d+)']:
-        if match := re.search(pattern, text, re.I):
-            od = match.group(1)
-            break
-    if not od:
-        od = "N/A"
-
-    # Determine pick type
-    pick_patterns = {
-        r'\brun\s*line\b': "Run Line",
-        r'\btotal\b': "Total",
-        r'\bover\b|\bunder\b': "Over/Under",
-        r'\bspread\b': "Spread"
+    data = {
+        "team": None,
+        "line": None,
+        "odds": None,
+        "bet_type": None,
+        "wager": None,
+        "home_team": None,
+        "away_team": None
     }
-    pick = "Money Line"
-    for pattern, pick_type in pick_patterns.items():
-        if re.search(pattern, text_lower):
-            pick = pick_type
-            break
 
-    # Figure out which channel
-    if channel:
-        chan_name = channel.lstrip("#")
-        cat = "VIP" if "vip" in chan_name.lower() else "Free"
-    else:
-        cat = "VIP" if "vip" in text_lower else "Free"
-        chan_name = VIP_CHANNEL_DEFAULT if cat == "VIP" else FREE_CHANNEL_DEFAULT
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    for line in lines:
+        if "$" in line:
+            match = re.search(r"\$(\d+\.\d{2})", line)
+            if match:
+                data["wager"] = match.group(1)
 
-    target = discord.utils.get(ctx.guild.text_channels, name=chan_name)
-    if not target:
-        return await ctx.send(f"❌ Channel `{chan_name}` not found.")
+        if re.search(r"\b-?\d+\.?\d*\b.*\b-?\d{2,3}\b", line):
+            parts = line.split()
+            if len(parts) >= 3:
+                data["team"] = " ".join(parts[:-2])
+                data["line"] = parts[-2]
+                data["odds"] = parts[-1]
 
-    # Finalize pick details
-    unit_size = units if units is not None else 1
-    date = datetime.now().strftime("%m/%d/%y")
-    time_str = get_game_time(team, opp)
-    tp, op = get_probable_pitchers(team, opp)
-    analysis = generate_analysis(team, opp, tp, op, pick, od)
-    num = get_play_number(self.sheet, cat)
-    emoji = "🔒" if cat == "VIP" else "💸"
+        if "line" in line.lower():
+            data["bet_type"] = line.strip()
 
-    # Message
-    header = f"# {emoji} I {cat.upper()} PLAY # {num} - 🏆 - {date}"
-    body = (
-        f"⚾️ I Game: {team} @ {opp}  ({date} {time_str})\n\n"
-        f"🏆 I {team} - {pick} ( {od} )\n\n"
-        f"💵 I Unit Size: {unit_size}\n\n"
-        f"👇 I Analysis Below:\n\n{analysis}"
+        if " at " in line.lower():
+            matchup = re.split(r"\s+at\s+", line, flags=re.IGNORECASE)
+            if len(matchup) == 2:
+                data["away_team"] = matchup[0].title()
+                data["home_team"] = matchup[1].title()
+
+    if not data["home_team"] or not data["away_team"] or not data["team"]:
+        raise ValueError("❌ Could not parse teams — check image quality.")
+
+    return data
+
+# ------------------ FAKE STATS FUNCTION ------------------
+def get_stat_summary(home_team, away_team):
+    return (
+        f"{home_team} has won 6 of their last 8 home games and ranks top 5 in bullpen ERA. "
+        f"{away_team}, on the other hand, is hitting just .210 over their last 7 and has lost 4 straight road games. "
+        f"Look for the pitching edge to be huge in this matchup."
     )
-    full = f"**{header}**\n\n{body}\n\nmake us some money tonight 💰 **"
-    file = discord.File(BytesIO(img_bytes), filename="pick.png")
 
-    # Send and log
-    chunks = chunk_text(full)
-    await target.send(content=chunks[0], file=file)
-    for c in chunks[1:]:
-        await target.send(content=c)
+# ------------------ GPT WRITE-UP ------------------
+def generate_gpt_writeup(bet, units, play_number, pick_type):
+    stats = get_stat_summary(bet['home_team'], bet['away_team'])
+    prompt = (
+        f"Write a confident, hype-driven {pick_type.upper()} betting preview.\n\n"
+        f"Team: {bet['team']}\n"
+        f"Line: {bet['line']}\n"
+        f"Bet Type: {bet['bet_type']}\n"
+        f"Matchup: {bet['away_team']} at {bet['home_team']}\n"
+        f"Odds: {bet['odds']}\n"
+        f"Units: {units}\n"
+        f"Stats: {stats}\n"
+        f"This is {pick_type.upper()} PLAY #{play_number}. Use an energetic tone with confidence and emojis."
+    )
 
-    log_pick(self.sheet, {
-        "team": team, "pick": pick, "odds": od,
-        "category": cat, "units": unit_size,
-        "team_pitcher": tp, "opp_pitcher": op,
-        "date": date, "time": time_str,
-        "analysis": analysis, "author": ctx.author.display_name
-    })
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=350
+    )
 
-    await ctx.send(f"✅ {cat} pick posted in **#{chan_name}** and logged.")
+    return response['choices'][0]['message']['content'].strip()
 
-if __name__ == "__main__":
-    if not DISCORD_TOKEN:
-        raise RuntimeError("❌ DISCORD_TOKEN not set in environment!")
-    bot.run(DISCORD_TOKEN)
+# ------------------ POST FUNCTION ------------------
+async def handle_pick(ctx, units, channel_name, pick_type):
+    if not ctx.message.attachments:
+        await ctx.send("❌ Please attach a bet slip image.")
+        return
+
+    try:
+        attachment = ctx.message.attachments[0]
+        image_bytes = await attachment.read()
+        bet = extract_text(BytesIO(image_bytes))
+
+        play_number = get_play_number(pick_type.upper()) + 1
+        writeup = generate_gpt_writeup(bet, units, play_number, pick_type)
+
+        # Post
+        title = f"**{pick_type.upper()} PLAY #{play_number}**"
+        post = f"{title}\n{writeup}\n\nChannel: {channel_name}"
+        await ctx.send(post)
+
+        # Log to Google Sheet
+        log_pick(pick_type.upper(), bet["home_team"], bet["away_team"], units, bet["line"], bet["odds"])
+
+    except Exception as e:
+        await ctx.send(f"❌ Error: {str(e)}")
+
+# ------------------ BOT COMMANDS ------------------
+@bot.command()
+async def postpick(ctx, units: float, channel_name: str):
+    await handle_pick(ctx, units, channel_name, pick_type="VIP")
+
+@bot.command()
+async def freepick(ctx, units: float, channel_name: str):
+    await handle_pick(ctx, units, channel_name, pick_type="Free")
+
+# ------------------ RUN ------------------
+bot.run(DISCORD_TOKEN)
