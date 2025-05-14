@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from mlb_statsapi import MLBStatsAPI
+from mlbstatsapi import MLBStatsAPI
 
 bot = commands.Bot(command_prefix='!')
 
