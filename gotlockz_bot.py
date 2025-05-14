@@ -160,7 +160,7 @@ class BettingBot(commands.Bot):
         await ctx.send(f"✅ {cat} pick posted in **#{channel_name}** and logged.")
 
 bot = BettingBot()
-
+bot.add_command(BettingBot.postpick)
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
         raise RuntimeError("❌ DISCORD_TOKEN not set in environment!")
