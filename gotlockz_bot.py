@@ -1,4 +1,19 @@
+import re
+import time
+import discord
 from discord.ext import commands
+import openai
+import requests
+
+from io import BytesIO
+from PIL import Image
+from datetime import datetime
+
+from config import *
+from utils.ocr import extract_text
+from utils.sheets import init_sheets, log_pick, get_play_number
+from utils.stats import get_game_time, get_probable_pitchers
+
 def chunk_text(text, limit=2000):
     chunks = []
     while text:
@@ -7,7 +22,6 @@ def chunk_text(text, limit=2000):
         chunks.append(text[:cut])
         text = text[cut:]
     return chunks
-
 def generate_analysis(team, opp, tp, op, pick, odds):
     prompt = f"""
 Write a hype‑driven, stat‑backed analysis:
