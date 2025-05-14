@@ -1,5 +1,6 @@
 import os
 from discord.ext import commands
+import discord 
 import statsapi              # corrected import for MLB-StatsAPI
 from pybaseball import playerid_lookup  # pybaseball as additional source
 from utils.ocr import extract_text
@@ -7,8 +8,9 @@ from utils.sheets import init_sheets, log_pick, get_play_number
 
 # Load Discord token from environment variable
 TOKEN = os.getenv("DISCORD_TOKEN")
-
-bot = commands.Bot(command_prefix="!")
+intents = discord.Intents.default() 
+intents.message_content = True 
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
