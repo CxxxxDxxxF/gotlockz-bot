@@ -6,4 +6,5 @@ gspread
 oauth2client
 pytesseract
 python-dotenv
-statsapi
+git+https://github.com/toddrob99/MLB-StatsAPI.git
+
