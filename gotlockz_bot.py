@@ -1,17 +1,15 @@
-import re
-import time
 import discord
+from discord.ext import commands
 import requests
 import openai
+import re
 from io import BytesIO
 from PIL import Image
 from datetime import datetime
-from discord.ext import commands
-
-from config import *
 from utils.ocr import extract_text
 from utils.sheets import init_sheets, log_pick, get_play_number
 from utils.stats import get_game_time, get_probable_pitchers
+from config import DISCORD_TOKEN, OPENAI_API_KEY, COMMAND_CHANNEL, VIP_CHANNEL_DEFAULT, FREE_CHANNEL_DEFAULT
 
 def chunk_text(text, limit=2000):
     chunks = []
@@ -41,15 +39,20 @@ Include:
     )
     return resp.choices[0].message.content.strip()
 
-# ✅ Initialize Bot
-intents = discord.Intents.all()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-bot.sheet = init_sheets()
+class BettingBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.all()
+        intents.message_content = True
+        intents.guilds = True
+        intents.messages = True
+        intents.members = True
+        super().__init__(command_prefix="!", intents=intents)
+        self.sheet = init_sheets()
 
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
+    async def on_ready(self):
+        print(f"✅ Logged in as {self.user}")
+
+bot = BettingBot()
 
 @bot.command(name="postpick")
 async def postpick(ctx, units: float = None, channel: str = None):
@@ -61,27 +64,34 @@ async def postpick(ctx, units: float = None, channel: str = None):
     res = requests.get(ctx.message.attachments[0].url)
     img = Image.open(BytesIO(res.content))
     lines = extract_text(img)
-text = "\n".join(lines)
-print("🔍 OCR Output:\n", text)  # Add this line for debugging
-await ctx.send(f"🔍 OCR text:\n```{text[:1900]}```")  # Show preview in Discord
     text = "\n".join(lines)
+    await ctx.send(f"📋 OCR text:\n```{text[:1900]}```")  # Debug
 
     team = opp = od = pick = None
 
-team_patterns = [
-    r'([A-Za-z\s]{3,})\s*(?:vs\.?|v\.?|@|at|-)\s*([A-Za-z\s]{3,})',
-    r'([A-Z]{2,4})\s*(?:vs\.?|@|-)\s*([A-Z]{2,4})'
-]
+    team_patterns = [
+        r"([A-Za-z\s]{3,})\s*(?:vs\.?|\?|@|at)\s*([A-Za-z\s]{3,})",
+        r"([A-Z][a-z]{2,4})\s*(vs\.?|@|at)\s*([A-Z][a-z]{2,4})"
+    ]
 
-text = text.lower()
-await ctx.send(f"🔍 OCR text:\n```{text[:1900]}```")
-for pattern in team_patterns:
-    if match := re.search(pattern, text, re.I):
-        team, opp = match.group(1).strip(), match.group(2).strip()
-        break
+    text = text.lower()
+    for pattern in team_patterns:
+        if match := re.search(pattern, text, re.I):
+            team, opp = match.group(1).strip(), match.group(2).strip()
+            break
+    if not (team and opp):
+        return await ctx.send("❌ Could not parse teams—please check image quality or try again.")
+
+    # Parse odds
     if not od:
-        od = "N/A"
+        for pattern in [r'([+-]\d+)', r'(\d+\s*[+-]\d+)', r'odds?\s*[:=]?\s*([+-]\d+)']:
+            if match := re.search(pattern, text, re.I):
+                od = match.group(1)
+                break
+        if not od:
+            od = "N/A"
 
+    # Parse pick
     pick_patterns = {
         r'\brun\s*line\b': "Run Line",
         r'\btotal\b': "Total",
@@ -94,44 +104,23 @@ for pattern in team_patterns:
             pick = pick_type
             break
 
-    team_patterns = [
-        r'(\w+[\w\s]+?)\s+(?:vs\.?|@|at)\s+(\w+[\w\s]+)',
-        r'(\w+[\w\s]+?)\s*[-@]\s*(\w+[\w\s]+)',
-        r'(\w+[\w\s]+?)\s+and\s+(\w+[\w\s]+)'
-    ]
-    for pattern in team_patterns:
-        for line in lines:
-            if match := re.search(pattern, line, re.I):
-                team, opp = match.group(1).strip(), match.group(2).strip()
-                team = re.sub(r'\s+', ' ', team)
-                opp = re.sub(r'\s+', ' ', opp)
-                break
-        if team and opp:
-            break
-
-    if not (team and opp):
-        return await ctx.send("❌ Could not parse teams—please check image quality or try again.")
-
-    unit_size = units if units else 0
-
-    if channel:
-        chan_name = channel.lstrip("#")
-        cat = "VIP" if "vip" in chan_name.lower() else "Free"
-    else:
-        cat = "VIP" if "vip" in text.lower() else "Free"
-        chan_name = VIP_CHANNEL_DEFAULT if cat == "VIP" else FREE_CHANNEL_DEFAULT
-
+    # Units and Channel
+    unit_size = units or 1.0
+    chan_name = channel.lstrip("#") if channel else (VIP_CHANNEL_DEFAULT if "vip" in text else FREE_CHANNEL_DEFAULT)
+    cat = "VIP" if "vip" in chan_name.lower() else "Free"
     target = discord.utils.get(ctx.guild.text_channels, name=chan_name)
     if not target:
         return await ctx.send(f"❌ Channel `{chan_name}` not found.")
 
+    # Stats & GPT
     date = datetime.now().strftime("%m/%d/%y")
     time_str = get_game_time(team, opp)
     tp, op = get_probable_pitchers(team, opp)
     analysis = generate_analysis(team, opp, tp, op, pick, od)
     num = get_play_number(bot.sheet, cat)
-    emoji = "🔒" if cat == "VIP" else "💸"
+    emoji = "🔐" if cat == "VIP" else "💸"
 
+    # Build message
     header = f"# {emoji} I {cat.upper()} PLAY # {num} - 🏆 - {date}"
     body = (
         f"⚾️ I Game: {team} @ {opp}  ({date} {time_str})\n\n"
@@ -157,9 +146,7 @@ for pattern in team_patterns:
 
     await ctx.send(f"✅ {cat} pick posted in **#{chan_name}** and logged.")
 
-# ✅ Run the bot
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
         raise RuntimeError("❌ DISCORD_TOKEN not set in environment!")
     bot.run(DISCORD_TOKEN)
-
