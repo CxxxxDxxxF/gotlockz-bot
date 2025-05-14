@@ -9,11 +9,15 @@ from pybaseball import playerid_lookup
 from utils.ocr import extract_text
 from utils.sheets import init_sheets, log_pick, get_play_number
 
-# Map your emoji keys to actual channel names
-CHANNEL_MAP = {
-    "🔒vip-plays": "🔒vip-plays",
-    "🏆free-plays": "🏆free-plays",
-}
+ CHANNEL_MAP = {
+-    "🔒vip-plays": "🔒vip-plays",
++    "🔒vip-plays": "🔒vip-plays",
++    "vip-plays":    "🔒vip-plays",     # ← add this line
+
+-    "🏆free-plays": "🏆free-plays",
++    "🏆free-plays": "🏆free-plays",
++    "free-plays":   "🏆free-plays",    # ← and this line
+ }
 
 # Load your Discord token
 TOKEN = os.getenv("DISCORD_TOKEN")
