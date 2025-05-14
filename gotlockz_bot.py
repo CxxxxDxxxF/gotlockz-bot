@@ -54,44 +54,58 @@ class BettingBot(commands.Bot):
 
 bot = BettingBot()
 
-@bot.command(name="postpick")
-async def postpick(ctx, units: float = None, channel: str = None):
+@commands.command(name="postpick")
+async def postpick(self, ctx, units: float = None, channel: str = None):
     if ctx.channel.name != COMMAND_CHANNEL:
         return await ctx.send(f"⛔ Please run this in #{COMMAND_CHANNEL} only.")
+
     if not ctx.message.attachments:
         return await ctx.send("❌ Attach your bet slip image.")
 
-    res = requests.get(ctx.message.attachments[0].url)
-    img = Image.open(BytesIO(res.content))
-    lines = extract_text(img)
+    # Load image bytes from Discord attachment
+    attachment = ctx.message.attachments[0]
+    img_bytes = await attachment.read()
+    try:
+        img = Image.open(BytesIO(img_bytes))
+    except Exception as e:
+        return await ctx.send(f"❌ Failed to read image: {e}")
+
+    # OCR extract
+    try:
+        lines = extract_text(img)
+    except Exception as e:
+        return await ctx.send(f"❌ OCR failed: {e}")
     text = "\n".join(lines)
-    await ctx.send(f"📋 OCR text:\n```{text[:1900]}```")  # Debug
 
+    # Send raw OCR output to Discord for debugging
+    await ctx.send(f"📋 OCR text:\n```{text[:1900]}```")
+
+    # Try to parse team matchup
     team = opp = od = pick = None
-
     team_patterns = [
-        r"([A-Za-z\s]{3,})\s*(?:vs\.?|\?|@|at)\s*([A-Za-z\s]{3,})",
-        r"([A-Z][a-z]{2,4})\s*(vs\.?|@|at)\s*([A-Z][a-z]{2,4})"
+        r"([A-Za-z\s]{3,})\s*(?:vs\.?|@|at|-)\s*([A-Za-z\s]{3,})",
+        r"([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+at\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)"
     ]
 
-    text = text.lower()
+    text_lower = text.lower()
     for pattern in team_patterns:
-        if match := re.search(pattern, text, re.I):
+        match = re.search(pattern, text_lower, re.I)
+        if match:
             team, opp = match.group(1).strip(), match.group(2).strip()
             break
+
     if not (team and opp):
         return await ctx.send("❌ Could not parse teams—please check image quality or try again.")
 
     # Parse odds
+    for pattern in [r'([+-]\d+)', r'odds?\s*[:=]?\s*([+-]\d+)']:
+        if match := re.search(pattern, text, re.I):
+            od = match.group(1)
+            break
     if not od:
-        for pattern in [r'([+-]\d+)', r'(\d+\s*[+-]\d+)', r'odds?\s*[:=]?\s*([+-]\d+)']:
-            if match := re.search(pattern, text, re.I):
-                od = match.group(1)
-                break
-        if not od:
-            od = "N/A"
+        od = "N/A"
 
-    # Parse pick
+    # Determine pick type
     pick_patterns = {
         r'\brun\s*line\b': "Run Line",
         r'\btotal\b': "Total",
@@ -100,27 +114,32 @@ async def postpick(ctx, units: float = None, channel: str = None):
     }
     pick = "Money Line"
     for pattern, pick_type in pick_patterns.items():
-        if re.search(pattern, text, re.I):
+        if re.search(pattern, text_lower):
             pick = pick_type
             break
 
-    # Units and Channel
-    unit_size = units or 1.0
-    chan_name = channel.lstrip("#") if channel else (VIP_CHANNEL_DEFAULT if "vip" in text else FREE_CHANNEL_DEFAULT)
-    cat = "VIP" if "vip" in chan_name.lower() else "Free"
+    # Figure out which channel
+    if channel:
+        chan_name = channel.lstrip("#")
+        cat = "VIP" if "vip" in chan_name.lower() else "Free"
+    else:
+        cat = "VIP" if "vip" in text_lower else "Free"
+        chan_name = VIP_CHANNEL_DEFAULT if cat == "VIP" else FREE_CHANNEL_DEFAULT
+
     target = discord.utils.get(ctx.guild.text_channels, name=chan_name)
     if not target:
         return await ctx.send(f"❌ Channel `{chan_name}` not found.")
 
-    # Stats & GPT
+    # Finalize pick details
+    unit_size = units if units is not None else 1
     date = datetime.now().strftime("%m/%d/%y")
     time_str = get_game_time(team, opp)
     tp, op = get_probable_pitchers(team, opp)
     analysis = generate_analysis(team, opp, tp, op, pick, od)
-    num = get_play_number(bot.sheet, cat)
-    emoji = "🔐" if cat == "VIP" else "💸"
+    num = get_play_number(self.sheet, cat)
+    emoji = "🔒" if cat == "VIP" else "💸"
 
-    # Build message
+    # Message
     header = f"# {emoji} I {cat.upper()} PLAY # {num} - 🏆 - {date}"
     body = (
         f"⚾️ I Game: {team} @ {opp}  ({date} {time_str})\n\n"
@@ -129,14 +148,15 @@ async def postpick(ctx, units: float = None, channel: str = None):
         f"👇 I Analysis Below:\n\n{analysis}"
     )
     full = f"**{header}**\n\n{body}\n\nmake us some money tonight 💰 **"
+    file = discord.File(BytesIO(img_bytes), filename="pick.png")
 
-    file = discord.File(BytesIO(res.content), filename="pick.png")
+    # Send and log
     chunks = chunk_text(full)
     await target.send(content=chunks[0], file=file)
     for c in chunks[1:]:
         await target.send(content=c)
 
-    log_pick(bot.sheet, {
+    log_pick(self.sheet, {
         "team": team, "pick": pick, "odds": od,
         "category": cat, "units": unit_size,
         "team_pitcher": tp, "opp_pitcher": op,
