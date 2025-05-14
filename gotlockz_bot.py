@@ -10,13 +10,13 @@ from utils.ocr import extract_text
 from utils.sheets import init_sheets, log_pick, get_play_number
 
  CHANNEL_MAP = {
--    "🔒vip-plays": "🔒vip-plays",
-+    "🔒vip-plays": "🔒vip-plays",
-+    "vip-plays":    "🔒vip-plays",     # ← add this line
+"🔒vip-plays": "🔒vip-plays",
+"🔒vip-plays": "🔒vip-plays",
+"vip-plays":    "🔒vip-plays",     # ← add this line
 
--    "🏆free-plays": "🏆free-plays",
-+    "🏆free-plays": "🏆free-plays",
-+    "free-plays":   "🏆free-plays",    # ← and this line
+"🏆free-plays": "🏆free-plays",
+"🏆free-plays": "🏆free-plays",
+"free-plays":   "🏆free-plays",    # ← and this line
  }
 
 # Load your Discord token
@@ -88,15 +88,40 @@ async def postpick(ctx, units: float, channel_key: str):
         matchup = mm.group(1) if mm else ""
         pick = f"{team.strip()} {line} ({odds})  {matchup}"
 
-    # 5) Determine destination channel
-    chan_name = CHANNEL_MAP.get(channel_key)
-    if not chan_name:
-        valid = ", ".join(CHANNEL_MAP.keys())
-        return await ctx.send(f"❌ Unknown key `{channel_key}`. Valid keys: {valid}")
+    # ———————— 5) Resolve destination channel ————————
+    raw = channel_key.strip().lower()
 
-    dest = discord.utils.get(ctx.guild.channels, name=chan_name)
+    # 5a) If they mentioned a channel (<#123…>), use it directly
+    if raw.startswith("<#") and raw.endswith(">"):
+        cid = int(raw.strip("<#>"))
+        dest = ctx.guild.get_channel(cid)
+    else:
+        # 5b) Exact map lookup (emoji‑key or plain lowercase)
+        target = CHANNEL_MAP.get(channel_key) or CHANNEL_MAP.get(raw)
+
+        # 5c) Fallback: substring match on any channel name
+        if not target:
+            matches = [
+                c.name
+                for c in ctx.guild.channels
+                if raw in c.name.lower()
+            ]
+            target = matches[0] if matches else None
+
+        if not target:
+            valid = ", ".join(
+                list(CHANNEL_MAP.keys()) +
+                [k.lower() for k in CHANNEL_MAP.keys()]
+            )
+            return await ctx.send(
+                f"❌ Unknown key `{channel_key}`. Valid keys: {valid}"
+            )
+
+        dest = discord.utils.get(ctx.guild.channels, name=target)
+
     if not dest:
-        return await ctx.send(f"❌ I can’t find a channel named `{chan_name}` here.")
+        return await ctx.send(f"❌ Can’t find channel for `{channel_key}`.")
+    # ———————————————————————————————————————————————
 
     # 6) Log the pick
     play_num = get_play_number()
