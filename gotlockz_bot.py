@@ -9,7 +9,7 @@ from pybaseball import playerid_lookup
 from utils.ocr import extract_text
 from utils.sheets import init_sheets, log_pick, get_play_number
 
- CHANNEL_MAP = {
+CHANNEL_MAP = {
 "🔒vip-plays": "🔒vip-plays",
 "🔒vip-plays": "🔒vip-plays",
 "vip-plays":    "🔒vip-plays",     # ← add this line
