@@ -62,14 +62,17 @@ async def postpick(self, ctx, units: float = None, channel: str = None):
     if not ctx.message.attachments:
         return await ctx.send("❌ Attach your bet slip image.")
 
-    # Load image bytes from Discord attachment
-    attachment = ctx.message.attachments[0]
-    img_bytes = await attachment.read()
-    try:
-        img = Image.open(BytesIO(img_bytes))
-    except Exception as e:
-        return await ctx.send(f"❌ Failed to read image: {e}")
-
+   # Load image bytes from Discord attachment
+attachment = ctx.message.attachments[0]
+img_bytes = await attachment.read()
+try:
+    img = Image.open(BytesIO(img_bytes))
+    lines = extract_text(img)
+    text = "\n".join(lines)
+    await ctx.send(f"📋 OCR text:\n```{text[:1900]}```")  # Optional preview
+except Exception as e:
+    return await ctx.send(f"❌ Error reading image: {e}")
+    
     # OCR extract
     try:
         lines = extract_text(img)
