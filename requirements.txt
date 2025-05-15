@@ -1,5 +1,5 @@
 discord.py==2.3.2
-statsapi@git+https://github.com/toddrob99/MLB-StatsAPI.git#egg=mlb-statsapi
+mlb-statsapi @ git+https://github.com/toddrob99/MLB-StatsAPI.git#egg=mlb-statsapi
 pybaseball==2.2.7
 aiohttp>=3.7.4
 pillow
