@@ -8,4 +8,4 @@ pybaseball>=2.2.7
 python-dotenv>=1.1.0
 openai>=1.78.1
 requests>=2.32.0
-pydantic>=1.9.0
+pydantic-settings>=2.0.0
