@@ -38,6 +38,9 @@ async def postpick(interaction: discord.Interaction, units: float, channel: disc
         return
     img_bytes = await image.read()
     try:
+        if __name__ == "__main__":
+    bot.run(config.discord_token)
+
         ocr = analysis.extract_text_from_image(img_bytes)
     except Exception:
         await interaction.followup.send("OCR failed.", ephemeral=True)
