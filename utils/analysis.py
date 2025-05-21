@@ -3,7 +3,7 @@ from io import BytesIO
 from PIL import Image
 import pytesseract
 import openai
-import mlb_statsapi as mlb
+from mlb_statsapi import Mlb
 
 TEAM_MAP = {
     "yankees":"New York Yankees","red sox":"Boston Red Sox",
