@@ -18,8 +18,15 @@ config = Settings()
 import openai
 openai.api_key = config.openai_api_key
 
+
 intents = discord.Intents.default()
-bot = commands.Bot(intents=intents, command_prefix="!", help_command=None)
+intents.message_content = True      
+bot = commands.Bot(
+    intents=intents,
+    command_prefix="!",
+    help_command=None
+)
+
 
 @bot.event
 async def on_ready():
