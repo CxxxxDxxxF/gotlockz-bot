@@ -36,51 +36,55 @@ async def postpick(interaction: discord.Interaction, units: float, channel: disc
     if not image.content_type or not image.content_type.startswith("image"):
         await interaction.followup.send("Attach a valid image.", ephemeral=True)
         return
+
     img_bytes = await image.read()
     try:
-        if __name__ == "__main__":
-    bot.run(config.discord_token)
-
         ocr = analysis.extract_text_from_image(img_bytes)
     except Exception:
         await interaction.followup.send("OCR failed.", ephemeral=True)
         return
+
     if not ocr.strip():
         await interaction.followup.send("No text found.", ephemeral=True)
         return
+
     desc, teams = analysis.parse_pick_text(ocr)
+
     try:
         analysis_msg = await analysis.generate_analysis_message(desc, teams, config.openai_model)
     except Exception as e:
         await interaction.followup.send(f"Analysis error: {e}", ephemeral=True)
         return
+
     try:
         await channel.send(f"**Pick Analysis:** {analysis_msg}")
     except Exception:
         await interaction.followup.send(f"Cannot post in {channel.mention}", ephemeral=True)
         return
+
     from datetime import datetime, timezone
     ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    record = {"pick_text": desc, "units": units, "channel": channel.id, "timestamp": ts}
+    record = {
+        "pick_text": desc,
+        "units": units,
+        "channel": channel.id,
+        "timestamp": ts
+    }
     await storage.add_pick(record)
     await interaction.followup.send(f"✅ Posted to {channel.mention}", ephemeral=True)
 
 @bot.tree.command(name="history", description="Show the history of past posted picks.")
 async def history_command(interaction: discord.Interaction):
-    """Slash command to display history of picks."""
     await interaction.response.defer(thinking=True, ephemeral=True)
 
-    # Load all pick entries
     data = await storage.get_all_picks()
     if not data:
         await interaction.followup.send("No picks have been logged yet.", ephemeral=True)
         return
 
-    # Build list of formatted lines
     lines = []
     for entry in data:
         ts = entry.get("timestamp", "")
-        # Convert +00:00 to Z
         ts_str = ts.rstrip("+00:00") + "Z" if ts.endswith("+00:00") else ts
         units = entry.get("units", "")
         pick_text = entry.get("pick_text", "")
@@ -88,6 +92,10 @@ async def history_command(interaction: discord.Interaction):
         channel_ref = f"<#{channel_id}>" if channel_id else ""
         lines.append(f"{ts_str} | {units}u | {pick_text} {channel_ref}")
 
-    # Construct and send the history message
     history_message = "**Pick History:**\n" + "\n".join(lines)
     await interaction.followup.send(history_message, ephemeral=True)
+
+if __name__ == "__main__":
+    # Start and block on the Discord bot
+    bot.run(config.discord_token)
+
