@@ -62,23 +62,29 @@ async def postpick(interaction: discord.Interaction, units: float, channel: disc
     await storage.add_pick(record)
     await interaction.followup.send(f"✅ Posted to {channel.mention}", ephemeral=True)
 
-@bot.tree.command(name="history", description="Show pick history")
-async def history(interaction: discord.Interaction):
+@bot.tree.command(name="history", description="Show the history of past posted picks.")
+async def history_command(interaction: discord.Interaction):
+    """Slash command to display history of picks."""
     await interaction.response.defer(thinking=True, ephemeral=True)
+
+    # Load all pick entries
     data = await storage.get_all_picks()
     if not data:
-        await interaction.followup.send("No picks logged.", ephemeral=True)
+        await interaction.followup.send("No picks have been logged yet.", ephemeral=True)
         return
-    lines = []
-    for e in data:
-        ts = e["timestamp"]
-        if ts.endswith("+00:00"):
-            ts = ts[:-6] + "Z"
-        lines.append(f"- {ts} | {e['units']}u | {e['pick_text']} <#{e['channel']}>")
-    msg = "**History:**
-" + "
-".join(lines[-50:])
-    await interaction.followup.send(msg, ephemeral=True)
 
-if __name__ == "__main__":
-    bot.run(config.discord_token)
+    # Build list of formatted lines
+    lines = []
+    for entry in data:
+        ts = entry.get("timestamp", "")
+        # Convert +00:00 to Z
+        ts_str = ts.rstrip("+00:00") + "Z" if ts.endswith("+00:00") else ts
+        units = entry.get("units", "")
+        pick_text = entry.get("pick_text", "")
+        channel_id = entry.get("channel", "")
+        channel_ref = f"<#{channel_id}>" if channel_id else ""
+        lines.append(f"{ts_str} | {units}u | {pick_text} {channel_ref}")
+
+    # Construct and send the history message
+    history_message = "**Pick History:**\n" + "\n".join(lines)
+    await interaction.followup.send(history_message, ephemeral=True)
