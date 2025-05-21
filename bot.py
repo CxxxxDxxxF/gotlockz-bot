@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import pytesseract
 from PIL import Image
 import openai
-import statsapi as mlb
+import mlb_statsapi as mlb
 
 # Load .env in local/dev
 load_dotenv()
