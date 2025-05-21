@@ -1,108 +1,94 @@
+# bot.py
+import os
+import json
 import asyncio
-import discord
-from discord import app_commands
 from discord.ext import commands
-from utils import storage, analysis
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
-
-class Settings(BaseSettings):
-    discord_token: str
-    openai_api_key: str
-    openai_model: str = "gpt-3.5-turbo"
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
-
-load_dotenv()
-config = Settings()
-
+import pytesseract
+from PIL import Image
 import openai
-openai.api_key = config.openai_api_key
+import mlb_statsapi as mlb
 
+# Load .env in local/dev
+load_dotenv()
 
-intents = discord.Intents.default()
-intents.message_content = True      
-bot = commands.Bot(
-    intents=intents,
-    command_prefix="!",
-    help_command=None
-)
+# Environment variables
+DISCORD_TOKEN        = os.getenv("DISCORD_TOKEN")
+OPENAI_API_KEY       = os.getenv("OPENAI_API_KEY")
+FREE_PLAY_CHANNEL_ID = int(os.getenv("FREE_PLAY_CHANNEL_ID", 0))
+VIP_PLAY_CHANNEL_ID  = int(os.getenv("VIP_PLAY_CHANNEL_ID", 0))
 
+openai.api_key = OPENAI_API_KEY
+
+# Simple JSON storage
+STORAGE_PATH = "storage.json"
+def load_storage():
+    if not os.path.exists(STORAGE_PATH):
+        return {}
+    with open(STORAGE_PATH, "r") as f:
+        return json.load(f)
+
+def save_storage(data):
+    with open(STORAGE_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+storage = load_storage()
+
+# Set up Discord bot
+bot = commands.Bot(command_prefix="!")
 
 @bot.event
 async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} commands. Ready as {bot.user}.")
-    except Exception as e:
-        print(f"Sync error: {e}")
+    print(f"Logged in as {bot.user}")
 
-@bot.tree.command(name="postpick", description="Analyze a betting pick from image")
-@app_commands.describe(units="Units to wager", channel="Channel to post", image="Bet slip image")
-async def postpick(interaction: discord.Interaction, units: float, channel: discord.TextChannel, image: discord.Attachment):
-    await interaction.response.defer(thinking=True, ephemeral=True)
-    if not image.content_type or not image.content_type.startswith("image"):
-        await interaction.followup.send("Attach a valid image.", ephemeral=True)
-        return
+@bot.command(name="postpick")
+async def postpick(ctx, units: float, channel: str):
+    # Assumes the user attaches an image; grab the first one
+    attachment = ctx.message.attachments[0]
+    img_data = await attachment.read()
+    img = Image.open(io.BytesIO(img_data))
 
-    img_bytes = await image.read()
-    try:
-        ocr = analysis.extract_text_from_image(img_bytes)
-    except Exception:
-        await interaction.followup.send("OCR failed.", ephemeral=True)
-        return
+    # OCR it
+    text = pytesseract.image_to_string(img)
 
-    if not ocr.strip():
-        await interaction.followup.send("No text found.", ephemeral=True)
-        return
+    # (Your parsing logic here)
+    # e.g. pick = parse_team(text)
+    # formatted = build_message_text(pick, units, etc.)
 
-    desc, teams = analysis.parse_pick_text(ocr)
-
-    try:
-        analysis_msg = await analysis.generate_analysis_message(desc, teams, config.openai_model)
-    except Exception as e:
-        await interaction.followup.send(f"Analysis error: {e}", ephemeral=True)
-        return
-
-    try:
-        await channel.send(f"**Pick Analysis:** {analysis_msg}")
-    except Exception:
-        await interaction.followup.send(f"Cannot post in {channel.mention}", ephemeral=True)
-        return
-
-    from datetime import datetime, timezone
-    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    record = {
-        "pick_text": desc,
+    # Log in JSON
+    entry_id = len(storage.get("plays", [])) + 1
+    storage.setdefault("plays", []).append({
+        "id": entry_id,
+        "text": text,
         "units": units,
-        "channel": channel.id,
-        "timestamp": ts
-    }
-    await storage.add_pick(record)
-    await interaction.followup.send(f"✅ Posted to {channel.mention}", ephemeral=True)
+        "channel": channel,
+        "timestamp": ctx.message.created_at.isoformat()
+    })
+    save_storage(storage)
 
-@bot.tree.command(name="history", description="Show the history of past posted picks.")
-async def history_command(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True, ephemeral=True)
-
-    data = await storage.get_all_picks()
-    if not data:
-        await interaction.followup.send("No picks have been logged yet.", ephemeral=True)
-        return
-
-    lines = []
-    for entry in data:
-        ts = entry.get("timestamp", "")
-        ts_str = ts.rstrip("+00:00") + "Z" if ts.endswith("+00:00") else ts
-        units = entry.get("units", "")
-        pick_text = entry.get("pick_text", "")
-        channel_id = entry.get("channel", "")
-        channel_ref = f"<#{channel_id}>" if channel_id else ""
-        lines.append(f"{ts_str} | {units}u | {pick_text} {channel_ref}")
-
-    history_message = "**Pick History:**\n" + "\n".join(lines)
-    await interaction.followup.send(history_message, ephemeral=True)
+    # Send back to Discord
+    await ctx.send(f"Processed pick #{entry_id}: ```{text}```")
 
 if __name__ == "__main__":
-    # Start and block on the Discord bot
+    # When running as a Background Worker:
+    bot.run(DISCORD_TOKEN)
+
+    # If you must deploy as a Web Service, uncomment the block below
+    # and change your Docker CMD to: ["python", "bot.py"]
+    #
+    # from aiohttp import web
+    #
+    # async def health(request):
+    #     return web.Response(text="OK")
+    #
+    # app = web.Application()
+    # app.add_routes([web.get("/", health)])
+    #
+    # async def main():
+    #     discord_task = asyncio.create_task(bot.start(DISCORD_TOKEN))
+    #     web_task     = asyncio.create_task(web._run_app(app, port=int(os.getenv("PORT", 5000))))
+    #     await asyncio.gather(discord_task, web_task)
+    #
+    # asyncio.run(main())
     bot.run(config.discord_token)
 
