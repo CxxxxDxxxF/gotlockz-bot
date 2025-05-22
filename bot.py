@@ -3,10 +3,10 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 import os
-from ocr_parser import extract_bet_info
-from mlb_stats import get_game_stats
-from gpt_analysis import generate_analysis
-from utils import format_message
+from utils.ocr_parser import extract_bet_info
+from utils.mlb_stats import get_game_stats
+from utils.gpt_analysis import generate_analysis
+from utils.utils import format_message
 
 load_dotenv()
 
