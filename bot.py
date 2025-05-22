@@ -12,15 +12,15 @@ from dotenv import load_dotenv
 import pytesseract
 from PIL import Image
 import openai
-import statsapi as mlb  # or import statsapi as mlb if you installed that
+import statsapi as mlb  # use statsapi.rename mlb-statsapi install
 
-# Load .env
+# Load environment variables
 load_dotenv()
 DISCORD_TOKEN        = os.getenv("DISCORD_TOKEN")
 OPENAI_API_KEY       = os.getenv("OPENAI_API_KEY")
 FREE_PLAY_CHANNEL_ID = int(os.getenv("FREE_PLAY_CHANNEL_ID", 0))
 VIP_PLAY_CHANNEL_ID  = int(os.getenv("VIP_PLAY_CHANNEL_ID", 0))
-openai.api_key = OPENAI_API_KEY
+openai.api_key       = OPENAI_API_KEY
 
 # JSON storage helpers
 STORAGE_PATH = "storage.json"
@@ -29,28 +29,31 @@ def load_storage():
         return {}
     with open(STORAGE_PATH, "r") as f:
         return json.load(f)
+
 def save_storage(data):
     with open(STORAGE_PATH, "w") as f:
         json.dump(data, f, indent=2)
+
 storage = load_storage()
 
-# Intents
-intents = discord.Intents.default()
-intents.message_content = True
-
-# Bot subclass to sync slash commands
+# Bot subclass with proper command tree setup
 class MyBot(commands.Bot):
     def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
         super().__init__(command_prefix="!", intents=intents)
-        self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        # Register tree commands with Discord
+        # sync all slash commands
         await self.tree.sync()
 
 bot = MyBot()
 
-# 1) Legacy prefix command
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+# Legacy prefix command
 @bot.command(name="postpick")
 async def postpick_prefix(ctx, units: float, channel: str):
     attachment = ctx.message.attachments[0]
@@ -67,9 +70,10 @@ async def postpick_prefix(ctx, units: float, channel: str):
         "timestamp": ctx.message.created_at.isoformat()
     })
     save_storage(storage)
+
     await ctx.send(f"Processed pick #{entry_id}: ```{text}```")
 
-# 2) Slash command version
+# Slash command version
 @bot.tree.command(
     name="postpick",
     description="OCR a bet slip image and log your pick"
@@ -77,7 +81,7 @@ async def postpick_prefix(ctx, units: float, channel: str):
 @app_commands.describe(
     units="Units to stake",
     channel="Destination channel name",
-    file="Upload your bet slip image here"
+    file="Your bet slip image file"
 )
 async def postpick_slash(
     interaction: discord.Interaction,
@@ -99,13 +103,8 @@ async def postpick_slash(
         "timestamp": interaction.created_at.isoformat()
     })
     save_storage(storage)
-    await interaction.followup.send(f"✅ Processed pick #{entry_id}: ```{text}```")
 
-# Startup
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
+    await interaction.followup.send(f"✅ Processed pick #{entry_id}: ```{text}```")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
-
