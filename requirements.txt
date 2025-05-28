@@ -3,4 +3,4 @@ python-dotenv>=1.0.0
 openai>=0.27.0
 pytesseract>=0.3.8
 Pillow>=9.0
-mlbstatsapi>=1.2.3
+
