@@ -9,9 +9,11 @@ RUN apt-get update \
 # Set work directory
 WORKDIR /app
 
-# Copy code and requirements
+# before installing requirements…
+RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
 
 # Copy the rest of your bot code
 COPY . .
