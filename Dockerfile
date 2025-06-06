@@ -1,24 +1,19 @@
 FROM python:3.11-slim
 
-# Install system deps
+# 1) Install system packages: git (so pip can fetch GitHub repos) and tesseract-ocr (for pytesseract)
+USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      tesseract-ocr \
-      libtesseract-dev \
-      libsm6 \
-      libxext6 \
-      libglib2.0-0 \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends \
+         git \
+         tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Copy and install Python deps (including GitHub MLB-StatsAPI)
-COPY requirements.txt .
-RUN pip install --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
-
-# Copy your bot code
 COPY . .
 
-# Start the bot
-CMD ["python", "bot.py"]
+# 2) Now that git exists, pip can install the "git+https://..." dependency successfully
+RUN pip install --upgrade pip \
+ && pip install -r requirements.txt
+
+# 3) Finally, start your bot
+CMD ["python", "main.py", "--log-level", "INFO"]
