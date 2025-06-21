@@ -22,20 +22,20 @@ def init_db():
     conn = sqlite3.connect('gotlockz.db')
     cursor = conn.cursor()
     
-    # Picks table
+    # Create picks table if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS picks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pick_number INTEGER,
-            pick_type TEXT,
-            bet_details TEXT,
+            pick_number INTEGER NOT NULL,
+            pick_type TEXT NOT NULL,
+            bet_details TEXT NOT NULL,
             odds TEXT,
             analysis TEXT,
-            posted_at TIMESTAMP,
-            result TEXT DEFAULT 'pending',
-            profit_loss REAL DEFAULT 0.0,
             confidence_score INTEGER,
-            edge_percentage REAL
+            edge_percentage REAL,
+            result TEXT,
+            profit_loss REAL,
+            posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -57,104 +57,87 @@ def init_db():
     conn.close()
 
 @app.route('/')
-def dashboard():
+def index():
     """Main dashboard page."""
     return render_template('dashboard.html')
 
 @app.route('/api/ping')
 def ping():
     """Ping endpoint for bot connectivity test."""
-    return jsonify({"status": "ok", "message": "Dashboard is running"})
-
-@app.route('/api/stats')
-def get_stats():
-    """Get overall statistics."""
-    conn = sqlite3.connect('gotlockz.db')
-    cursor = conn.cursor()
-    
-    # Overall stats
-    cursor.execute('''
-        SELECT 
-            COUNT(*) as total_picks,
-            SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
-            SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses,
-            SUM(CASE WHEN result = 'push' THEN 1 ELSE 0 END) as pushes,
-            SUM(profit_loss) as total_profit
-        FROM picks 
-        WHERE result != 'pending'
-    ''')
-    
-    stats = cursor.fetchone()
-    total_picks, wins, losses, pushes, total_profit = stats
-    
-    # Calculate ROI
-    roi = (total_profit / (total_picks * 100)) * 100 if total_picks > 0 else 0
-    
-    # Recent picks
-    cursor.execute('''
-        SELECT pick_type, bet_details, odds, result, profit_loss, posted_at
-        FROM picks 
-        ORDER BY posted_at DESC 
-        LIMIT 10
-    ''')
-    
-    recent_picks = []
-    for row in cursor.fetchall():
-        recent_picks.append({
-            'type': row[0],
-            'bet': row[1],
-            'odds': row[2],
-            'result': row[3],
-            'profit_loss': row[4],
-            'posted_at': row[5]
-        })
-    
-    conn.close()
-    
     return jsonify({
-        'total_picks': total_picks,
-        'wins': wins,
-        'losses': losses,
-        'pushes': pushes,
-        'total_profit': total_profit,
-        'roi_percentage': roi,
-        'win_rate': (wins / total_picks * 100) if total_picks > 0 else 0,
-        'recent_picks': recent_picks
+        "message": "Dashboard is running",
+        "status": "ok",
+        "timestamp": datetime.now().isoformat()
     })
 
-@app.route('/api/picks/<pick_type>')
-def get_picks_by_type(pick_type):
-    """Get picks by type (vip, lotto, free)."""
+@app.route('/api/bot-status')
+def bot_status():
+    """Get bot status and real-time information."""
+    try:
+        # Check if bot is running by looking for the process
+        bot_running = False
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if 'python' in proc.info['name'].lower() and any('bot.py' in cmd for cmd in proc.info['cmdline'] if cmd):
+                    bot_running = True
+                    break
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Get system stats
+        cpu_percent = psutil.cpu_percent()
+        memory = psutil.virtual_memory()
+        
+        return jsonify({
+            'bot_running': bot_running,
+            'dashboard_running': True,
+            'system': {
+                'cpu_percent': cpu_percent,
+                'memory_percent': memory.percent,
+                'memory_available': memory.available // (1024**3),  # GB
+                'uptime': psutil.boot_time()
+            },
+            'last_updated': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'bot_running': False,
+            'dashboard_running': True,
+            'error': str(e),
+            'last_updated': datetime.now().isoformat()
+        })
+
+@app.route('/api/picks')
+def get_picks():
     conn = sqlite3.connect('gotlockz.db')
     cursor = conn.cursor()
+    cursor.execute('SELECT * FROM picks ORDER BY posted_at DESC')
+    picks = cursor.fetchall()
+    conn.close()
     
-    cursor.execute('''
-        SELECT pick_number, bet_details, odds, result, profit_loss, confidence_score, edge_percentage
-        FROM picks 
-        WHERE pick_type = ? AND result != 'pending'
-        ORDER BY posted_at DESC
-    ''', (pick_type,))
-    
-    picks = []
-    for row in cursor.fetchall():
-        picks.append({
-            'pick_number': row[0],
-            'bet': row[1],
-            'odds': row[2],
-            'result': row[3],
-            'profit_loss': row[4],
-            'confidence': row[5],
-            'edge': row[6]
+    pick_list = []
+    for pick in picks:
+        pick_list.append({
+            "id": pick[0],
+            "pick_number": pick[1],
+            "pick_type": pick[2],
+            "bet_details": pick[3],
+            "odds": pick[4],
+            "analysis": pick[5],
+            "confidence_score": pick[6],
+            "edge_percentage": pick[7],
+            "result": pick[8],
+            "profit_loss": pick[9],
+            "posted_at": pick[10]
         })
     
-    conn.close()
-    return jsonify(picks)
+    return jsonify(pick_list)
 
 @app.route('/api/picks/add', methods=['POST'])
 def add_pick():
     """Add a new pick to the database."""
     try:
-        data = request.get_json()
+        data = request.json
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'}), 400
             
@@ -162,25 +145,22 @@ def add_pick():
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT INTO picks (
-                pick_number, pick_type, bet_details, odds, analysis, 
-                posted_at, confidence_score, edge_percentage
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO picks (pick_number, pick_type, bet_details, odds, analysis, confidence_score, edge_percentage)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('pick_number'),
             data.get('pick_type'),
             data.get('bet_details'),
-            data.get('odds'),
+            data.get('odds', '-110'),
             data.get('analysis', ''),
-            datetime.now().isoformat(),
-            data.get('confidence_score', 0),
-            data.get('edge_percentage', 0.0)
+            data.get('confidence_score', 7),
+            data.get('edge_percentage', 3.0)
         ))
         
         conn.commit()
         conn.close()
         
-        return jsonify({'success': True, 'message': 'Pick added successfully'})
+        return jsonify({'success': True, 'message': 'Pick added successfully', 'id': cursor.lastrowid})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -213,40 +193,70 @@ def update_pick_result():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/bot-status')
-def get_bot_status():
-    """Get bot status and real-time information."""
-    try:
-        # Check if bot is running by looking for the process
-        bot_running = False
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if 'python' in proc.info['name'].lower() and any('bot.py' in cmd for cmd in proc.info['cmdline'] if cmd):
-                    bot_running = True
-                    break
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        # Get system stats
-        cpu_percent = psutil.cpu_percent()
-        memory = psutil.virtual_memory()
-        
-        return jsonify({
-            'bot_running': bot_running,
-            'system': {
-                'cpu_percent': cpu_percent,
-                'memory_percent': memory.percent,
-                'memory_available': memory.available // (1024**3),  # GB
-                'uptime': psutil.boot_time()
-            },
-            'last_updated': datetime.now().isoformat()
+@app.route('/api/stats')
+def get_stats():
+    """Get overall statistics."""
+    conn = sqlite3.connect('gotlockz.db')
+    cursor = conn.cursor()
+    
+    # Total picks
+    cursor.execute('SELECT COUNT(*) FROM picks')
+    total_picks = cursor.fetchone()[0]
+    
+    # Wins
+    cursor.execute('SELECT COUNT(*) FROM picks WHERE result = "win"')
+    wins = cursor.fetchone()[0]
+    
+    # Losses
+    cursor.execute('SELECT COUNT(*) FROM picks WHERE result = "loss"')
+    losses = cursor.fetchone()[0]
+    
+    # Pending
+    cursor.execute('SELECT COUNT(*) FROM picks WHERE result IS NULL')
+    pending = cursor.fetchone()[0]
+    
+    # Total profit/loss
+    cursor.execute('SELECT SUM(profit_loss) FROM picks WHERE profit_loss IS NOT NULL')
+    total_pl = cursor.fetchone()[0] or 0
+    
+    conn.close()
+    
+    return jsonify({
+        "total_picks": total_picks,
+        "wins": wins,
+        "losses": losses,
+        "pending": pending,
+        "win_rate": (wins / (wins + losses) * 100) if (wins + losses) > 0 else 0,
+        "total_profit_loss": total_pl
+    })
+
+@app.route('/api/picks/<pick_type>')
+def get_picks_by_type(pick_type):
+    """Get picks by type (vip, lotto, free)."""
+    conn = sqlite3.connect('gotlockz.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT pick_number, bet_details, odds, result, profit_loss, confidence_score, edge_percentage
+        FROM picks 
+        WHERE pick_type = ? AND result != 'pending'
+        ORDER BY posted_at DESC
+    ''', (pick_type,))
+    
+    picks = []
+    for row in cursor.fetchall():
+        picks.append({
+            'pick_number': row[0],
+            'bet': row[1],
+            'odds': row[2],
+            'result': row[3],
+            'profit_loss': row[4],
+            'confidence': row[5],
+            'edge': row[6]
         })
-    except Exception as e:
-        return jsonify({
-            'bot_running': False,
-            'error': str(e),
-            'last_updated': datetime.now().isoformat()
-        })
+    
+    conn.close()
+    return jsonify(picks)
 
 @app.route('/api/performance/daily')
 def get_daily_performance():
@@ -584,16 +594,16 @@ def get_help():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/sync-discord', methods=['POST'])
-def sync_discord_picks():
+def sync_discord():
     """Upsert picks from Discord into the dashboard database."""
     try:
-        picks = request.get_json()
-        if not picks or not isinstance(picks, list):
+        data = request.json
+        if not data or not isinstance(data, list):
             return jsonify({'success': False, 'error': 'Invalid data'}), 400
         
         conn = sqlite3.connect('gotlockz.db')
         cursor = conn.cursor()
-        for pick in picks:
+        for pick in data:
             # Upsert based on unique pick_number and pick_type
             cursor.execute('''
                 SELECT COUNT(*) FROM picks WHERE pick_number = ? AND pick_type = ?
@@ -639,10 +649,12 @@ def sync_discord_picks():
                 ))
         conn.commit()
         conn.close()
-        return jsonify({'success': True, 'message': f'Synced {len(picks)} picks'})
+        return jsonify({'success': True, 'message': f'Synced {len(data)} picks'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    # For Hugging Face Spaces, use port 7860
+    port = int(os.environ.get('PORT', 7860))
+    app.run(debug=False, host='0.0.0.0', port=port)
