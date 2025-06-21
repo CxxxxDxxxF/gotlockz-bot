@@ -20,7 +20,7 @@ fi
 cd dashboard
 
 # Initialize database and start dashboard
-echo "🌐 Starting dashboard at http://localhost:5000"
+echo "🌐 Starting dashboard at http://localhost:8080"
 echo "📊 Press Ctrl+C to stop the dashboard"
 echo ""
 

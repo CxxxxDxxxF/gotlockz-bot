@@ -11,6 +11,7 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 import os
+import psutil
 
 app = Flask(__name__)
 CORS(app)
@@ -59,6 +60,11 @@ def init_db():
 def dashboard():
     """Main dashboard page."""
     return render_template('dashboard.html')
+
+@app.route('/api/ping')
+def ping():
+    """Ping endpoint for bot connectivity test."""
+    return jsonify({"status": "ok", "message": "Dashboard is running"})
 
 @app.route('/api/stats')
 def get_stats():
@@ -144,37 +150,499 @@ def get_picks_by_type(pick_type):
     conn.close()
     return jsonify(picks)
 
+@app.route('/api/picks/add', methods=['POST'])
+def add_pick():
+    """Add a new pick to the database."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        conn = sqlite3.connect('gotlockz.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO picks (
+                pick_number, pick_type, bet_details, odds, analysis, 
+                posted_at, confidence_score, edge_percentage
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('pick_number'),
+            data.get('pick_type'),
+            data.get('bet_details'),
+            data.get('odds'),
+            data.get('analysis', ''),
+            datetime.now().isoformat(),
+            data.get('confidence_score', 0),
+            data.get('edge_percentage', 0.0)
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': 'Pick added successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/picks/update-result', methods=['POST'])
+def update_pick_result():
+    """Update the result of a pick."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        conn = sqlite3.connect('gotlockz.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE picks 
+            SET result = ?, profit_loss = ?
+            WHERE pick_number = ? AND pick_type = ?
+        ''', (
+            data.get('result'),
+            data.get('profit_loss', 0.0),
+            data.get('pick_number'),
+            data.get('pick_type')
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': 'Pick result updated'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/bot-status')
+def get_bot_status():
+    """Get bot status and real-time information."""
+    try:
+        # Check if bot is running by looking for the process
+        bot_running = False
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if 'python' in proc.info['name'].lower() and any('bot.py' in cmd for cmd in proc.info['cmdline'] if cmd):
+                    bot_running = True
+                    break
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Get system stats
+        cpu_percent = psutil.cpu_percent()
+        memory = psutil.virtual_memory()
+        
+        return jsonify({
+            'bot_running': bot_running,
+            'system': {
+                'cpu_percent': cpu_percent,
+                'memory_percent': memory.percent,
+                'memory_available': memory.available // (1024**3),  # GB
+                'uptime': psutil.boot_time()
+            },
+            'last_updated': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'bot_running': False,
+            'error': str(e),
+            'last_updated': datetime.now().isoformat()
+        })
+
 @app.route('/api/performance/daily')
 def get_daily_performance():
-    """Get daily performance over the last 30 days."""
-    conn = sqlite3.connect('gotlockz.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT 
-            DATE(posted_at) as date,
-            COUNT(*) as picks,
-            SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
-            SUM(profit_loss) as profit
-        FROM picks 
-        WHERE posted_at >= DATE('now', '-30 days')
-        GROUP BY DATE(posted_at)
-        ORDER BY date
-    ''')
-    
-    daily_data = []
-    for row in cursor.fetchall():
-        daily_data.append({
-            'date': row[0],
-            'picks': row[1],
-            'wins': row[2],
-            'profit': row[3],
-            'win_rate': (row[2] / row[1] * 100) if row[1] > 0 else 0
+    """Get daily performance data for the chart."""
+    try:
+        period = request.args.get('period', '30d')
+        
+        # Calculate days based on period
+        if period == '7d':
+            days = 7
+        elif period == '90d':
+            days = 90
+        else:  # 30d default
+            days = 30
+            
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        conn = sqlite3.connect('gotlockz.db')
+        cursor = conn.cursor()
+        
+        # Get daily performance data
+        cursor.execute('''
+            SELECT 
+                DATE(posted_at) as date,
+                COUNT(*) as total_picks,
+                SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+                SUM(profit_loss) as daily_profit
+            FROM picks 
+            WHERE posted_at >= ? AND posted_at <= ?
+            GROUP BY DATE(posted_at)
+            ORDER BY date
+        ''', (start_date.isoformat(), end_date.isoformat()))
+        
+        daily_data = cursor.fetchall()
+        conn.close()
+        
+        # Format data for chart
+        performance_data = []
+        for row in daily_data:
+            date, total_picks, wins, daily_profit = row
+            win_rate = (wins / total_picks * 100) if total_picks > 0 else 0
+            
+            performance_data.append({
+                'date': date,
+                'profit': daily_profit or 0,
+                'win_rate': win_rate,
+                'total_picks': total_picks
+            })
+        
+        return jsonify(performance_data)
+        
+    except Exception as e:
+        return jsonify([])
+
+@app.route('/api/analytics')
+def get_analytics():
+    """Get comprehensive analytics data."""
+    try:
+        conn = sqlite3.connect('gotlockz.db')
+        cursor = conn.cursor()
+        
+        # Get overall stats
+        cursor.execute('''
+            SELECT 
+                COUNT(*) as total_picks,
+                SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN result = 'push' THEN 1 ELSE 0 END) as pushes,
+                SUM(profit_loss) as total_profit,
+                AVG(confidence_score) as avg_confidence,
+                AVG(edge_percentage) as avg_edge
+            FROM picks
+        ''')
+        
+        overall_stats = cursor.fetchone()
+        
+        # Get performance by pick type
+        cursor.execute('''
+            SELECT 
+                pick_type,
+                COUNT(*) as total,
+                SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+                SUM(profit_loss) as profit,
+                AVG(confidence_score) as avg_confidence
+            FROM picks 
+            GROUP BY pick_type
+        ''')
+        
+        type_stats = cursor.fetchall()
+        
+        # Get monthly performance
+        cursor.execute('''
+            SELECT 
+                strftime('%Y-%m', posted_at) as month,
+                COUNT(*) as picks,
+                SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+                SUM(profit_loss) as profit
+            FROM picks 
+            GROUP BY strftime('%Y-%m', posted_at)
+            ORDER BY month DESC
+            LIMIT 12
+        ''')
+        
+        monthly_stats = cursor.fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            'overall': {
+                'total_picks': overall_stats[0] or 0,
+                'wins': overall_stats[1] or 0,
+                'losses': overall_stats[2] or 0,
+                'pushes': overall_stats[3] or 0,
+                'total_profit': overall_stats[4] or 0,
+                'avg_confidence': overall_stats[5] or 0,
+                'avg_edge': overall_stats[6] or 0
+            },
+            'by_type': [
+                {
+                    'type': row[0],
+                    'total': row[1],
+                    'wins': row[2],
+                    'profit': row[3] or 0,
+                    'avg_confidence': row[4] or 0
+                } for row in type_stats
+            ],
+            'monthly': [
+                {
+                    'month': row[0],
+                    'picks': row[1],
+                    'wins': row[2],
+                    'profit': row[3] or 0
+                } for row in monthly_stats
+            ]
         })
-    
-    conn.close()
-    return jsonify(daily_data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/history')
+def get_pick_history():
+    """Get detailed pick history with filtering."""
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        pick_type = request.args.get('type', '')
+        result = request.args.get('result', '')
+        
+        offset = (page - 1) * limit
+        
+        conn = sqlite3.connect('gotlockz.db')
+        cursor = conn.cursor()
+        
+        # Build query with filters
+        query = '''
+            SELECT 
+                pick_number, pick_type, bet_details, odds, result, 
+                profit_loss, confidence_score, edge_percentage, posted_at, analysis
+            FROM picks 
+            WHERE 1=1
+        '''
+        params = []
+        
+        if pick_type:
+            query += ' AND pick_type = ?'
+            params.append(pick_type)
+        
+        if result:
+            query += ' AND result = ?'
+            params.append(result)
+        
+        query += ' ORDER BY posted_at DESC LIMIT ? OFFSET ?'
+        params.extend([limit, offset])
+        
+        cursor.execute(query, params)
+        picks = cursor.fetchall()
+        
+        # Get total count for pagination
+        count_query = 'SELECT COUNT(*) FROM picks WHERE 1=1'
+        count_params = []
+        
+        if pick_type:
+            count_query += ' AND pick_type = ?'
+            count_params.append(pick_type)
+        
+        if result:
+            count_query += ' AND result = ?'
+            count_params.append(result)
+        
+        cursor.execute(count_query, count_params)
+        total_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return jsonify({
+            'picks': [
+                {
+                    'pick_number': row[0],
+                    'pick_type': row[1],
+                    'bet_details': row[2],
+                    'odds': row[3],
+                    'result': row[4],
+                    'profit_loss': row[5] or 0,
+                    'confidence_score': row[6] or 0,
+                    'edge_percentage': row[7] or 0,
+                    'posted_at': row[8],
+                    'analysis': row[9] or ''
+                } for row in picks
+            ],
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total_count,
+                'pages': (total_count + limit - 1) // limit
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/notifications')
+def get_notifications():
+    """Get notification settings and recent notifications."""
+    try:
+        # This would typically come from a notifications table
+        # For now, return mock data
+        return jsonify({
+            'settings': {
+                'email_notifications': True,
+                'discord_notifications': True,
+                'new_pick_alerts': True,
+                'result_alerts': True,
+                'performance_alerts': True
+            },
+            'recent_notifications': [
+                {
+                    'id': 1,
+                    'type': 'new_pick',
+                    'message': 'New VIP pick posted: Lakers -5.5',
+                    'timestamp': datetime.now().isoformat(),
+                    'read': False
+                },
+                {
+                    'id': 2,
+                    'type': 'result',
+                    'message': 'Pick #123 resulted in WIN (+$50.00)',
+                    'timestamp': (datetime.now() - timedelta(hours=2)).isoformat(),
+                    'read': True
+                }
+            ]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings')
+def get_settings():
+    """Get dashboard settings."""
+    try:
+        # This would typically come from a settings table
+        return jsonify({
+            'dashboard': {
+                'auto_refresh': True,
+                'refresh_interval': 30,
+                'theme': 'dark',
+                'chart_type': 'line'
+            },
+            'notifications': {
+                'email': True,
+                'discord': True,
+                'browser': True
+            },
+            'display': {
+                'show_confidence': True,
+                'show_edge': True,
+                'show_analysis': True
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/help')
+def get_help():
+    """Get help documentation."""
+    try:
+        return jsonify({
+            'sections': [
+                {
+                    'title': 'Getting Started',
+                    'content': 'Learn how to use the GotLockz Dashboard to track your betting performance.',
+                    'items': [
+                        'Understanding the Dashboard Layout',
+                        'Reading Performance Charts',
+                        'Adding and Managing Picks',
+                        'Exporting Data'
+                    ]
+                },
+                {
+                    'title': 'Bot Integration',
+                    'content': 'How the Discord bot works with the dashboard.',
+                    'items': [
+                        'Bot Status Monitoring',
+                        'Automatic Pick Tracking',
+                        'Real-time Updates',
+                        'Troubleshooting'
+                    ]
+                },
+                {
+                    'title': 'Analytics',
+                    'content': 'Understanding your betting performance metrics.',
+                    'items': [
+                        'Win Rate Analysis',
+                        'Profit Tracking',
+                        'ROI Calculations',
+                        'Trend Analysis'
+                    ]
+                }
+            ],
+            'faq': [
+                {
+                    'question': 'How often does the dashboard update?',
+                    'answer': 'The dashboard automatically refreshes every 30 seconds. You can also manually refresh using the refresh button.'
+                },
+                {
+                    'question': 'Can I add picks manually?',
+                    'answer': 'Yes! Use the "Add Pick" button to manually add picks to the database.'
+                },
+                {
+                    'question': 'How do I export my data?',
+                    'answer': 'Click the "Export Data" button to download your picks as a CSV file.'
+                }
+            ]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sync-discord', methods=['POST'])
+def sync_discord_picks():
+    """Upsert picks from Discord into the dashboard database."""
+    try:
+        picks = request.get_json()
+        if not picks or not isinstance(picks, list):
+            return jsonify({'success': False, 'error': 'Invalid data'}), 400
+        
+        conn = sqlite3.connect('gotlockz.db')
+        cursor = conn.cursor()
+        for pick in picks:
+            # Upsert based on unique pick_number and pick_type
+            cursor.execute('''
+                SELECT COUNT(*) FROM picks WHERE pick_number = ? AND pick_type = ?
+            ''', (pick.get('pick_number'), pick.get('pick_type')))
+            exists = cursor.fetchone()[0]
+            if exists:
+                # Update existing pick
+                cursor.execute('''
+                    UPDATE picks SET
+                        bet_details = ?, odds = ?, analysis = ?, posted_at = ?,
+                        confidence_score = ?, edge_percentage = ?, result = ?, profit_loss = ?
+                    WHERE pick_number = ? AND pick_type = ?
+                ''', (
+                    pick.get('bet_details'),
+                    pick.get('odds'),
+                    pick.get('analysis', ''),
+                    pick.get('posted_at'),
+                    pick.get('confidence_score', 0),
+                    pick.get('edge_percentage', 0.0),
+                    pick.get('result'),
+                    pick.get('profit_loss', 0.0),
+                    pick.get('pick_number'),
+                    pick.get('pick_type')
+                ))
+            else:
+                # Insert new pick
+                cursor.execute('''
+                    INSERT INTO picks (
+                        pick_number, pick_type, bet_details, odds, analysis, posted_at,
+                        confidence_score, edge_percentage, result, profit_loss
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    pick.get('pick_number'),
+                    pick.get('pick_type'),
+                    pick.get('bet_details'),
+                    pick.get('odds'),
+                    pick.get('analysis', ''),
+                    pick.get('posted_at'),
+                    pick.get('confidence_score', 0),
+                    pick.get('edge_percentage', 0.0),
+                    pick.get('result'),
+                    pick.get('profit_loss', 0.0)
+                ))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': f'Synced {len(picks)} picks'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=8080, debug=True)
