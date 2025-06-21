@@ -8,11 +8,14 @@ from datetime import datetime
 class GotLockzBot(commands.Bot):
     def __init__(self, **kwargs):
         super().__init__(command_prefix="!", intents=discord.Intents.all(), **kwargs)
+        # Use environment variable or default to localhost for development
         self.dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080")
+        self.dashboard_enabled = bool(os.getenv("DASHBOARD_URL"))
 
     async def on_ready(self):
         print(f"Bot connected as {self.user}")
         print(f"Dashboard URL: {self.dashboard_url}")
+        print(f"Dashboard enabled: {self.dashboard_enabled}")
         
         # Sync slash commands with Discord
         print("🔄 Syncing slash commands...")
@@ -22,15 +25,18 @@ class GotLockzBot(commands.Bot):
         except Exception as e:
             print(f"❌ Command sync failed: {e}")
         
-        # Test dashboard connection
-        try:
-            response = requests.get(f"{self.dashboard_url}/api/ping", timeout=5)
-            if response.status_code == 200:
-                print("✅ Dashboard connection successful")
-            else:
-                print("⚠️ Dashboard connection failed")
-        except Exception as e:
-            print(f"❌ Dashboard connection error: {e}")
+        # Test dashboard connection only if dashboard is enabled
+        if self.dashboard_enabled:
+            try:
+                response = requests.get(f"{self.dashboard_url}/api/ping", timeout=5)
+                if response.status_code == 200:
+                    print("✅ Dashboard connection successful")
+                else:
+                    print("⚠️ Dashboard connection failed")
+            except Exception as e:
+                print(f"❌ Dashboard connection error: {e}")
+        else:
+            print("ℹ️ Dashboard disabled - using local mode")
 
     async def setup_hook(self):
         # Register slash commands
@@ -41,6 +47,11 @@ class GotLockzBot(commands.Bot):
         @self.tree.command(name="sync", description="Sync picks from Discord to dashboard")
         async def slash_sync(interaction: discord.Interaction):
             await interaction.response.defer()
+            
+            if not self.dashboard_enabled:
+                await interaction.followup.send("ℹ️ Dashboard is disabled. Running in local mode.")
+                return
+                
             try:
                 # Example: Send some test picks to dashboard
                 test_picks = [
@@ -70,12 +81,19 @@ class GotLockzBot(commands.Bot):
                 else:
                     await interaction.followup.send(f"❌ Sync failed: {response.text}")
                     
+            except requests.exceptions.ConnectionError:
+                await interaction.followup.send("❌ Cannot connect to dashboard. Make sure DASHBOARD_URL is set correctly.")
             except Exception as e:
                 await interaction.followup.send(f"❌ Sync error: {str(e)}")
         
         @self.tree.command(name="status", description="Check bot and dashboard status")
         async def slash_status(interaction: discord.Interaction):
             await interaction.response.defer()
+            
+            if not self.dashboard_enabled:
+                await interaction.followup.send("ℹ️ Bot Status: 🟢 Online (Dashboard disabled)")
+                return
+                
             try:
                 response = requests.get(f"{self.dashboard_url}/api/bot-status", timeout=5)
                 if response.status_code == 200:
@@ -84,12 +102,19 @@ class GotLockzBot(commands.Bot):
                     await interaction.followup.send(f"Bot Status: {status}")
                 else:
                     await interaction.followup.send("❌ Dashboard not responding")
+            except requests.exceptions.ConnectionError:
+                await interaction.followup.send("❌ Cannot connect to dashboard. Check DASHBOARD_URL setting.")
             except Exception as e:
                 await interaction.followup.send(f"❌ Status check failed: {str(e)}")
         
         @self.tree.command(name="addpick", description="Add a new pick to the dashboard")
         async def slash_addpick(interaction: discord.Interaction, pick_type: str, pick_number: int, bet_details: str):
             await interaction.response.defer()
+            
+            if not self.dashboard_enabled:
+                await interaction.followup.send("ℹ️ Dashboard is disabled. Cannot add picks.")
+                return
+                
             try:
                 pick_data = {
                     "pick_type": pick_type.lower(),
@@ -113,6 +138,8 @@ class GotLockzBot(commands.Bot):
                 else:
                     await interaction.followup.send(f"❌ Failed to add pick: {response.text}")
                     
+            except requests.exceptions.ConnectionError:
+                await interaction.followup.send("❌ Cannot connect to dashboard. Check DASHBOARD_URL setting.")
             except Exception as e:
                 await interaction.followup.send(f"❌ Error adding pick: {str(e)}")
         
@@ -135,6 +162,10 @@ class GotLockzBot(commands.Bot):
         @self.command()
         async def sync(ctx):
             """Sync picks from Discord to dashboard"""
+            if not self.dashboard_enabled:
+                await ctx.send("ℹ️ Dashboard is disabled. Running in local mode.")
+                return
+                
             try:
                 # Example: Send some test picks to dashboard
                 test_picks = [
@@ -164,12 +195,18 @@ class GotLockzBot(commands.Bot):
                 else:
                     await ctx.send(f"❌ Sync failed: {response.text}")
                     
+            except requests.exceptions.ConnectionError:
+                await ctx.send("❌ Cannot connect to dashboard. Make sure DASHBOARD_URL is set correctly.")
             except Exception as e:
                 await ctx.send(f"❌ Sync error: {str(e)}")
         
         @self.command()
         async def status(ctx):
             """Check bot and dashboard status"""
+            if not self.dashboard_enabled:
+                await ctx.send("ℹ️ Bot Status: 🟢 Online (Dashboard disabled)")
+                return
+                
             try:
                 response = requests.get(f"{self.dashboard_url}/api/bot-status", timeout=5)
                 if response.status_code == 200:
@@ -178,12 +215,18 @@ class GotLockzBot(commands.Bot):
                     await ctx.send(f"Bot Status: {status}")
                 else:
                     await ctx.send("❌ Dashboard not responding")
+            except requests.exceptions.ConnectionError:
+                await ctx.send("❌ Cannot connect to dashboard. Check DASHBOARD_URL setting.")
             except Exception as e:
                 await ctx.send(f"❌ Status check failed: {str(e)}")
         
         @self.command()
         async def addpick(ctx, pick_type: str, pick_number: int, *, bet_details: str):
             """Add a new pick to the dashboard"""
+            if not self.dashboard_enabled:
+                await ctx.send("ℹ️ Dashboard is disabled. Cannot add picks.")
+                return
+                
             try:
                 pick_data = {
                     "pick_type": pick_type.lower(),
@@ -207,6 +250,8 @@ class GotLockzBot(commands.Bot):
                 else:
                     await ctx.send(f"❌ Failed to add pick: {response.text}")
                     
+            except requests.exceptions.ConnectionError:
+                await ctx.send("❌ Cannot connect to dashboard. Check DASHBOARD_URL setting.")
             except Exception as e:
                 await ctx.send(f"❌ Error adding pick: {str(e)}")
 

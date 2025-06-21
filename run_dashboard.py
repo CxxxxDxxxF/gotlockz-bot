@@ -12,11 +12,8 @@ from pathlib import Path
 dashboard_path = Path(__file__).parent / 'dashboard'
 sys.path.insert(0, str(dashboard_path))
 
-# Change to dashboard directory
-os.chdir(dashboard_path)
-
 # Import and run the dashboard
-from app import app, init_db
+from dashboard.app import app, init_db
 
 if __name__ == '__main__':
     print("🚀 Starting GotLockz Dashboard...")
