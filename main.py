@@ -8,20 +8,24 @@ Main entry point for the GotLockz Discord bot.
 Handles startup, shutdown, and signal handling.
 """
 import os
-import logging
+import asyncio
 from bot import GotLockzBot
 
 def main():
-    logging.basicConfig(level=logging.INFO)
-    token = os.getenv("DISCORD_TOKEN")
+    # Get bot token from environment
+    token = os.getenv('DISCORD_TOKEN')
     if not token:
         print("❌ DISCORD_TOKEN environment variable not set!")
-        print("Please set your Discord bot token as an environment variable.")
         return
     
+    # Create and run bot
     bot = GotLockzBot()
-    print("🚀 Starting GotLockz bot...")
-    bot.run(token)
+    
+    try:
+        print("🚀 Starting GotLockz Bot...")
+        bot.run(token)
+    except Exception as e:
+        print(f"❌ Bot failed to start: {e}")
 
 if __name__ == "__main__":
     main()
