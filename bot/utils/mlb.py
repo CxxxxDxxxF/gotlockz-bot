@@ -82,21 +82,19 @@ class MLBDataFetcher:
             schedule = self.statsapi.schedule(date=today, sportId=1)
             
             live_games = []
-            if isinstance(schedule, dict) and 'dates' in schedule:
-                for date in schedule.get('dates', []):
-                    if isinstance(date, dict) and 'games' in date:
-                        for game in date.get('games', []):
-                            if isinstance(game, dict):
-                                game_status = game.get('status', {}).get('detailedState', '')
-                                if 'Live' in game_status or 'In Progress' in game_status:
-                                    live_games.append({
-                                        'away_team': game.get('teams', {}).get('away', {}).get('team', {}).get('name', ''),
-                                        'home_team': game.get('teams', {}).get('home', {}).get('team', {}).get('name', ''),
-                                        'away_score': game.get('teams', {}).get('away', {}).get('score', 0),
-                                        'home_score': game.get('teams', {}).get('home', {}).get('score', 0),
-                                        'inning': game.get('linescore', {}).get('currentInning', 0),
-                                        'status': game_status
-                                    })
+            if schedule:  # schedule is a list, not a dict
+                for game in schedule:
+                    if isinstance(game, dict):
+                        game_status = game.get('status', '')
+                        if 'Live' in game_status or 'In Progress' in game_status:
+                            live_games.append({
+                                'away_team': game.get('away_name', ''),
+                                'home_team': game.get('home_name', ''),
+                                'away_score': game.get('away_score', 0),
+                                'home_score': game.get('home_score', 0),
+                                'inning': game.get('current_inning', 0),
+                                'status': game_status
+                            })
             
             return {'live_games': live_games}
 
@@ -157,23 +155,18 @@ class MLBDataFetcher:
             
             team_id = teams[0]['id']
             
-            # Get team stats using the correct method
-            team_stats = self.statsapi.get('teams', {'teamId': team_id, 'season': datetime.now().year})
+            # For now, return basic team info since detailed stats require different API calls
+            # We can enhance this later with more detailed stats
+            return {
+                'wins': 0,  # Would need additional API call
+                'losses': 0,  # Would need additional API call
+                'win_pct': 0,  # Would need additional API call
+                'runs_per_game': 0,  # Would need additional API call
+                'era': 0,  # Would need additional API call
+                'team_id': team_id,
+                'team_name': teams[0]['name']
+            }
             
-            if isinstance(team_stats, dict) and 'teams' in team_stats:
-                teams_data = team_stats['teams']
-                if isinstance(teams_data, list) and len(teams_data) > 0:
-                    team_data = teams_data[0]
-                    return {
-                        'wins': team_data.get('record', {}).get('wins', 0),
-                        'losses': team_data.get('record', {}).get('losses', 0),
-                        'win_pct': team_data.get('record', {}).get('winPercentage', 0),
-                        'runs_per_game': 0,  # Would need additional API call
-                        'era': 0  # Would need additional API call
-                    }
-            
-            return {}
-
         except Exception as e:
             logger.error(f"Error fetching MLB team stats: {e}")
             return {}
@@ -189,20 +182,18 @@ class MLBDataFetcher:
             player_id = players[0]['id']
             
             # Get player stats using the correct method
-            player_stats = self.statsapi.player_stats(player_id, season=datetime.now().year, group='hitting')
+            player_stats = self.statsapi.player_stat_data(player_id, group='hitting', type='season')
             
-            if isinstance(player_stats, dict) and 'stats' in player_stats:
-                stats_list = player_stats['stats']
-                if isinstance(stats_list, list) and len(stats_list) > 0:
-                    stats = stats_list[0]['splits'][0]['stat']
-                    return {
-                        'avg': f"{stats.get('avg', 0):.3f}",
-                        'hr': stats.get('homeRuns', 0),
-                        'rbi': stats.get('rbi', 0),
-                        'ops': f"{stats.get('ops', 0):.3f}",
-                        'slg': f"{stats.get('slg', 0):.3f}",
-                        'obp': f"{stats.get('obp', 0):.3f}"
-                    }
+            if player_stats and 'stats' in player_stats and player_stats['stats']:
+                stats = player_stats['stats'][0]['stats']  # Correct path to stats
+                return {
+                    'batting_avg': stats.get('avg', '.000'),
+                    'hr': stats.get('homeRuns', 0),
+                    'rbi': stats.get('rbi', 0),
+                    'ops': stats.get('ops', '.000'),
+                    'slg': stats.get('slg', '.000'),
+                    'obp': stats.get('obp', '.000')
+                }
             
             return {}
 
@@ -216,23 +207,21 @@ class MLBDataFetcher:
             today = datetime.now().strftime("%Y-%m-%d")
             schedule = self.statsapi.schedule(date=today, sportId=1)
             
-            if isinstance(schedule, dict) and 'dates' in schedule:
-                for date in schedule.get('dates', []):
-                    if isinstance(date, dict) and 'games' in date:
-                        for game in date.get('games', []):
-                            if isinstance(game, dict):
-                                game_away = game.get('teams', {}).get('away', {}).get('team', {}).get('name', '')
-                                game_home = game.get('teams', {}).get('home', {}).get('team', {}).get('name', '')
-                                
-                                if (away_team.lower() in game_away.lower() and 
-                                    home_team.lower() in game_home.lower()):
-                                    return {
-                                        'game_time': game.get('gameDate', ''),
-                                        'venue': game.get('venue', {}).get('name', ''),
-                                        'weather': 'Clear, 72°F',  # Default
-                                        'away_pitcher': game.get('teams', {}).get('away', {}).get('probablePitcher', {}).get('fullName', 'TBD'),
-                                        'home_pitcher': game.get('teams', {}).get('home', {}).get('probablePitcher', {}).get('fullName', 'TBD')
-                                    }
+            if schedule:  # schedule is a list
+                for game in schedule:
+                    if isinstance(game, dict):
+                        game_away = game.get('away_name', '')
+                        game_home = game.get('home_name', '')
+                        
+                        if (away_team.lower() in game_away.lower() and 
+                            home_team.lower() in game_home.lower()):
+                            return {
+                                'game_time': game.get('game_datetime', ''),
+                                'venue': game.get('venue_name', ''),
+                                'weather': 'Clear, 72°F',  # Default
+                                'away_pitcher': game.get('away_probable_pitcher', 'TBD'),
+                                'home_pitcher': game.get('home_probable_pitcher', 'TBD')
+                            }
             
             return {}
 
@@ -310,16 +299,16 @@ class MLBDataFetcher:
             player_id = players[0]['id']
             
             # Get recent stats using the correct method
-            recent_stats = self.statsapi.player_stats(
+            recent_stats = self.statsapi.player_stat_data(
                 player_id, 
-                season=datetime.now().year, 
-                group='hitting'
+                group='hitting',
+                type='season'
             )
             
-            if recent_stats and 'stats' in recent_stats:
-                stats = recent_stats['stats'][0]['splits'][0]['stat']
+            if recent_stats and 'stats' in recent_stats and recent_stats['stats']:
+                stats = recent_stats['stats'][0]['stats']  # Correct path to stats
                 return {
-                    'recent_avg': f"{stats.get('avg', 0):.3f}",
+                    'recent_avg': stats.get('avg', '.000'),
                     'recent_hr': stats.get('homeRuns', 0),
                     'recent_rbi': stats.get('rbi', 0)
                 }
@@ -340,18 +329,14 @@ class MLBDataFetcher:
 
             team_id = teams[0]['id']
             
-            # Get recent stats using the correct method
-            recent_stats = self.statsapi.get('teams', {'teamId': team_id, 'season': datetime.now().year})
-            
-            if recent_stats and 'teams' in recent_stats:
-                team_data = recent_stats['teams'][0]
-                return {
-                    'recent_wins': team_data.get('record', {}).get('wins', 0),
-                    'recent_losses': team_data.get('record', {}).get('losses', 0),
-                    'recent_runs_per_game': 0  # Would need additional API call
-                }
-
-            return {}
+            # For now, return basic team info since detailed stats require different API calls
+            return {
+                'recent_wins': 0,  # Would need additional API call
+                'recent_losses': 0,  # Would need additional API call
+                'recent_runs_per_game': 0,  # Would need additional API call
+                'team_id': team_id,
+                'team_name': teams[0]['name']
+            }
 
         except Exception as e:
             logger.error(f"Error fetching recent team stats: {e}")

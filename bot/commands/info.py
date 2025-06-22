@@ -99,9 +99,7 @@ class InfoCommands(app_commands.Group):
 • **Total:** {sum(counters.values())}
 
 **Commands Available:**
-• `/betting vip` - Post VIP pick
-• `/betting free` - Post free pick
-• `/lotto-ticket-bets` - Post lotto pick
+• `/betting postpick` - Post a pick with custom units and channel
 • `/info ping` - Test responsiveness
 • `/info status` - Check bot status
 • `/info stats` - View statistics"""
@@ -121,7 +119,15 @@ class InfoCommands(app_commands.Group):
         """Force sync all slash commands."""
         try:
             # Check if user has admin permissions
-            if not interaction.user.guild_permissions.administrator:
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.",
+                    ephemeral=True
+                )
+                return
+                
+            member = interaction.guild.get_member(interaction.user.id)
+            if not member or not member.guild_permissions.administrator:
                 await interaction.response.send_message(
                     "❌ You need administrator permissions to use this command.",
                     ephemeral=True
