@@ -175,6 +175,14 @@ class GotLockzBot(commands.Bot):
                 ephemeral=True
             )
             return
+        
+        if not ANALYSIS_ENABLED:
+            await interaction.response.send_message(
+                "❌ Analysis functionality is not available. Please install required dependencies: opencv-python, pytesseract",
+                ephemeral=True
+            )
+            return
+            
         await interaction.response.defer(thinking=True)
         try:
             # Validate image
@@ -454,6 +462,13 @@ class GotLockzBot(commands.Bot):
         """Post a pick with analysis to the specified channel."""
         # Check if interaction has already been responded to
         if interaction.response.is_done():
+            return
+        
+        if not ANALYSIS_ENABLED:
+            await interaction.response.send_message(
+                "❌ Analysis functionality is not available. Please install required dependencies: opencv-python, pytesseract",
+                ephemeral=True
+            )
             return
         
         await interaction.response.defer(thinking=True)
