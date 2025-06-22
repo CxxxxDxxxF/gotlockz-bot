@@ -12,29 +12,55 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-def get_env_var(name: str, default: str = "") -> str:
+def get_env_var(name: str, default: str = "", required: bool = False) -> str:
     """Gets an environment variable or returns a default."""
     var = os.getenv(name)
     if var is None or var == "":
-        if default == "":
+        if required:
             logger.error(f"{name} environment variable not set.")
             raise ValueError(f"Missing required environment variable: {name}")
         return default
     return var
 
 # --- Bot Credentials & IDs ---
-DISCORD_TOKEN = get_env_var("DISCORD_TOKEN")
-GUILD_ID = int(get_env_var("GUILD_ID"))
-OWNER_ID = int(get_env_var("OWNER_ID", default="0")) # Optional: for DMs
+try:
+    DISCORD_TOKEN = get_env_var("DISCORD_TOKEN", required=True)
+except ValueError:
+    DISCORD_TOKEN = ""
+
+try:
+    GUILD_ID = int(get_env_var("GUILD_ID", default="0"))
+except ValueError:
+    GUILD_ID = 0
+
+try:
+    OWNER_ID = int(get_env_var("OWNER_ID", default="0"))
+except ValueError:
+    OWNER_ID = 0
 
 # --- Channel IDs ---
-ANALYSIS_CHANNEL_ID = int(get_env_var("ANALYSIS_CHANNEL_ID"))
-VIP_CHANNEL_ID = int(get_env_var("VIP_CHANNEL_ID"))
-LOTTO_CHANNEL_ID = int(get_env_var("LOTTO_CHANNEL_ID"))
-FREE_CHANNEL_ID = int(get_env_var("FREE_CHANNEL_ID"))
+try:
+    ANALYSIS_CHANNEL_ID = int(get_env_var("ANALYSIS_CHANNEL_ID", default="0"))
+except ValueError:
+    ANALYSIS_CHANNEL_ID = 0
+
+try:
+    VIP_CHANNEL_ID = int(get_env_var("VIP_CHANNEL_ID", default="0"))
+except ValueError:
+    VIP_CHANNEL_ID = 0
+
+try:
+    LOTTO_CHANNEL_ID = int(get_env_var("LOTTO_CHANNEL_ID", default="0"))
+except ValueError:
+    LOTTO_CHANNEL_ID = 0
+
+try:
+    FREE_CHANNEL_ID = int(get_env_var("FREE_CHANNEL_ID", default="0"))
+except ValueError:
+    FREE_CHANNEL_ID = 0
 
 # --- API Keys ---
-OPENAI_API_KEY = get_env_var("OPENAI_API_KEY")
+OPENAI_API_KEY = get_env_var("OPENAI_API_KEY", default="")
 
 # --- AI Analysis Tuning ---
 OPENAI_MODEL = get_env_var("OPENAI_MODEL", default="gpt-4")

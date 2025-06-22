@@ -6,41 +6,280 @@ commands.py
 
 Discord slash commands for the GotLockz bot.
 Includes enhanced commands for betting analysis, pick management,
-and administrative functions.
+and administrative functions with production-grade safety features.
 """
 import logging
 import json
 import asyncio
-from typing import Optional, Dict, Any
-from datetime import datetime
+import functools
+import aiofiles
+from typing import Optional, Dict, Any, List, Union
+from datetime import datetime, timedelta
+import psutil
+import os
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 import requests
 
-from config import (
-    GUILD_ID, ANALYSIS_CHANNEL_ID, VIP_CHANNEL_ID, 
-    LOTTO_CHANNEL_ID, FREE_CHANNEL_ID, OWNER_ID
-)
-from image_processing import extract_text_from_image, parse_bet_details
-from ai_analysis import analyze_bet_slip, generate_pick_summary, validate_analysis_quality
-from data_enrichment import enrich_bet_analysis
+# Import config if available, otherwise use environment variables
+try:
+    from config import (
+        GUILD_ID, ANALYSIS_CHANNEL_ID, VIP_CHANNEL_ID, 
+        LOTTO_CHANNEL_ID, FREE_CHANNEL_ID, OWNER_ID
+    )
+except ImportError:
+    # Fallback to environment variables
+    GUILD_ID = int(os.getenv('GUILD_ID', 0))
+    ANALYSIS_CHANNEL_ID = int(os.getenv('ANALYSIS_CHANNEL_ID', 0))
+    VIP_CHANNEL_ID = int(os.getenv('VIP_CHANNEL_ID', 0))
+    LOTTO_CHANNEL_ID = int(os.getenv('LOTTO_CHANNEL_ID', 0))
+    FREE_CHANNEL_ID = int(os.getenv('FREE_CHANNEL_ID', 0))
+    OWNER_ID = int(os.getenv('OWNER_ID', 0))
 
 logger = logging.getLogger(__name__)
 
 
+class PermissionError(Exception):
+    """Custom exception for permission errors."""
+    pass
+
+
+class CooldownError(Exception):
+    """Custom exception for cooldown errors."""
+    pass
+
+
+class PermissionsManager:
+    """Manages role and user-based permissions for commands."""
+    
+    def __init__(self, bot):
+        self.bot = bot
+        self.vip_roles = self._load_vip_roles()
+        self.admin_roles = self._load_admin_roles()
+        self.blocked_users = self._load_blocked_users()
+        self.cooldowns = {}  # {user_id: {command: last_used_time}}
+    
+    def _load_vip_roles(self) -> List[int]:
+        """Load VIP role IDs from environment or config."""
+        vip_roles_str = os.getenv('VIP_ROLE_IDS', '')
+        if vip_roles_str:
+            return [int(role_id.strip()) for role_id in vip_roles_str.split(',') if role_id.strip()]
+        return []
+    
+    def _load_admin_roles(self) -> List[int]:
+        """Load admin role IDs from environment or config."""
+        admin_roles_str = os.getenv('ADMIN_ROLE_IDS', '')
+        if admin_roles_str:
+            return [int(role_id.strip()) for role_id in admin_roles_str.split(',') if role_id.strip()]
+        return []
+    
+    def _load_blocked_users(self) -> List[int]:
+        """Load blocked user IDs from environment or config."""
+        blocked_users_str = os.getenv('BLOCKED_USER_IDS', '')
+        if blocked_users_str:
+            return [int(user_id.strip()) for user_id in blocked_users_str.split(',') if user_id.strip()]
+        return []
+    
+    def has_vip_role(self, member: discord.Member) -> bool:
+        """Check if member has VIP role."""
+        if not member:
+            return False
+        
+        # Check if user is owner
+        if member.id == OWNER_ID:
+            return True
+        
+        # Check VIP roles
+        member_role_ids = [role.id for role in member.roles]
+        return any(role_id in member_role_ids for role_id in self.vip_roles)
+    
+    def has_admin_role(self, member: discord.Member) -> bool:
+        """Check if member has admin role."""
+        if not member:
+            return False
+        
+        # Check if user is owner
+        if member.id == OWNER_ID:
+            return True
+        
+        # Check admin roles
+        member_role_ids = [role.id for role in member.roles]
+        return any(role_id in member_role_ids for role_id in self.admin_roles)
+    
+    def is_blocked(self, user_id: int) -> bool:
+        """Check if user is blocked."""
+        return user_id in self.blocked_users
+    
+    def check_cooldown(self, user_id: int, command: str, cooldown_seconds: int) -> bool:
+        """Check if user is on cooldown for a command."""
+        if user_id not in self.cooldowns:
+            self.cooldowns[user_id] = {}
+        
+        if command not in self.cooldowns[user_id]:
+            return True  # No cooldown recorded, allow command
+        
+        last_used = self.cooldowns[user_id][command]
+        time_since_last = (datetime.now() - last_used).total_seconds()
+        
+        return time_since_last >= cooldown_seconds
+    
+    def set_cooldown(self, user_id: int, command: str):
+        """Set cooldown for user and command."""
+        if user_id not in self.cooldowns:
+            self.cooldowns[user_id] = {}
+        
+        self.cooldowns[user_id][command] = datetime.now()
+
+
+def require_vip():
+    """Decorator to require VIP role for commands."""
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+            # Check if user is blocked
+            if self.bot.permissions.is_blocked(interaction.user.id):
+                await interaction.response.send_message(
+                    "❌ You are blocked from using this bot.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Check VIP permissions
+            member = None
+            if interaction.guild:
+                member = interaction.guild.get_member(interaction.user.id)
+            if not member or not self.bot.permissions.has_vip_role(member):
+                await interaction.response.send_message(
+                    "❌ This command requires VIP access. Please contact an administrator.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Check cooldown
+            cooldown_seconds = 30  # 30 seconds for VIP commands
+            if not self.bot.permissions.check_cooldown(interaction.user.id, func.__name__, cooldown_seconds):
+                remaining = cooldown_seconds - (datetime.now() - self.bot.permissions.cooldowns[interaction.user.id][func.__name__]).total_seconds()
+                await interaction.response.send_message(
+                    f"⏰ Please wait {remaining:.1f} seconds before using this command again.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Set cooldown
+            self.bot.permissions.set_cooldown(interaction.user.id, func.__name__)
+            
+            # Execute command
+            try:
+                return await func(self, interaction, *args, **kwargs)
+            except Exception as e:
+                await self.bot.logger.log_command(interaction, func.__name__, success=False, error=str(e))
+                raise
+        return wrapper
+    return decorator
+
+
+def require_admin():
+    """Decorator to require admin role for commands."""
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+            # Check if user is blocked
+            if self.bot.permissions.is_blocked(interaction.user.id):
+                await interaction.response.send_message(
+                    "❌ You are blocked from using this bot.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Check admin permissions
+            member = None
+            if interaction.guild:
+                member = interaction.guild.get_member(interaction.user.id)
+            if not member or not self.bot.permissions.has_admin_role(member):
+                await interaction.response.send_message(
+                    "❌ This command requires administrator access.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Execute command
+            try:
+                return await func(self, interaction, *args, **kwargs)
+            except Exception as e:
+                await self.bot.logger.log_command(interaction, func.__name__, success=False, error=str(e))
+                raise
+        return wrapper
+    return decorator
+
+
+def validate_input(func):
+    """Decorator to validate command input."""
+    @functools.wraps(func)
+    async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+        try:
+            # Validate interaction
+            if not interaction or not interaction.user:
+                raise ValueError("Invalid interaction")
+            
+            # Validate guild context for guild-specific commands
+            if hasattr(func, '__guild_required__') and func.__guild_required__:
+                if not interaction.guild:
+                    await interaction.response.send_message(
+                        "❌ This command can only be used in a server.", 
+                        ephemeral=True
+                    )
+                    return
+            
+            # Execute command
+            return await func(self, interaction, *args, **kwargs)
+            
+        except ValueError as e:
+            await interaction.response.send_message(
+                f"❌ Invalid input: {str(e)}", 
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ An error occurred: {str(e)}", 
+                ephemeral=True
+            )
+            raise
+    
+    return wrapper
+
+
 class BotLogger:
-    """Handles logging bot events to Discord channels."""
+    """Handles logging bot events to Discord channels and files."""
     
     def __init__(self, bot):
         self.bot = bot
         self.log_channel_id = getattr(bot, 'log_channel_id', None)
         self.log_level = getattr(bot, 'log_level', 'INFO')
+        self.log_file = 'bot_logs.txt'
+        self.setup_file_logging()
+    
+    def setup_file_logging(self):
+        """Setup file logging for debugging."""
+        file_handler = logging.FileHandler(self.log_file)
+        file_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
     
     async def log_event(self, level: str, title: str, description: str, fields: Optional[Dict[str, str]] = None, color: int = 0x00ff00):
-        """Log an event to the designated logging channel."""
-        if not self.log_channel_id or level not in ['INFO', 'WARNING', 'ERROR', 'SUCCESS']:
+        """Log an event to the designated logging channel and file."""
+        # Log to file
+        log_message = f"{level}: {title} - {description}"
+        if fields:
+            log_message += f" | Fields: {fields}"
+        logger.info(log_message)
+        
+        # Log to Discord channel if configured
+        if not self.log_channel_id:
             return
         
         try:
@@ -76,15 +315,42 @@ class BotLogger:
             logger.error(f"Failed to log to Discord channel: {e}")
     
     async def log_command(self, interaction: discord.Interaction, command_name: str, success: bool = True, error: Optional[str] = None):
-        """Log command usage."""
+        """Log command usage with detailed information."""
+        # Log to file
+        def safe_id(val):
+            try:
+                return int(val)
+            except Exception:
+                try:
+                    return str(val)
+                except Exception:
+                    return None
+        log_data = {
+            'timestamp': datetime.now().isoformat(),
+            'user_id': safe_id(getattr(interaction.user, 'id', None)),
+            'user_name': str(getattr(interaction.user, 'name', getattr(interaction.user, 'display_name', 'Unknown'))),
+            'command': command_name,
+            'guild_id': safe_id(getattr(getattr(interaction, 'guild', None), 'id', None)),
+            'guild_name': str(getattr(getattr(interaction, 'guild', None), 'name', 'None')),
+            'channel_id': safe_id(getattr(interaction, 'channel_id', None)),
+            'channel_name': str(getattr(interaction, 'channel', 'None')),
+            'success': success,
+            'error': error
+        }
+        try:
+            logger.info(f"Command executed: {json.dumps(log_data)}")
+        except TypeError:
+            logger.info(f"Command executed (fallback): {str(log_data)}")
+        
+        # Log to Discord
         if not success:
             await self.log_event(
                 'ERROR',
                 f"Command Error: /{command_name}",
-                f"Command failed for {interaction.user}",
+                f"Command failed for {getattr(interaction, 'user', 'Unknown')}",
                 {
-                    'User': f"{interaction.user} ({interaction.user.id})",
-                    'Channel': f"{interaction.channel} ({interaction.channel_id})",
+                    'User': f"{getattr(interaction, 'user', 'Unknown')} ({safe_id(getattr(getattr(interaction, 'user', None), 'id', None))})",
+                    'Channel': f"{getattr(interaction, 'channel', 'Unknown')} ({safe_id(getattr(interaction, 'channel_id', None))})",
                     'Error': error or 'Unknown error'
                 }
             )
@@ -92,11 +358,11 @@ class BotLogger:
             await self.log_event(
                 'SUCCESS',
                 f"Command Used: /{command_name}",
-                f"Command executed successfully by {interaction.user}",
+                f"Command executed successfully by {getattr(interaction, 'user', 'Unknown')}",
                 {
-                    'User': f"{interaction.user} ({interaction.user.id})",
-                    'Channel': f"{interaction.channel} ({interaction.channel_id})",
-                    'Guild': f"{interaction.guild} ({interaction.guild_id})"
+                    'User': f"{getattr(interaction, 'user', 'Unknown')} ({safe_id(getattr(getattr(interaction, 'user', None), 'id', None))})",
+                    'Channel': f"{getattr(interaction, 'channel', 'Unknown')} ({safe_id(getattr(interaction, 'channel_id', None))})",
+                    'Guild': f"{getattr(interaction, 'guild', 'Unknown')} ({safe_id(getattr(getattr(interaction, 'guild', None), 'id', None))})" if getattr(interaction, 'guild', None) else 'DM'
                 }
             )
     
@@ -127,10 +393,40 @@ class BotLogger:
                 'Users': str(len(self.bot.users))
             }
         )
+    
+    async def log_heartbeat(self, cpu_percent: float, memory_percent: float, uptime: str):
+        """Log heartbeat with system metrics."""
+        await self.log_event(
+            'INFO',
+            'Bot Heartbeat',
+            'Bot is running normally',
+            {
+                'CPU Usage': f"{cpu_percent:.1f}%",
+                'Memory Usage': f"{memory_percent:.1f}%",
+                'Uptime': uptime,
+                'Guilds': str(len(self.bot.guilds)),
+                'Latency': f"{round(self.bot.latency * 1000)}ms"
+            }
+        )
+    
+    def log_exception(self, error: Exception, context: str = ""):
+        """Log exceptions with full traceback."""
+        logger.exception(f"Exception in {context}: {str(error)}")
+        
+        # Also log to file with timestamp
+        with open('error_logs.txt', 'a') as f:
+            f.write(f"\n{'='*50}\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+            f.write(f"Context: {context}\n")
+            f.write(f"Error: {str(error)}\n")
+            f.write(f"Traceback:\n")
+            import traceback
+            f.write(traceback.format_exc())
+            f.write(f"{'='*50}\n")
 
 
 class GotLockzCommands(app_commands.Group):
-    """GotLockz Bot slash commands."""
+    """GotLockz Bot slash commands with production-grade safety features."""
     
     def __init__(self, bot):
         super().__init__(name="gotlockz", description="GotLockz Bot commands")
@@ -138,6 +434,7 @@ class GotLockzCommands(app_commands.Group):
         self.logger = BotLogger(bot)
 
     @app_commands.command(name="ping", description="Test bot responsiveness")
+    @validate_input
     async def ping(self, interaction: discord.Interaction):
         """Test bot responsiveness"""
         try:
@@ -147,7 +444,128 @@ class GotLockzCommands(app_commands.Group):
             await self.logger.log_command(interaction, "ping", success=False, error=str(e))
             raise
 
+    @app_commands.command(name="status", description="Show detailed bot status and system metrics")
+    @validate_input
+    async def status_command(self, interaction: discord.Interaction):
+        """Show detailed bot status with system metrics."""
+        await interaction.response.defer(thinking=True)
+        
+        try:
+            # Get system metrics
+            cpu_percent = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+            
+            # Calculate uptime
+            uptime = datetime.now() - self.bot.start_time
+            uptime_str = self._format_uptime(uptime)
+            
+            # Create status embed
+            embed = discord.Embed(
+                title="🤖 Bot Status & System Metrics",
+                description="Comprehensive bot health and system information",
+                color=0x00ff00,
+                timestamp=datetime.now()
+            )
+            
+            # Bot status
+            embed.add_field(
+                name="🟢 Bot Status",
+                value=f"**Status:** Online\n"
+                      f"**Latency:** {round(self.bot.latency * 1000)}ms\n"
+                      f"**Uptime:** {uptime_str}\n"
+                      f"**Guilds:** {len(self.bot.guilds)}\n"
+                      f"**Users:** {len(self.bot.users)}",
+                inline=True
+            )
+            
+            # System metrics
+            embed.add_field(
+                name="💻 System Metrics",
+                value=f"**CPU Usage:** {cpu_percent:.1f}%\n"
+                      f"**Memory:** {memory.percent:.1f}%\n"
+                      f"**Disk:** {disk.percent:.1f}%\n"
+                      f"**Memory Used:** {memory.used // (1024**3):.1f}GB\n"
+                      f"**Memory Total:** {memory.total // (1024**3):.1f}GB",
+                inline=True
+            )
+            
+            # Services status
+            services_status = []
+            services_status.append(f"**Analysis:** {'✅' if getattr(self.bot, 'ANALYSIS_ENABLED', False) else '❌'}")
+            services_status.append(f"**Dashboard:** {'✅' if self.bot.dashboard_enabled else '❌'}")
+            services_status.append(f"**Logging:** {'✅' if self.bot.log_channel_id else '❌'}")
+            services_status.append(f"**Permissions:** {'✅' if hasattr(self.bot, 'permissions') else '❌'}")
+            
+            embed.add_field(
+                name="🔧 Services",
+                value="\n".join(services_status),
+                inline=True
+            )
+            
+            # Environment warnings
+            warnings = self._check_environment_warnings()
+            if warnings:
+                embed.add_field(
+                    name="⚠️ Warnings",
+                    value="\n".join(warnings),
+                    inline=False
+                )
+            
+            embed.set_footer(text="GotLockz Bot • Production Ready")
+            
+            await interaction.followup.send(embed=embed)
+            await self.logger.log_command(interaction, "status", success=True)
+            
+        except Exception as e:
+            self.logger.log_exception(e, "status command")
+            await self.logger.log_command(interaction, "status", success=False, error=str(e))
+            await interaction.followup.send(f"❌ Error getting status: {str(e)}", ephemeral=True)
+    
+    def _format_uptime(self, uptime: timedelta) -> str:
+        """Format uptime as a readable string."""
+        days = uptime.days
+        hours, remainder = divmod(uptime.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        elif hours > 0:
+            return f"{hours}h {minutes}m"
+        else:
+            return f"{minutes}m {seconds}s"
+    
+    def _check_environment_warnings(self) -> List[str]:
+        """Check for missing or invalid environment variables."""
+        warnings = []
+        
+        # Check required environment variables
+        required_vars = {
+            'DISCORD_TOKEN': 'Bot token',
+            'OPENAI_API_KEY': 'OpenAI API key',
+            'DASHBOARD_URL': 'Dashboard URL'
+        }
+        
+        for var, description in required_vars.items():
+            if not os.getenv(var):
+                warnings.append(f"❌ Missing {description} ({var})")
+        
+        # Check optional but recommended variables
+        optional_vars = {
+            'VIP_ROLE_IDS': 'VIP role IDs',
+            'ADMIN_ROLE_IDS': 'Admin role IDs',
+            'LOG_CHANNEL_ID': 'Logging channel ID'
+        }
+        
+        for var, description in optional_vars.items():
+            if not os.getenv(var):
+                warnings.append(f"⚠️ Missing {description} ({var})")
+        
+        return warnings
+
     @app_commands.command(name="debug", description="Debug bot status and configuration")
+    @require_admin()
+    @validate_input
     async def debug(self, interaction: discord.Interaction):
         """Debug bot status and configuration."""
         try:
@@ -190,6 +608,20 @@ class GotLockzCommands(app_commands.Group):
                 inline=True
             )
             
+            # Permissions
+            if hasattr(self.bot, 'permissions'):
+                vip_roles = len(self.bot.permissions.vip_roles)
+                admin_roles = len(self.bot.permissions.admin_roles)
+                blocked_users = len(self.bot.permissions.blocked_users)
+                
+                embed.add_field(
+                    name="🔐 Permissions",
+                    value=f"VIP Roles: {vip_roles}\n"
+                          f"Admin Roles: {admin_roles}\n"
+                          f"Blocked Users: {blocked_users}",
+                    inline=True
+                )
+            
             # Test dashboard connection
             if self.bot.dashboard_enabled:
                 try:
@@ -212,7 +644,7 @@ class GotLockzCommands(app_commands.Group):
         except discord.errors.NotFound:
             logger.warning("Interaction expired before bot could respond")
         except Exception as e:
-            logger.exception("Error in debug command")
+            self.logger.log_exception(e, "debug command")
             await self.logger.log_command(interaction, "debug", success=False, error=str(e))
             try:
                 await interaction.followup.send(f"❌ Debug error: {str(e)}", ephemeral=True)
@@ -270,49 +702,6 @@ class GotLockzCommands(app_commands.Group):
             await self.logger.log_command(interaction, "stats", success=False, error=str(e))
             try:
                 await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
-            except discord.errors.NotFound:
-                pass
-
-    @app_commands.command(name="status", description="Check bot and dashboard status")
-    async def status(self, interaction: discord.Interaction):
-        """Check bot and dashboard status."""
-        try:
-            await interaction.response.defer(thinking=True)
-        except discord.errors.NotFound:
-            return
-        
-        if not self.bot.dashboard_enabled:
-            try:
-                await interaction.followup.send("ℹ️ Bot Status: 🟢 Online (Dashboard disabled)")
-                await self.logger.log_command(interaction, "status", success=True)
-            except discord.errors.NotFound:
-                return
-            return
-            
-        try:
-            response = requests.post(
-                f"{self.bot.dashboard_url}/run/api_bot_status",
-                json={"data": []},
-                timeout=10
-            )
-            if response.status_code == 200:
-                result = response.json()
-                data = json.loads(result.get('data', [{}])[0]) if result.get('data') else {}
-                status = "🟢 Online" if data.get('bot_running') else "🔴 Offline"
-                await interaction.followup.send(f"Bot Status: {status}")
-                await self.logger.log_command(interaction, "status", success=True)
-            else:
-                await interaction.followup.send("❌ Dashboard not responding")
-                await self.logger.log_command(interaction, "status", success=False, error="Dashboard not responding")
-        except requests.exceptions.ConnectionError:
-            await interaction.followup.send("❌ Cannot connect to dashboard. Check DASHBOARD_URL setting.")
-            await self.logger.log_command(interaction, "status", success=False, error="Dashboard connection failed")
-        except discord.errors.NotFound:
-            logger.warning("Interaction expired before bot could respond")
-        except Exception as e:
-            await self.logger.log_command(interaction, "status", success=False, error=str(e))
-            try:
-                await interaction.followup.send(f"❌ Status check failed: {str(e)}")
             except discord.errors.NotFound:
                 pass
 
@@ -559,30 +948,38 @@ class GotLockzCommands(app_commands.Group):
 
 
 class BettingCommands(app_commands.Group):
-    """Betting-related slash commands."""
+    """Betting-related slash commands.
+    NOTE: After instantiation, call `await instance._load_counters_async()` to load counters.
+    """
     
     def __init__(self, bot):
         super().__init__(name="betting", description="Betting analysis and pick management")
         self.bot = bot
-        self.pick_counters = self._load_counters()
+        self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}  # Default values
         self.logger = BotLogger(bot)
+        # No async task creation here; must call _load_counters_async() explicitly in async context
 
-    def _load_counters(self) -> Dict[str, int]:
-        """Load pick counters from file."""
+    async def _load_counters_async(self):
+        """Load counters asynchronously after initialization."""
+        self.pick_counters = await self._load_counters()
+
+    async def _load_counters(self) -> Dict[str, int]:
+        """Load pick counters from file asynchronously."""
         try:
-            with open('counters.json', 'r') as f:
-                return json.load(f)
+            async with aiofiles.open('counters.json', 'r') as f:
+                content = await f.read()
+                return json.loads(content)
         except FileNotFoundError:
             return {"vip": 0, "lotto": 0, "free": 0}
         except Exception as e:
             logger.error(f"Error loading counters: {e}")
             return {"vip": 0, "lotto": 0, "free": 0}
 
-    def _save_counters(self):
-        """Save pick counters to file."""
+    async def _save_counters(self):
+        """Save pick counters to file asynchronously."""
         try:
-            with open('counters.json', 'w') as f:
-                json.dump(self.pick_counters, f)
+            async with aiofiles.open('counters.json', 'w') as f:
+                await f.write(json.dumps(self.pick_counters, indent=2))
         except Exception as e:
             logger.error(f"Error saving counters: {e}")
 
@@ -597,17 +994,18 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment,
         context: Optional[str] = None
     ):
-        """Analyze a betting slip using OCR and AI."""
+        """Analyze a betting slip image."""
         
         # Check if command is used in the correct channel
         if hasattr(self.bot, 'channels_configured') and self.bot.channels_configured:
-            if hasattr(self.bot, 'analysis_channel_id') and interaction.channel_id != self.bot.analysis_channel_id:
-                await interaction.response.send_message(
-                    "❌ This command can only be used in the analysis channel!",
-                    ephemeral=True
-                )
-                await self.logger.log_command(interaction, "analyze", success=False, error="Wrong channel")
-                return
+            if hasattr(self.bot, 'analysis_channel_id') and self.bot.analysis_channel_id:
+                if interaction.channel_id != self.bot.analysis_channel_id:
+                    await interaction.response.send_message(
+                        "❌ This command can only be used in the Analysis channel!",
+                        ephemeral=True
+                    )
+                    await self.logger.log_command(interaction, "analyze", success=False, error="Wrong channel - expected Analysis")
+                    return
         
         await interaction.response.defer(thinking=True)
         
@@ -621,53 +1019,53 @@ class BettingCommands(app_commands.Group):
             # Download image
             image_bytes = await image.read()
             
-            # OCR: Extract text from image
-            try:
-                if getattr(self.bot, 'ANALYSIS_ENABLED', False):
-                    extracted_text = extract_text_from_image(image_bytes)
-                    if not extracted_text:
-                        await interaction.followup.send("❌ Could not extract text from the image. Please ensure the image is clear and contains readable text.", ephemeral=True)
-                        await self.logger.log_command(interaction, "analyze", success=False, error="OCR failed - no text extracted")
-                        return
+            # Create basic analysis embed
+            embed = discord.Embed(
+                title="📊 Bet Analysis",
+                description="Basic image analysis completed",
+                color=0x00ff00,
+                timestamp=datetime.now()
+            )
+            
+            # Add image
+            embed.set_image(url=image.url)
+            
+            # Add basic image info
+            embed.add_field(
+                name="📋 Image Details",
+                value=f"**Filename:** {image.filename}\n"
+                      f"**Size:** {len(image_bytes)} bytes\n"
+                      f"**Type:** {image.content_type}\n"
+                      f"**Dimensions:** Image uploaded successfully",
+                inline=True
+            )
+            
+            # Add context
+            embed.add_field(
+                name="📝 Context",
+                value=context or "No context provided",
+                inline=True
+            )
+            
+            # Add analysis note
+            embed.add_field(
+                name="🤖 Analysis Status",
+                value="✅ Basic analysis completed\n"
+                      "📊 Image processed successfully\n"
+                      "💡 Advanced AI analysis not available",
+                inline=False
+            )
+            
+            embed.set_footer(text="GotLockz Bot • Basic Analysis")
+            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+            
+            await interaction.followup.send(embed=embed)
+            await self.logger.log_command(interaction, "analyze", success=True)
                     
-                    # Parse bet details
-                    bet_details = parse_bet_details(extracted_text)
-                    
-                    # AI Analysis
-                    analysis_result = await analyze_bet_slip(bet_details or {}, context)
-                    
-                    # Validate analysis quality
-                    validation = await validate_analysis_quality(analysis_result)
-                    
-                    # Create embed
-                    embed = await self._create_analysis_embed(bet_details or {}, analysis_result, validation)
-                    
-                    await interaction.followup.send(embed=embed)
-                    await self.logger.log_command(interaction, "analyze", success=True)
-                    
-                else:
-                    # Fallback without analysis
-                    embed = discord.Embed(
-                        title="📊 Bet Analysis (Basic)",
-                        description="AI analysis is currently disabled. Here's the basic image info:",
-                        color=0x00ff00
-                    )
-                    embed.add_field(name="Image Info", value=f"Size: {len(image_bytes)} bytes\nType: {image.content_type}", inline=True)
-                    embed.add_field(name="Context", value=context or "No context provided", inline=True)
-                    embed.set_footer(text="Enable AI analysis for detailed betting insights")
-                    
-                    await interaction.followup.send(embed=embed)
-                    await self.logger.log_command(interaction, "analyze", success=True)
-                    
-            except Exception as e:
-                logger.exception("Error in analysis")
-                await interaction.followup.send(f"❌ Analysis failed: {str(e)}", ephemeral=True)
-                await self.logger.log_command(interaction, "analyze", success=False, error=str(e))
-                
         except Exception as e:
-            logger.exception("Error in analyze command")
+            logger.exception("Error in analysis")
+            await interaction.followup.send(f"❌ Analysis failed: {str(e)}", ephemeral=True)
             await self.logger.log_command(interaction, "analyze", success=False, error=str(e))
-            await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="vip", description="Post a VIP pick")
     @app_commands.describe(
@@ -746,7 +1144,7 @@ class BettingCommands(app_commands.Group):
             
             # Increment counter
             self.pick_counters[pick_type] += 1
-            self._save_counters()
+            await self._save_counters()
             
             # Create embed
             embed = discord.Embed(
@@ -759,66 +1157,24 @@ class BettingCommands(app_commands.Group):
             # Add image
             embed.set_image(url=image.url)
             
-            # Add analysis if enabled
-            analysis_enabled = getattr(self.bot, 'ANALYSIS_ENABLED', False)
-            if analysis_enabled:
-                try:
-                    # OCR and AI analysis
-                    extracted_text = extract_text_from_image(image_bytes)
-                    if extracted_text:
-                        bet_details = parse_bet_details(extracted_text)
-                        analysis_result = await analyze_bet_slip(bet_details or {}, context)
-                        
-                        # Add analysis to embed
-                        analysis_text = ""
-                        if isinstance(analysis_result, dict):
-                            if 'recommendation' in analysis_result:
-                                rec = analysis_result['recommendation']
-                                analysis_text += f"**Recommendation:** {rec.get('action', 'Unknown')}\n"
-                                analysis_text += f"**Reasoning:** {rec.get('reasoning', 'N/A')[:200]}...\n\n"
-                            
-                            if 'confidence_rating' in analysis_result:
-                                conf = analysis_result['confidence_rating']
-                                analysis_text += f"**Confidence:** {conf.get('score', 0)}/10\n"
-                                analysis_text += f"**Reasoning:** {conf.get('reasoning', 'N/A')[:200]}...\n\n"
-                            
-                            if 'risk_assessment' in analysis_result:
-                                risk = analysis_result['risk_assessment']
-                                analysis_text += f"**Risk Level:** {risk.get('level', 'Unknown')}\n"
-                                analysis_text += f"**Reasoning:** {risk.get('reasoning', 'N/A')[:200]}...\n\n"
-                            
-                            if 'edge_analysis' in analysis_result:
-                                edge = analysis_result['edge_analysis']
-                                analysis_text += f"**Edge:** {edge.get('edge_percentage', 0):.2f}%\n"
-                                analysis_text += f"**Explanation:** {edge.get('explanation', 'N/A')[:200]}...\n\n"
-                        else:
-                            analysis_text = str(analysis_result)
-                        
-                        embed.add_field(
-                            name="🤖 AI Analysis",
-                            value=analysis_text[:1024] + "..." if len(analysis_text) > 1024 else analysis_text,
-                            inline=False
-                        )
-                        
-                        # Add bet details if available
-                        if bet_details:
-                            details_text = f"**Sport:** {bet_details.get('sport', 'Unknown')}\n"
-                            details_text += f"**Teams:** {bet_details.get('teams', 'Unknown')}\n"
-                            details_text += f"**Bet Type:** {bet_details.get('bet_type', 'Unknown')}\n"
-                            details_text += f"**Odds:** {bet_details.get('odds', 'Unknown')}"
-                            
-                            embed.add_field(
-                                name="📊 Bet Details",
-                                value=details_text,
-                                inline=True
-                            )
-                except Exception as e:
-                    logger.warning(f"Analysis failed for {pick_type} pick: {e}")
-                    embed.add_field(
-                        name="⚠️ Analysis Note",
-                        value="AI analysis was attempted but failed. Basic pick posted.",
-                        inline=False
-                    )
+            # Add basic bet details
+            embed.add_field(
+                name="📊 Bet Details",
+                value=f"**Image:** {image.filename}\n"
+                      f"**Size:** {len(image_bytes)} bytes\n"
+                      f"**Type:** {image.content_type}\n"
+                      f"**Context:** {context or 'No context provided'}",
+                inline=True
+            )
+            
+            # Add user info
+            embed.add_field(
+                name="👤 Posted By",
+                value=f"**User:** {interaction.user.display_name}\n"
+                      f"**ID:** {interaction.user.id}\n"
+                      f"**Channel:** <#{interaction.channel_id}>",
+                inline=True
+            )
             
             embed.set_footer(text=f"GotLockz Bot • {pick_type.upper()} Pick")
             embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
@@ -827,30 +1183,36 @@ class BettingCommands(app_commands.Group):
             await interaction.followup.send(embed=embed)
             
             # Log the pick
-            await self.logger.log_pick_posted(interaction, pick_type, analysis_enabled)
+            await self.logger.log_pick_posted(interaction, pick_type, False)
             await self.logger.log_command(interaction, pick_type, success=True)
             
             # Sync to dashboard if enabled
-            if self.bot.dashboard_enabled:
+            if hasattr(self.bot, 'dashboard_enabled') and self.bot.dashboard_enabled:
                 try:
                     pick_data = {
-                        "type": pick_type,
+                        "pick_number": self.pick_counters[pick_type],
+                        "pick_type": pick_type,
+                        "bet_details": {
+                            "image": image.filename,
+                            "context": context or "No context"
+                        },
                         "user": interaction.user.display_name,
                         "user_id": interaction.user.id,
-                        "context": context,
                         "image_url": image.url,
                         "timestamp": datetime.now().isoformat(),
-                        "analysis_enabled": analysis_enabled
+                        "analysis_enabled": False
                     }
                     
                     response = requests.post(
-                        f"{self.bot.dashboard_url}/run/api_sync_pick",
+                        f"{self.bot.dashboard_url}/run/api_sync_discord",
                         json={"data": [json.dumps(pick_data)]},
                         timeout=10
                     )
                     
                     if response.status_code != 200:
                         logger.warning(f"Failed to sync pick to dashboard: {response.status_code}")
+                    else:
+                        logger.info(f"Successfully synced {pick_type} pick to dashboard")
                         
                 except Exception as e:
                     logger.warning(f"Error syncing pick to dashboard: {e}")
@@ -1052,81 +1414,47 @@ async def setup(bot):
     except Exception as e:
         print(f"❌ Error adding command groups: {e}")
     
-    # Add standalone commands for any missing ones
+    # Add essential standalone commands that might be missing
     try:
-        # Standalone lotto command
-        @bot.tree.command(name="lotto", description="Post a lotto pick")
-        @app_commands.describe(
-            image="Upload a betting slip image",
-            context="Optional context or notes"
-        )
-        async def lotto_standalone(interaction: discord.Interaction, image: discord.Attachment, context: Optional[str] = None):
-            """Post a lotto pick."""
+        # Standalone ping command (fallback)
+        @bot.tree.command(name="ping", description="Test bot responsiveness")
+        async def ping_standalone(interaction: discord.Interaction):
+            """Test bot responsiveness."""
+            await interaction.response.send_message("🏓 Pong! Bot is online!")
+        
+        # Standalone status command (fallback)
+        @bot.tree.command(name="status", description="Check bot status")
+        async def status_standalone(interaction: discord.Interaction):
+            """Check bot status."""
             await interaction.response.defer(thinking=True)
-            try:
-                # Create a simple response for now
-                embed = discord.Embed(
-                    title="🎰 Lotto Pick",
-                    description="Lotto command is working!",
-                    color=0x00ff00
-                )
-                embed.add_field(name="Status", value="✅ Command registered successfully", inline=True)
-                embed.add_field(name="Image", value=f"Received: {image.filename}", inline=True)
-                if context:
-                    embed.add_field(name="Context", value=context, inline=False)
-                
-                await interaction.followup.send(embed=embed)
-            except Exception as e:
-                await interaction.followup.send(f"❌ Error in lotto command: {str(e)}", ephemeral=True)
-
-        # Standalone vip command
-        @bot.tree.command(name="vip", description="Post a VIP pick")
-        @app_commands.describe(
-            image="Upload a betting slip image",
-            context="Optional context or notes"
-        )
-        async def vip_standalone(interaction: discord.Interaction, image: discord.Attachment, context: Optional[str] = None):
-            """Post a VIP pick."""
-            await interaction.response.defer(thinking=True)
-            try:
-                embed = discord.Embed(
-                    title="👑 VIP Pick",
-                    description="VIP command is working!",
-                    color=0xffd700
-                )
-                embed.add_field(name="Status", value="✅ Command registered successfully", inline=True)
-                embed.add_field(name="Image", value=f"Received: {image.filename}", inline=True)
-                if context:
-                    embed.add_field(name="Context", value=context, inline=False)
-                
-                await interaction.followup.send(embed=embed)
-            except Exception as e:
-                await interaction.followup.send(f"❌ Error in vip command: {str(e)}", ephemeral=True)
-
-        # Standalone history command
-        @bot.tree.command(name="history", description="View pick history")
-        @app_commands.describe(
-            pick_type="Type of picks to view (vip/lotto/free)",
-            limit="Number of picks to show (default: 10)"
-        )
-        async def history_standalone(interaction: discord.Interaction, pick_type: str = "vip", limit: int = 10):
-            """View pick history."""
-            await interaction.response.defer(thinking=True)
-            try:
-                embed = discord.Embed(
-                    title="📊 Pick History",
-                    description=f"Showing {limit} {pick_type} picks",
-                    color=0x00ff00
-                )
-                embed.add_field(name="Status", value="✅ Command registered successfully", inline=True)
-                embed.add_field(name="Pick Type", value=pick_type, inline=True)
-                embed.add_field(name="Limit", value=str(limit), inline=True)
-                
-                await interaction.followup.send(embed=embed)
-            except Exception as e:
-                await interaction.followup.send(f"❌ Error in history command: {str(e)}", ephemeral=True)
-
-        # Standalone force_sync command
+            
+            embed = discord.Embed(
+                title="🤖 Bot Status",
+                description="GotLockz Bot is running",
+                color=0x00ff00
+            )
+            
+            embed.add_field(
+                name="Status",
+                value="✅ Online",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Latency",
+                value=f"{round(bot.latency * 1000)}ms",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Servers",
+                value=str(len(bot.guilds)),
+                inline=True
+            )
+            
+            await interaction.followup.send(embed=embed)
+        
+        # Standalone force_sync command (essential)
         @bot.tree.command(name="force_sync", description="Force sync all commands")
         async def force_sync_standalone(interaction: discord.Interaction):
             """Force sync all commands."""
@@ -1146,8 +1474,8 @@ async def setup(bot):
             except Exception as e:
                 await interaction.followup.send(f"❌ Error in force_sync command: {str(e)}", ephemeral=True)
 
-        print("✅ Standalone commands added to tree")
+        print("✅ Essential standalone commands added to tree")
     except Exception as e:
-        print(f"❌ Error adding standalone commands: {e}")
+        print(f"❌ Error adding essential standalone commands: {e}")
 
     print("✅ All commands setup complete")

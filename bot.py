@@ -56,6 +56,22 @@ class GotLockzBot(commands.Bot):
         
         # Bot start time for uptime tracking
         self.start_time = datetime.now()
+        
+        # Initialize permissions manager
+        try:
+            from commands import PermissionsManager
+            self.permissions = PermissionsManager(self)
+        except ImportError:
+            logger.warning("Permissions manager not available - using basic permissions")
+            self.permissions = None
+        
+        # Initialize logger
+        try:
+            from commands import BotLogger
+            self.logger = BotLogger(self)
+        except ImportError:
+            logger.warning("Bot logger not available - using basic logging")
+            self.logger = None
 
     def _load_counters(self):
         """Load pick counters from file."""
