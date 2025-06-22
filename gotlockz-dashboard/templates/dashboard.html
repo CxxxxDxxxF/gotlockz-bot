@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GotLockz Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .pick-card {
+            border-left: 4px solid #28a745;
+            margin-bottom: 10px;
+        }
+        .pick-card.loss {
+            border-left-color: #dc3545;
+        }
+        .pick-card.push {
+            border-left-color: #ffc107;
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-lock"></i> GotLockz Dashboard
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text">
+                    <i class="fas fa-chart-line"></i> Live Performance
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Bot Status Alert -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">
+                                    <i class="fas fa-robot"></i> Bot Status
+                                    <span id="botStatus" class="badge ms-2">Checking...</span>
+                                </h5>
+                                <small class="text-muted" id="botStatusDetails">Checking bot connection...</small>
+                            </div>
+                            <div class="text-end">
+                                <div class="small text-muted">
+                                    <i class="fas fa-microchip"></i> CPU: <span id="cpuUsage">--</span>%
+                                </div>
+                                <div class="small text-muted">
+                                    <i class="fas fa-memory"></i> RAM: <span id="memoryUsage">--</span>%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number" id="totalPicks">0</div>
+                    <div class="stat-label">Total Picks</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number" id="winRate">0%</div>
+                    <div class="stat-label">Win Rate</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number" id="totalProfit">$0</div>
+                    <div class="stat-label">Total Profit</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number" id="roi">0%</div>
+                    <div class="stat-label">ROI</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Performance Chart -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-chart-line"></i> 30-Day Performance</h5>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary active" onclick="changeChartPeriod('7d')">7D</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="changeChartPeriod('30d')">30D</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="changeChartPeriod('90d')">90D</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="performanceChart" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Picks -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-clock"></i> Recent Picks</h5>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadRecentPicks()">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentPicks">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Loading...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pick Type Breakdown -->
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-crown"></i> VIP Picks</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="vipPicks">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-dice"></i> Lotto Picks</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="lottoPicks">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-gift"></i> Free Picks</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="freePicks">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-tools"></i> Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-primary w-100 mb-2" onclick="exportData()">
+                                    <i class="fas fa-download"></i> Export Data
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-success w-100 mb-2" onclick="refreshAll()">
+                                    <i class="fas fa-sync-alt"></i> Refresh All
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-info w-100 mb-2" onclick="showAnalytics()">
+                                    <i class="fas fa-chart-bar"></i> Analytics
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-warning w-100 mb-2" onclick="showSettings()">
+                                    <i class="fas fa-cog"></i> Settings
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-danger w-100 mb-2" onclick="showAddPickModal()">
+                                    <i class="fas fa-plus"></i> Add Pick
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-secondary w-100 mb-2" onclick="showPickHistory()">
+                                    <i class="fas fa-history"></i> History
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-dark w-100 mb-2" onclick="showNotifications()">
+                                    <i class="fas fa-bell"></i> Notifications
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-light w-100 mb-2" onclick="showHelp()">
+                                    <i class="fas fa-question-circle"></i> Help
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Pick Modal -->
+    <div class="modal fade" id="addPickModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus"></i> Add New Pick
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addPickForm">
+                        <div class="mb-3">
+                            <label class="form-label">Pick Type</label>
+                            <select class="form-select" name="pick_type" required>
+                                <option value="">Select type...</option>
+                                <option value="vip">VIP</option>
+                                <option value="lotto">Lotto</option>
+                                <option value="free">Free</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Pick Number</label>
+                            <input type="number" class="form-control" name="pick_number" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Bet Details</label>
+                            <textarea class="form-control" name="bet_details" rows="3" required 
+                                placeholder="e.g., Lakers -5.5 vs Warriors"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Odds</label>
+                            <input type="text" class="form-control" name="odds" required 
+                                placeholder="e.g., -110">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Analysis (Optional)</label>
+                            <textarea class="form-control" name="analysis" rows="3" 
+                                placeholder="AI analysis or notes..."></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Confidence Score</label>
+                                    <input type="range" class="form-range" name="confidence_score" 
+                                        min="1" max="10" value="7">
+                                    <div class="text-center">
+                                        <span id="confidenceValue">7</span>/10
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Edge %</label>
+                                    <input type="number" class="form-control" name="edge_percentage" 
+                                        step="0.1" placeholder="e.g., 5.2">
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitPick()">
+                        <i class="fas fa-save"></i> Add Pick
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Modal -->
+    <div class="modal fade" id="analyticsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-chart-bar"></i> Advanced Analytics
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Overall Performance</h6>
+                                </div>
+                                <div class="card-body" id="overallStats">
+                                    <div class="text-center">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Performance by Type</h6>
+                                </div>
+                                <div class="card-body" id="typeStats">
+                                    <div class="text-center">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Monthly Performance</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="monthlyChart" height="100"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div class="modal fade" id="historyModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-history"></i> Pick History
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <select class="form-select" id="historyTypeFilter">
+                                <option value="">All Types</option>
+                                <option value="vip">VIP</option>
+                                <option value="lotto">Lotto</option>
+                                <option value="free">Free</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" id="historyResultFilter">
+                                <option value="">All Results</option>
+                                <option value="win">Wins</option>
+                                <option value="loss">Losses</option>
+                                <option value="push">Pushes</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-outline-primary" onclick="loadHistory()">
+                                <i class="fas fa-filter"></i> Filter
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-outline-secondary" onclick="exportHistory()">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                    </div>
+                    <div id="historyContent">
+                        <div class="text-center">
+                            <i class="fas fa-spinner fa-spin"></i> Loading history...
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3" id="historyPagination">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications Modal -->
+    <div class="modal fade" id="notificationsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-bell"></i> Notifications
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Notification Settings</h6>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="emailNotif" checked>
+                                <label class="form-check-label" for="emailNotif">
+                                    Email Notifications
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="discordNotif" checked>
+                                <label class="form-check-label" for="discordNotif">
+                                    Discord Notifications
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="newPickNotif" checked>
+                                <label class="form-check-label" for="newPickNotif">
+                                    New Pick Alerts
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="resultNotif" checked>
+                                <label class="form-check-label" for="resultNotif">
+                                    Result Alerts
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Recent Notifications</h6>
+                            <div id="recentNotifications">
+                                <div class="text-center">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="saveNotificationSettings()">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cog"></i> Dashboard Settings
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Auto Refresh</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                            <label class="form-check-label" for="autoRefresh">
+                                Enable automatic refresh
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Refresh Interval (seconds)</label>
+                        <input type="number" class="form-control" id="refreshInterval" value="30" min="10" max="300">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Theme</label>
+                        <select class="form-select" id="themeSelect">
+                            <option value="light">Light</option>
+                            <option value="dark" selected>Dark</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Display Options</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="showConfidence" checked>
+                            <label class="form-check-label" for="showConfidence">
+                                Show confidence scores
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="showEdge" checked>
+                            <label class="form-check-label" for="showEdge">
+                                Show edge percentages
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="showAnalysis" checked>
+                            <label class="form-check-label" for="showAnalysis">
+                                Show analysis text
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveSettings()">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal fade" id="helpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-question-circle"></i> Help & Documentation
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="helpContent">
+                        <div class="text-center">
+                            <i class="fas fa-spinner fa-spin"></i> Loading help content...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="static/js/dashboard.js"></script>
+</body>
+</html>
