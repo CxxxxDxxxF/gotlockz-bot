@@ -46,9 +46,6 @@ class GotLockzBot(commands.Bot):
         # Dashboard configuration
         self.dashboard_url = os.getenv("DASHBOARD_URL", "")
         self.dashboard_enabled = bool(self.dashboard_url)
-        
-        # Initialize command tree
-        # self.tree = commands.app_commands.CommandTree(self)
 
     def _load_counters(self):
         """Load pick counters from file."""
@@ -75,8 +72,13 @@ class GotLockzBot(commands.Bot):
         print(f"Analysis enabled: {ANALYSIS_ENABLED}")
         print(f"Channels configured: {self.channels_configured}")
         
-        # Commands are automatically synced by Discord.py
-        print("✅ Slash commands are automatically registered")
+        # Sync slash commands with Discord
+        print("🔄 Syncing slash commands...")
+        try:
+            synced = await self.tree.sync()
+            print(f"✅ Synced {len(synced)} command(s)")
+        except Exception as e:
+            print(f"❌ Command sync failed: {e}")
         
         # Test dashboard connection only if dashboard is enabled
         if self.dashboard_enabled:
@@ -276,3 +278,28 @@ class GotLockzBot(commands.Bot):
             return
         
         await self.process_commands(message)
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Handle application command errors."""
+        if isinstance(error, app_commands.CommandNotFound):
+            await interaction.response.send_message(
+                "❌ That command doesn't exist or was removed. Please try again or contact support.",
+                ephemeral=True
+            )
+        elif isinstance(error, app_commands.MissingPermissions):
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+        elif isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏰ This command is on cooldown. Try again in {error.retry_after:.2f} seconds.",
+                ephemeral=True
+            )
+        else:
+            # Log the error for debugging
+            logger.exception(f"Unhandled app command error: {error}")
+            await interaction.response.send_message(
+                "❌ An unexpected error occurred. Please try again or contact support.",
+                ephemeral=True
+            )

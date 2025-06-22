@@ -597,26 +597,117 @@ class BettingCommands(app_commands.Group):
 
 async def setup(bot):
     """Setup function for the commands cog."""
-    await bot.add_cog(GotLockzCommands(bot))
-    await bot.add_cog(BettingCommands(bot))
+    print("🔄 Setting up command groups...")
+    
+    # Add command groups to the bot's tree
+    try:
+        gotlockz_commands = GotLockzCommands(bot)
+        betting_commands = BettingCommands(bot)
+        
+        # Add the command groups to the bot's tree
+        bot.tree.add_command(gotlockz_commands)
+        bot.tree.add_command(betting_commands)
+        
+        print("✅ Command groups added to tree")
+    except Exception as e:
+        print(f"❌ Error adding command groups: {e}")
+    
+    # Add standalone commands for any missing ones
+    try:
+        # Standalone lotto command
+        @bot.tree.command(name="lotto", description="Post a lotto pick")
+        @app_commands.describe(
+            image="Upload a betting slip image",
+            context="Optional context or notes"
+        )
+        async def lotto_standalone(interaction: discord.Interaction, image: discord.Attachment, context: Optional[str] = None):
+            """Post a lotto pick."""
+            await interaction.response.defer(thinking=True)
+            try:
+                # Create a simple response for now
+                embed = discord.Embed(
+                    title="🎰 Lotto Pick",
+                    description="Lotto command is working!",
+                    color=0x00ff00
+                )
+                embed.add_field(name="Status", value="✅ Command registered successfully", inline=True)
+                embed.add_field(name="Image", value=f"Received: {image.filename}", inline=True)
+                if context:
+                    embed.add_field(name="Context", value=context, inline=False)
+                
+                await interaction.followup.send(embed=embed)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error in lotto command: {str(e)}", ephemeral=True)
 
-# Add standalone commands that might be missing
-@bot.tree.command(name="lotto", description="Post a lotto pick")
-async def lotto_standalone(interaction: discord.Interaction, image: discord.Attachment, context: Optional[str] = None):
-    """Post a lotto pick."""
-    await interaction.response.send_message("🎰 Lotto command works! (Standalone version)", ephemeral=True)
+        # Standalone vip command
+        @bot.tree.command(name="vip", description="Post a VIP pick")
+        @app_commands.describe(
+            image="Upload a betting slip image",
+            context="Optional context or notes"
+        )
+        async def vip_standalone(interaction: discord.Interaction, image: discord.Attachment, context: Optional[str] = None):
+            """Post a VIP pick."""
+            await interaction.response.defer(thinking=True)
+            try:
+                embed = discord.Embed(
+                    title="👑 VIP Pick",
+                    description="VIP command is working!",
+                    color=0xffd700
+                )
+                embed.add_field(name="Status", value="✅ Command registered successfully", inline=True)
+                embed.add_field(name="Image", value=f"Received: {image.filename}", inline=True)
+                if context:
+                    embed.add_field(name="Context", value=context, inline=False)
+                
+                await interaction.followup.send(embed=embed)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error in vip command: {str(e)}", ephemeral=True)
 
-@bot.tree.command(name="vip", description="Post a VIP pick")
-async def vip_standalone(interaction: discord.Interaction, image: discord.Attachment, context: Optional[str] = None):
-    """Post a VIP pick."""
-    await interaction.response.send_message("👑 VIP command works! (Standalone version)", ephemeral=True)
+        # Standalone history command
+        @bot.tree.command(name="history", description="View pick history")
+        @app_commands.describe(
+            pick_type="Type of picks to view (vip/lotto/free)",
+            limit="Number of picks to show (default: 10)"
+        )
+        async def history_standalone(interaction: discord.Interaction, pick_type: str = "vip", limit: int = 10):
+            """View pick history."""
+            await interaction.response.defer(thinking=True)
+            try:
+                embed = discord.Embed(
+                    title="📊 Pick History",
+                    description=f"Showing {limit} {pick_type} picks",
+                    color=0x00ff00
+                )
+                embed.add_field(name="Status", value="✅ Command registered successfully", inline=True)
+                embed.add_field(name="Pick Type", value=pick_type, inline=True)
+                embed.add_field(name="Limit", value=str(limit), inline=True)
+                
+                await interaction.followup.send(embed=embed)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error in history command: {str(e)}", ephemeral=True)
 
-@bot.tree.command(name="history", description="View pick history")
-async def history_standalone(interaction: discord.Interaction, pick_type: str = "vip", limit: int = 10):
-    """View pick history."""
-    await interaction.response.send_message(f"📊 History command works! Showing {limit} {pick_type} picks", ephemeral=True)
+        # Standalone force_sync command
+        @bot.tree.command(name="force_sync", description="Force sync all commands")
+        async def force_sync_standalone(interaction: discord.Interaction):
+            """Force sync all commands."""
+            await interaction.response.defer(thinking=True)
+            try:
+                # Sync the command tree
+                synced = await bot.tree.sync()
+                embed = discord.Embed(
+                    title="🔄 Force Sync",
+                    description=f"Synced {len(synced)} commands successfully!",
+                    color=0x00ff00
+                )
+                embed.add_field(name="Status", value="✅ Commands synced", inline=True)
+                embed.add_field(name="Commands", value=str(len(synced)), inline=True)
+                
+                await interaction.followup.send(embed=embed)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error in force_sync command: {str(e)}", ephemeral=True)
 
-@bot.tree.command(name="force_sync", description="Force sync all commands")
-async def force_sync_standalone(interaction: discord.Interaction):
-    """Force sync all commands."""
-    await interaction.response.send_message("🔄 Force sync command works!", ephemeral=True)
+        print("✅ Standalone commands added to tree")
+    except Exception as e:
+        print(f"❌ Error adding standalone commands: {e}")
+
+    print("✅ All commands setup complete")
