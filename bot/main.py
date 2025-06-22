@@ -8,9 +8,9 @@ Production-ready Discord bot with enhanced betting commands,
 OCR integration, and MLB data analysis.
 """
 
-from bot.commands.info import InfoCommands
-from bot.commands.betting import BettingCommands
-from bot.config import load_config
+from commands.info import InfoCommands
+from commands.betting import BettingCommands
+from config import load_config
 from dotenv import load_dotenv
 from discord.ext import commands
 import discord

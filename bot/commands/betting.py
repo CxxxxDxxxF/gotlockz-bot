@@ -15,8 +15,8 @@ import os
 import re
 
 # Import utilities
-from bot.utils.ocr import ocr_parser
-from bot.utils.mlb import mlb_fetcher
+from utils.ocr import ocr_parser
+from utils.mlb import mlb_fetcher
 
 logger = logging.getLogger(__name__)
 
