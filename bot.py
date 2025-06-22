@@ -78,9 +78,10 @@ class GotLockzBot(commands.Bot):
         # Test dashboard connection only if dashboard is enabled
         if self.dashboard_enabled:
             try:
-                # Test with REST API endpoint
-                response = requests.get(
-                    f"{self.dashboard_url}/api/ping",
+                # Test with Gradio API endpoint
+                response = requests.post(
+                    f"{self.dashboard_url}/run/api_ping",
+                    json={"data": []},
                     timeout=10
                 )
                 if response.status_code == 200:
@@ -239,9 +240,14 @@ class GotLockzBot(commands.Bot):
         try:
             # Get pick history from dashboard if enabled
             if self.dashboard_enabled:
-                response = requests.get(f"{self.dashboard_url}/api/picks", timeout=15)
+                response = requests.post(
+                    f"{self.dashboard_url}/run/api_picks",
+                    json={"data": []},
+                    timeout=15
+                )
                 if response.status_code == 200:
-                    picks = response.json()
+                    result = response.json()
+                    picks = json.loads(result.get('data', [{}])[0]) if result.get('data') else []
                     filtered_picks = [p for p in picks if p.get('pick_type') == pick_type.lower()][-limit:]
                     
                     if filtered_picks:
@@ -291,9 +297,14 @@ class GotLockzBot(commands.Bot):
         
         try:
             if self.dashboard_enabled:
-                response = requests.get(f"{self.dashboard_url}/api/stats", timeout=15)
+                response = requests.post(
+                    f"{self.dashboard_url}/run/api_stats",
+                    json={"data": []},
+                    timeout=15
+                )
                 if response.status_code == 200:
-                    stats = response.json()
+                    result = response.json()
+                    stats = json.loads(result.get('data', [{}])[0]) if result.get('data') else {}
                     
                     embed = discord.Embed(
                         title="📈 Bot Statistics",
@@ -354,8 +365,8 @@ class GotLockzBot(commands.Bot):
             ]
             
             response = requests.post(
-                f"{self.dashboard_url}/api/sync-discord",
-                json=test_picks,
+                f"{self.dashboard_url}/run/api_sync_discord",
+                json={"data": [json.dumps(test_picks)]},
                 timeout=15
             )
             
@@ -378,9 +389,14 @@ class GotLockzBot(commands.Bot):
             return
             
         try:
-            response = requests.get(f"{self.dashboard_url}/api/bot-status", timeout=10)
+            response = requests.post(
+                f"{self.dashboard_url}/run/api_bot_status",
+                json={"data": []},
+                timeout=10
+            )
             if response.status_code == 200:
-                data = response.json()
+                result = response.json()
+                data = json.loads(result.get('data', [{}])[0]) if result.get('data') else {}
                 status = "🟢 Online" if data.get('bot_running') else "🔴 Offline"
                 await interaction.followup.send(f"Bot Status: {status}")
             else:
@@ -410,8 +426,8 @@ class GotLockzBot(commands.Bot):
             }
             
             response = requests.post(
-                f"{self.dashboard_url}/api/picks/add",
-                json=pick_data,
+                f"{self.dashboard_url}/run/api_add_pick",
+                json={"data": [json.dumps(pick_data)]},
                 timeout=15
             )
             
@@ -435,31 +451,36 @@ class GotLockzBot(commands.Bot):
             await interaction.followup.send(f"❌ Force sync failed: {e}")
 
     async def _post_pick_with_analysis(self, interaction: discord.Interaction, image: discord.Attachment, context: str, pick_type: str, channel_id: Optional[int] = None):
-        """Internal method to post picks with real OCR and AI analysis."""
+        """Post a pick with analysis to the specified channel."""
+        # Check if interaction has already been responded to
+        if interaction.response.is_done():
+            return
+        
         await interaction.response.defer(thinking=True)
+        
         try:
             # Validate image
             if not image.content_type or not image.content_type.startswith('image/'):
                 await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
                 return
-            # Increment pick counter
-            self.pick_counters[pick_type] += 1
-            pick_number = self.pick_counters[pick_type]
-            self._save_counters()
+            
             # Download image
             image_bytes = await image.read()
+            
             # OCR: Extract text from image
             try:
                 text = extract_text_from_image(image_bytes)
             except Exception as e:
                 await interaction.followup.send(f"❌ OCR failed: {str(e)}", ephemeral=True)
                 return
+            
             if not text.strip():
                 await interaction.followup.send(
                     "❌ Could not extract text from the image. Please ensure the image is clear and readable.",
                     ephemeral=True
                 )
                 return
+            
             # Parse bet details
             bet_details = parse_bet_details(text)
             if not bet_details:
@@ -468,60 +489,66 @@ class GotLockzBot(commands.Bot):
                     ephemeral=True
                 )
                 return
+            
             # AI: Analyze bet slip
             try:
                 analysis = await analyze_bet_slip(bet_details, context)
             except Exception as e:
                 await interaction.followup.send(f"❌ AI analysis failed: {str(e)}", ephemeral=True)
                 return
+            
             # Validate analysis quality
             try:
                 validation = await validate_analysis_quality(analysis)
             except Exception as e:
                 validation = {"status": f"Validation error: {str(e)}"}
-            # Create pick embed with analysis
+            
+            # Create response embed
             embed = await self._create_analysis_embed(bet_details, analysis, validation)
-            embed.title = f"🏆 {pick_type.upper()} PICK #{pick_number}"
-            embed.add_field(name="📊 Pick Type", value=pick_type.upper(), inline=True)
-            embed.add_field(name="🔢 Pick Number", value=f"#{pick_number}", inline=True)
-            embed.add_field(name="📝 Context", value=context or "No additional context", inline=False)
-            embed.add_field(name="⏰ Posted", value=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-            embed.add_field(name="👤 Posted By", value=interaction.user.mention, inline=True)
-            embed.set_image(url=image.url)
-            # Send to dashboard if enabled
+            
+            # Post to specified channel if configured, otherwise post in current channel
+            if channel_id and self.channels_configured:
+                try:
+                    channel = self.get_channel(channel_id)
+                    if channel and isinstance(channel, discord.TextChannel):
+                        await channel.send(embed=embed)
+                        await interaction.followup.send(f"✅ {pick_type.upper()} pick posted to <#{channel_id}>!", ephemeral=True)
+                    else:
+                        await interaction.followup.send(f"❌ Could not find text channel {channel_id}", ephemeral=True)
+                except Exception as e:
+                    await interaction.followup.send(f"❌ Error posting to channel: {str(e)}", ephemeral=True)
+            else:
+                # Post in current channel
+                await interaction.followup.send(embed=embed)
+            
+            # Update pick counter
+            self.pick_counters[pick_type] += 1
+            self._save_counters()
+            
+            # Sync to dashboard if enabled
             if self.dashboard_enabled:
                 try:
                     pick_data = {
-                        "pick_number": pick_number,
                         "pick_type": pick_type,
+                        "pick_number": self.pick_counters[pick_type],
                         "bet_details": bet_details,
-                        "odds": bet_details.get("odds", "-110"),
-                        "analysis": analysis.get("summary", str(analysis)),
-                        "confidence_score": analysis.get("confidence_rating", {}).get("score", 7),
-                        "edge_percentage": analysis.get("edge_analysis", {}).get("edge_percentage", 0),
-                        "posted_at": datetime.now().isoformat()
+                        "odds": "-110",  # Default odds
+                        "analysis": analysis,
+                        "confidence_score": 7,
+                        "edge_percentage": 3.0
                     }
                     response = requests.post(
-                        f"{self.dashboard_url}/run/api_add_pick_api",
+                        f"{self.dashboard_url}/run/api_add_pick",
                         json={"data": [json.dumps(pick_data)]},
                         timeout=15
                     )
                     if response.status_code == 200:
-                        embed.add_field(name="🔄 Dashboard", value="✅ Synced to dashboard", inline=True)
+                        print(f"✅ Pick synced to dashboard")
                     else:
-                        embed.add_field(name="🔄 Dashboard", value="❌ Sync failed", inline=True)
+                        print(f"⚠️ Dashboard sync failed: {response.text}")
                 except Exception as e:
-                    logger.error(f"Dashboard sync error: {e}")
-                    embed.add_field(name="🔄 Dashboard", value="❌ Sync error", inline=True)
-            # Send to channel if channel ID is provided
-            if channel_id:
-                channel = self.get_channel(channel_id)
-                if channel and isinstance(channel, discord.TextChannel):
-                    try:
-                        await channel.send(embed=embed)
-                    except Exception as e:
-                        logger.error(f"Error sending to channel {channel_id}: {e}")
-            await interaction.followup.send(embed=embed)
+                    print(f"❌ Dashboard sync error: {e}")
+                    
         except Exception as e:
             logger.exception("Error in _post_pick_with_analysis")
             await interaction.followup.send(f"❌ An error occurred while posting the pick: {str(e)}", ephemeral=True)
