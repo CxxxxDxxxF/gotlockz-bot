@@ -9,9 +9,10 @@ import os
 import sys
 from pathlib import Path
 
+
 def create_env_file():
     """Create .env file with environment variables."""
-    
+
     env_content = """# GotLockz Bot Environment Configuration
 
 # === DISCORD BOT SETUP ===
@@ -50,16 +51,16 @@ GOOGLE_SHEET_NAME=GotLockz Picks
 # Set to true for production
 PRODUCTION_MODE=false
 """
-    
+
     env_file = Path('.env')
-    
+
     if env_file.exists():
         print("⚠️  .env file already exists!")
         response = input("Do you want to overwrite it? (y/N): ")
         if response.lower() != 'y':
             print("❌ Setup cancelled.")
             return False
-    
+
     try:
         with open(env_file, 'w') as f:
             f.write(env_content)
@@ -68,6 +69,7 @@ PRODUCTION_MODE=false
     except Exception as e:
         print(f"❌ Error creating .env file: {e}")
         return False
+
 
 def check_dependencies():
     """Check if required dependencies are installed."""
@@ -78,15 +80,15 @@ def check_dependencies():
         'requests',
         'python-dotenv'
     ]
-    
+
     missing_packages = []
-    
+
     for package in required_packages:
         try:
             __import__(package.replace('-', '_'))
         except ImportError:
             missing_packages.append(package)
-    
+
     if missing_packages:
         print("❌ Missing required packages:")
         for package in missing_packages:
@@ -97,29 +99,31 @@ def check_dependencies():
         print("✅ All required packages are installed!")
         return True
 
+
 def create_directories():
     """Create necessary directories."""
     directories = ['logs', 'data', 'temp']
-    
+
     for directory in directories:
         Path(directory).mkdir(exist_ok=True)
-    
+
     print("✅ Directories created successfully!")
+
 
 def main():
     """Main setup function."""
     print("🚀 GotLockz Bot Environment Setup")
     print("=" * 40)
-    
+
     # Check dependencies
     print("\n1. Checking dependencies...")
     if not check_dependencies():
         sys.exit(1)
-    
+
     # Create directories
     print("\n2. Creating directories...")
     create_directories()
-    
+
     # Create .env file
     print("\n3. Creating .env file...")
     if create_env_file():
@@ -137,6 +141,7 @@ def main():
     else:
         print("❌ Setup failed!")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

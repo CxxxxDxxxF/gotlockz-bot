@@ -39,11 +39,12 @@ def preprocess_image(image_input: Union[str, bytes]) -> np.ndarray:
     else:
         img = cv2.imread(image_input)
         if img is None:
-            raise FileNotFoundError(f"Image not found or unreadable: {image_input}")
+            raise FileNotFoundError(
+                f"Image not found or unreadable: {image_input}")
 
     # Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
+
     # Deskew correction
     coords = np.column_stack(np.where(gray > 0))
     angle = cv2.minAreaRect(coords)[-1]
@@ -52,16 +53,17 @@ def preprocess_image(image_input: Union[str, bytes]) -> np.ndarray:
     (h, w) = gray.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-    
+    rotated = cv2.warpAffine(
+        gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
     # Noise reduction
     denoised = cv2.fastNlMeansDenoising(rotated)
-    
+
     # Adaptive thresholding
     thresh = cv2.adaptiveThreshold(
         denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
     )
-    
+
     # Resize for optimal OCR (maintain aspect ratio, max width 1200px)
     h, w = thresh.shape
     scale = min(1.0, 1200.0 / w)
@@ -74,7 +76,8 @@ def preprocess_image(image_input: Union[str, bytes]) -> np.ndarray:
     else:
         resized = thresh
 
-    logger.debug("Image preprocessed: deskew, denoise, adaptive threshold, resize")
+    logger.debug(
+        "Image preprocessed: deskew, denoise, adaptive threshold, resize")
     return resized
 
 
@@ -89,15 +92,15 @@ def extract_text_from_image(
     if config is None:
         # Optimized config for bet slips
         config = "--psm 6 --oem 3 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@+-.()/: "
-    
+
     try:
         bin_img = preprocess_image(image_input)
         pil_img = Image.fromarray(bin_img)
-        
+
         # Enhance contrast for better OCR
         enhancer = ImageEnhance.Contrast(pil_img)
         pil_img = enhancer.enhance(1.5)
-        
+
         text = pytesseract.image_to_string(pil_img, config=config)
         logger.info(f"OCR extracted {len(text)} characters")
         return text
@@ -116,10 +119,10 @@ def parse_bet_details(text: str) -> Optional[Dict[str, Any]]:
     Returns a dict with parsed bet details.
     """
     logger.debug("Parsing bet details from OCR text")
-    
+
     # Clean and normalize text
     text = re.sub(r'\s+', ' ', text.strip())
-    
+
     # Try different bet type patterns
     patterns = [
         _parse_moneyline,
@@ -128,13 +131,13 @@ def parse_bet_details(text: str) -> Optional[Dict[str, Any]]:
         _parse_teaser,
         _parse_totals
     ]
-    
+
     for pattern_func in patterns:
         result = pattern_func(text)
         if result:
             logger.info(f"Detected bet type: {result.get('type', 'unknown')}")
             return result
-    
+
     logger.warning("No valid bet details found in OCR text")
     return None
 
@@ -144,12 +147,12 @@ def _parse_moneyline(text: str) -> Optional[Dict[str, Any]]:
     # Pattern: "Team1 at Team2 +150" or "Team1 @ Team2 -190"
     pattern = r'([A-Za-z\s]+?)\s+(?:at|@)\s+([A-Za-z\s]+?)\s+([-+]\d{2,4})'
     match = re.search(pattern, text, re.IGNORECASE)
-    
+
     if match:
         team1 = match.group(1).strip()
         team2 = match.group(2).strip()
         odds = match.group(3)
-        
+
         return {
             "type": "moneyline",
             "away": team1,
@@ -166,14 +169,14 @@ def _parse_player_prop(text: str) -> Optional[Dict[str, Any]]:
     # Pattern: "Player Over/Under X.Y Stat -120"
     pattern = r'([A-Za-z\s]+?)\s+(Over|Under)\s+([\d\.]+)\s+([A-Za-z\s]+?)\s+([-+]\d{2,4})'
     match = re.search(pattern, text, re.IGNORECASE)
-    
+
     if match:
         player = match.group(1).strip()
         direction = match.group(2).capitalize()
         value = match.group(3)
         stat = match.group(4).strip()
         odds = match.group(5)
-        
+
         return {
             "type": "player_prop",
             "player": player,
@@ -191,11 +194,11 @@ def _parse_parlay(text: str) -> Optional[Dict[str, Any]]:
     # Pattern: "Team1 ML + Team2 -1.5 +200" or similar
     pattern = r'(.+?)\s+([-+]\d{2,4})'
     matches = re.findall(pattern, text)
-    
+
     if len(matches) >= 2:  # At least 2 legs for a parlay
         legs = [match[0].strip() for match in matches[:-1]]  # All but last
         odds = matches[-1][1]  # Last match is the parlay odds
-        
+
         return {
             "type": "parlay",
             "legs": legs,
@@ -211,11 +214,11 @@ def _parse_teaser(text: str) -> Optional[Dict[str, Any]]:
     # Pattern: "Team1 -2.5 + Team2 +3.5 -110"
     pattern = r'(.+?)\s+([-+]\d{2,4})'
     matches = re.findall(pattern, text)
-    
+
     if len(matches) >= 2:
         legs = [match[0].strip() for match in matches[:-1]]
         odds = matches[-1][1]
-        
+
         return {
             "type": "teaser",
             "legs": legs,
@@ -231,12 +234,12 @@ def _parse_totals(text: str) -> Optional[Dict[str, Any]]:
     # Pattern: "Over/Under X.Y -110"
     pattern = r'(Over|Under)\s+([\d\.]+)\s+([-+]\d{2,4})'
     match = re.search(pattern, text, re.IGNORECASE)
-    
+
     if match:
         direction = match.group(1).capitalize()
         total = match.group(2)
         odds = match.group(3)
-        
+
         return {
             "type": "total",
             "bet": f"{direction} {total}",

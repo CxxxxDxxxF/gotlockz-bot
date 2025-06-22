@@ -29,52 +29,69 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class GotLockzBot(commands.Bot):
     """Professional Discord bot for betting analysis and pick management."""
-    
+
     def __init__(self):
         # Set up intents
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        
+
         # Initialize bot
         super().__init__(
             command_prefix="!",
             intents=intents,
             help_command=None
         )
-        
+
         # Bot configuration
         self.start_time = datetime.now()
         self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}
-        
+
         # Load configuration
         self._load_config()
         self._load_counters()
-        
+
         logger.info("Bot initialized successfully")
 
     def _load_config(self):
         """Load bot configuration from environment variables."""
         # Channel IDs
-        self.vip_channel_id = int(os.getenv('VIP_CHANNEL_ID', 0)) if os.getenv('VIP_CHANNEL_ID') else None
-        self.lotto_channel_id = int(os.getenv('LOTTO_CHANNEL_ID', 0)) if os.getenv('LOTTO_CHANNEL_ID') else None
-        self.free_channel_id = int(os.getenv('FREE_CHANNEL_ID', 0)) if os.getenv('FREE_CHANNEL_ID') else None
-        self.analysis_channel_id = int(os.getenv('ANALYSIS_CHANNEL_ID', 0)) if os.getenv('ANALYSIS_CHANNEL_ID') else None
-        self.log_channel_id = int(os.getenv('LOG_CHANNEL_ID', 0)) if os.getenv('LOG_CHANNEL_ID') else None
-        
+        self.vip_channel_id = int(
+            os.getenv(
+                'VIP_CHANNEL_ID',
+                0)) if os.getenv('VIP_CHANNEL_ID') else None
+        self.lotto_channel_id = int(
+            os.getenv(
+                'LOTTO_CHANNEL_ID',
+                0)) if os.getenv('LOTTO_CHANNEL_ID') else None
+        self.free_channel_id = int(
+            os.getenv(
+                'FREE_CHANNEL_ID',
+                0)) if os.getenv('FREE_CHANNEL_ID') else None
+        self.analysis_channel_id = int(
+            os.getenv(
+                'ANALYSIS_CHANNEL_ID',
+                0)) if os.getenv('ANALYSIS_CHANNEL_ID') else None
+        self.log_channel_id = int(
+            os.getenv(
+                'LOG_CHANNEL_ID',
+                0)) if os.getenv('LOG_CHANNEL_ID') else None
+
         # Check if channels are configured
         self.channels_configured = all([
-            self.vip_channel_id, self.lotto_channel_id, 
+            self.vip_channel_id, self.lotto_channel_id,
             self.free_channel_id, self.analysis_channel_id
         ])
-        
+
         # Dashboard configuration
         self.dashboard_url = os.getenv('DASHBOARD_URL')
         self.dashboard_enabled = bool(self.dashboard_url)
-        
-        logger.info(f"Configuration loaded - Channels: {self.channels_configured}, Dashboard: {self.dashboard_enabled}")
+
+        logger.info(
+            f"Configuration loaded - Channels: {self.channels_configured}, Dashboard: {self.dashboard_enabled}")
 
     def _load_counters(self):
         """Load pick counters from file."""
@@ -98,7 +115,7 @@ class GotLockzBot(commands.Bot):
     async def setup_hook(self):
         """Set up the bot's slash commands."""
         logger.info("🔄 Setting up slash commands...")
-        
+
         try:
             # Load commands from commands.py
             from commands import setup as setup_commands
@@ -112,11 +129,11 @@ class GotLockzBot(commands.Bot):
     async def _create_fallback_commands(self):
         """Create basic fallback commands if main commands fail."""
         logger.info("Creating fallback commands...")
-        
+
         @self.tree.command(name="ping", description="Test bot responsiveness")
         async def ping(interaction: discord.Interaction):
             await interaction.response.send_message("🏓 Pong! Bot is online!")
-        
+
         @self.tree.command(name="status", description="Check bot status")
         async def status(interaction: discord.Interaction):
             embed = discord.Embed(
@@ -125,8 +142,12 @@ class GotLockzBot(commands.Bot):
                 color=0x00ff00
             )
             embed.add_field(name="Status", value="✅ Online", inline=True)
-            embed.add_field(name="Latency", value=f"{round(self.latency * 1000)}ms", inline=True)
-            embed.add_field(name="Servers", value=str(len(self.guilds)), inline=True)
+            embed.add_field(
+                name="Latency",
+                value=f"{round(self.latency * 1000)}ms",
+                inline=True)
+            embed.add_field(name="Servers", value=str(
+                len(self.guilds)), inline=True)
             await interaction.response.send_message(embed=embed)
 
     async def on_ready(self):
@@ -134,7 +155,7 @@ class GotLockzBot(commands.Bot):
         logger.info(f"✅ Bot connected as {self.user}")
         logger.info(f"📊 Connected to {len(self.guilds)} guild(s)")
         logger.info(f"👥 Serving {len(self.users)} user(s)")
-        
+
         # Sync slash commands
         logger.info("🔄 Syncing slash commands...")
         try:
@@ -142,11 +163,12 @@ class GotLockzBot(commands.Bot):
             logger.info(f"✅ Synced {len(synced)} command(s)")
         except Exception as e:
             logger.error(f"❌ Command sync failed: {e}")
-        
+
         # Test dashboard connection
         if self.dashboard_enabled:
             try:
-                response = requests.get(f"{self.dashboard_url}/api/ping", timeout=10)
+                response = requests.get(
+                    f"{self.dashboard_url}/api/ping", timeout=10)
                 if response.status_code == 200:
                     logger.info("✅ Dashboard connection successful")
                 else:
@@ -156,10 +178,12 @@ class GotLockzBot(commands.Bot):
         else:
             logger.info("ℹ️ Dashboard disabled - using local mode")
 
-    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+    async def on_app_command_error(self,
+                                   interaction: discord.Interaction,
+                                   error: app_commands.AppCommandError):
         """Handle application command errors."""
         logger.error(f"Command error: {error}")
-        
+
         if isinstance(error, app_commands.CommandOnCooldown):
             await interaction.response.send_message(
                 f"⏰ Please wait {error.retry_after:.1f} seconds before using this command again.",
@@ -182,7 +206,7 @@ class GotLockzBot(commands.Bot):
         days = uptime.days
         hours, remainder = divmod(uptime.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        
+
         if days > 0:
             return f"{days}d {hours}h {minutes}m"
         elif hours > 0:
@@ -190,12 +214,18 @@ class GotLockzBot(commands.Bot):
         else:
             return f"{minutes}m {seconds}s"
 
-    async def _post_pick_with_analysis(self, interaction: discord.Interaction, image: discord.Attachment, context: str, pick_type: str, channel_id: Optional[int] = None):
+    async def _post_pick_with_analysis(
+            self,
+            interaction: discord.Interaction,
+            image: discord.Attachment,
+            context: str,
+            pick_type: str,
+            channel_id: Optional[int] = None):
         """Post a pick with analysis to the specified channel."""
         # Check if interaction has already been responded to
         if interaction.response.is_done():
             return
-        
+
         if not ANALYSIS_ENABLED:
             try:
                 await interaction.response.send_message(
@@ -206,22 +236,23 @@ class GotLockzBot(commands.Bot):
                 # Interaction expired, can't respond
                 return
             return
-        
+
         try:
             await interaction.response.defer(thinking=True)
         except discord.errors.NotFound:
             # Interaction expired, can't respond
             return
-        
+
         try:
             # Validate image
-            if not image.content_type or not image.content_type.startswith('image/'):
+            if not image.content_type or not image.content_type.startswith(
+                    'image/'):
                 await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
                 return
-            
+
             # Download image
             image_bytes = await image.read()
-            
+
             # OCR: Extract text from image
             try:
                 # For now, use a placeholder since OCR is not implemented
@@ -229,31 +260,36 @@ class GotLockzBot(commands.Bot):
             except Exception as e:
                 await interaction.followup.send(f"❌ OCR failed: {str(e)}", ephemeral=True)
                 return
-            
+
             if not text.strip():
                 await interaction.followup.send(
                     "❌ Could not extract text from the image. Please ensure the image is clear and readable.",
                     ephemeral=True
                 )
                 return
-            
+
             # Parse bet details (simplified for now)
-            bet_details = {"team": "Lakers", "opponent": "Warriors", "pick": "-5.5", "sport": "NBA"}
-            
+            bet_details = {
+                "team": "Lakers",
+                "opponent": "Warriors",
+                "pick": "-5.5",
+                "sport": "NBA"}
+
             # AI: Analyze bet slip
             try:
                 analysis = generate_analysis(str(bet_details))
             except Exception as e:
                 await interaction.followup.send(f"❌ AI analysis failed: {str(e)}", ephemeral=True)
                 return
-            
+
             # Validate analysis quality (simplified)
             validation = {"status": "Analysis completed"}
-            
+
             # Create response embed
             embed = await self._create_analysis_embed(bet_details, analysis, validation)
-            
-            # Post to specified channel if configured, otherwise post in current channel
+
+            # Post to specified channel if configured, otherwise post in
+            # current channel
             if channel_id and self.channels_configured:
                 try:
                     channel = self.get_channel(channel_id)
@@ -267,11 +303,11 @@ class GotLockzBot(commands.Bot):
             else:
                 # Post in current channel
                 await interaction.followup.send(embed=embed)
-            
+
             # Update pick counter
             self.pick_counters[pick_type] += 1
             self._save_counters()
-            
+
             # Sync to dashboard if enabled
             if self.dashboard_enabled:
                 try:
@@ -295,7 +331,7 @@ class GotLockzBot(commands.Bot):
                         print(f"⚠️ Dashboard sync failed: {response.text}")
                 except Exception as e:
                     print(f"❌ Dashboard sync error: {e}")
-                    
+
         except discord.errors.NotFound:
             # Interaction expired, can't respond
             logger.warning("Interaction expired before bot could respond")
@@ -314,7 +350,7 @@ class GotLockzBot(commands.Bot):
             description="AI-powered analysis of your betting slip",
             color=0x00ff00
         )
-        
+
         # Bet details
         embed.add_field(
             name="📋 Bet Details",
@@ -324,30 +360,30 @@ class GotLockzBot(commands.Bot):
                   f"**Sport:** {bet_details.get('sport', 'Unknown')}",
             inline=True
         )
-        
+
         # Analysis results
         embed.add_field(
             name="🤖 AI Analysis",
             value=analysis if isinstance(analysis, str) else str(analysis),
             inline=False
         )
-        
+
         # Validation status
         embed.add_field(
             name="✅ Validation",
             value=validation.get('status', 'Unknown'),
             inline=True
         )
-        
+
         # Footer
         embed.set_footer(text="GotLockz Bot • AI-Powered Betting Analysis")
         embed.timestamp = datetime.now()
-        
+
         return embed
 
     async def on_message(self, message):
         # Don't respond to bot's own messages
         if message.author == self.user:
             return
-        
+
         await self.process_commands(message)

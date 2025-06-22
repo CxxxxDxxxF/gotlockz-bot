@@ -5,7 +5,7 @@ Tests for data enrichment functionality.
 """
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from data_enrichment import DataEnrichment, enrich_bet_analysis
+from bot.utils.data_enrichment import DataEnrichment, enrich_bet_analysis
 
 
 class TestDataEnrichment:
@@ -22,7 +22,7 @@ class TestDataEnrichment:
             "odds": "+150"
         }
         
-        with patch('data_enrichment.DataEnrichment') as mock_de_class:
+        with patch('bot.utils.data_enrichment.DataEnrichment') as mock_de_class:
             mock_de = AsyncMock()
             mock_de_class.return_value.__aenter__.return_value = mock_de
             
@@ -59,7 +59,7 @@ class TestDataEnrichment:
             "odds": "-120"
         }
         
-        with patch('data_enrichment.DataEnrichment') as mock_de_class:
+        with patch('bot.utils.data_enrichment.DataEnrichment') as mock_de_class:
             mock_de = AsyncMock()
             mock_de_class.return_value.__aenter__.return_value = mock_de
             

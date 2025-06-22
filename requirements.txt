@@ -25,3 +25,6 @@ aiohttp>=3.8.0
 asyncio-mqtt>=0.11.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+
+# New dependencies
+aiofiles>=23.2.1

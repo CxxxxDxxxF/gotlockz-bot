@@ -6,7 +6,7 @@ Tests for image processing and OCR functionality.
 import pytest
 import numpy as np
 from unittest.mock import Mock, patch
-from image_processing import (
+from bot.utils.image_processing import (
     preprocess_image, extract_text_from_image, parse_bet_details,
     calculate_implied_probability, calculate_edge
 )

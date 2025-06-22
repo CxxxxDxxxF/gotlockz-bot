@@ -5,7 +5,7 @@ Tests for AI analysis functionality.
 """
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from ai_analysis import (
+from bot.utils.ai_analysis import (
     analyze_bet_slip, generate_pick_summary, validate_analysis_quality,
     BettingAnalysisError
 )
@@ -26,10 +26,10 @@ class TestAIAnalysis:
             "game": "Yankees @ Red Sox"
         }
         
-        with patch('ai_analysis.enrich_bet_analysis') as mock_enrich:
+        with patch('bot.utils.ai_analysis.enrich_bet_analysis') as mock_enrich:
             mock_enrich.return_value = bet_details
             
-            with patch('ai_analysis._generate_ai_analysis') as mock_generate:
+            with patch('bot.utils.ai_analysis._generate_ai_analysis') as mock_generate:
                 mock_generate.return_value = {
                     "recommendation": {
                         "action": "Bet",
@@ -56,7 +56,7 @@ class TestAIAnalysis:
         """Test bet slip analysis with error."""
         bet_details = {"type": "invalid"}
         
-        with patch('ai_analysis.enrich_bet_analysis', side_effect=Exception("Test error")):
+        with patch('bot.utils.ai_analysis.enrich_bet_analysis', side_effect=Exception("Test error")):
             with pytest.raises(BettingAnalysisError):
                 await analyze_bet_slip(bet_details)
     
@@ -115,7 +115,7 @@ class TestAIAnalysis:
             }
         }
         
-        with patch('ai_analysis._get_next_pick_number', return_value=1):
+        with patch('bot.utils.ai_analysis._get_next_pick_number', return_value=1):
             result = await generate_pick_summary(bet_details, analysis, "vip")
             
             assert "GOTLOCKZ VIP PICK #1" in result
