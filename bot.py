@@ -578,39 +578,78 @@ class GotLockzBot(commands.Bot):
         
         # Add bet details
         if bet_details:
+            if isinstance(bet_details, dict):
+                embed.add_field(
+                    name="📋 Bet Details",
+                    value=f"```{json.dumps(bet_details, indent=2)}```",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="📋 Bet Details",
+                    value=str(bet_details),
+                    inline=False
+                )
+        else:
             embed.add_field(
                 name="📋 Bet Details",
-                value=f"```{json.dumps(bet_details, indent=2)}```",
+                value="No bet details available",
                 inline=False
             )
         
         # Add analysis results
         if analysis:
+            if isinstance(analysis, dict):
+                embed.add_field(
+                    name="🤖 AI Analysis",
+                    value=analysis.get('summary', 'No analysis available'),
+                    inline=False
+                )
+                
+                if 'confidence' in analysis:
+                    embed.add_field(
+                        name="📊 Confidence",
+                        value=f"{analysis['confidence']}/10",
+                        inline=True
+                    )
+                
+                if 'recommendation' in analysis:
+                    embed.add_field(
+                        name="💡 Recommendation",
+                        value=analysis['recommendation'],
+                        inline=True
+                    )
+            else:
+                embed.add_field(
+                    name="🤖 AI Analysis",
+                    value=str(analysis),
+                    inline=False
+                )
+        else:
             embed.add_field(
                 name="🤖 AI Analysis",
-                value=analysis.get('summary', 'No analysis available'),
+                value="Analysis not available",
                 inline=False
             )
-            
-            if 'confidence' in analysis:
-                embed.add_field(
-                    name="📊 Confidence",
-                    value=f"{analysis['confidence']}/10",
-                    inline=True
-                )
-            
-            if 'recommendation' in analysis:
-                embed.add_field(
-                    name="💡 Recommendation",
-                    value=analysis['recommendation'],
-                    inline=True
-                )
         
         # Add validation results
         if validation:
+            if isinstance(validation, dict):
+                embed.add_field(
+                    name="✅ Validation",
+                    value=validation.get('status', 'Unknown'),
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name="✅ Validation",
+                    value=str(validation),
+                    inline=True
+                )
+        else:
             embed.add_field(
                 name="✅ Validation",
-                value=validation.get('status', 'Unknown'),
+                value="Validation not available",
                 inline=True
             )
         
