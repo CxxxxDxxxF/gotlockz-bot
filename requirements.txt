@@ -28,3 +28,9 @@ lxml>=4.9.0
 
 # New dependencies
 aiofiles>=23.2.1
+
+# MLB Stats API Integration
+statsapi>=1.8.0
+pybaseball>=2.2.0
+opencv-python>=4.8.0
+sportsipy>=0.6.0
