@@ -37,7 +37,29 @@ class MLBDataFetcher:
 
             if response.status_code == 200:
                 data = response.json()
-                return self._parse_team_stats(data)
+                season_stats = self._parse_team_stats(data)
+                
+                # Get recent team performance (last 10 games)
+                recent_url = f"{self.base_url}/teams/{team_id}/stats"
+                recent_params = {
+                    'stats': 'last10Games',
+                    'group': 'hitting'
+                }
+                recent_response = self.session.get(recent_url, params=recent_params, timeout=10)
+                
+                recent_stats = {}
+                if recent_response.status_code == 200:
+                    recent_data = recent_response.json()
+                    recent_stats = self._parse_team_stats(recent_data)
+                
+                # Combine season and recent stats
+                combined_stats = {**season_stats}
+                if recent_stats:
+                    combined_stats['recent_wins'] = recent_stats.get('wins', 0)
+                    combined_stats['recent_losses'] = recent_stats.get('losses', 0)
+                    combined_stats['recent_runs_per_game'] = recent_stats.get('runs_per_game', 0)
+                
+                return combined_stats
             else:
                 logger.warning(
                     f"Failed to fetch team stats: {response.status_code}")
@@ -55,7 +77,7 @@ class MLBDataFetcher:
             if not player_id:
                 return {}
 
-            # Get player stats
+            # Get player stats for current season
             url = f"{self.base_url}/people/{player_id}/stats"
             params = {
                 'stats': 'season',
@@ -65,7 +87,28 @@ class MLBDataFetcher:
 
             if response.status_code == 200:
                 data = response.json()
-                return self._parse_player_stats(data)
+                season_stats = self._parse_player_stats(data)
+                
+                # Get recent performance (last 7 days)
+                recent_params = {
+                    'stats': 'last7Days',
+                    'group': 'hitting'
+                }
+                recent_response = self.session.get(url, params=recent_params, timeout=10)
+                
+                recent_stats = {}
+                if recent_response.status_code == 200:
+                    recent_data = recent_response.json()
+                    recent_stats = self._parse_player_stats(recent_data)
+                
+                # Combine season and recent stats
+                combined_stats = {**season_stats}
+                if recent_stats:
+                    combined_stats['recent_avg'] = recent_stats.get('avg', '.000')
+                    combined_stats['recent_hr'] = recent_stats.get('hr', '0')
+                    combined_stats['recent_rbi'] = recent_stats.get('rbi', '0')
+                
+                return combined_stats
             else:
                 logger.warning(
                     f"Failed to fetch player stats: {response.status_code}")

@@ -610,36 +610,120 @@ LOCK IT. 🔒🔥"""
             team_stats = mlb_data.get('team_stats', {}) or {}
             trends = mlb_data.get('current_trends', '') or ''
             weather = mlb_data.get('weather', '') or ''
+            away_team = mlb_data.get('away_team', 'TBD') or 'TBD'
+            home_team = mlb_data.get('home_team', 'TBD') or 'TBD'
+            description = bet_data.get('description', 'TBD') or 'TBD'
 
-            # Build analysis with fallbacks
+            # Build comprehensive analysis
             analysis_parts = []
 
-            # Player stats
+            # Player Performance Analysis
             if player != 'TBD' and player_stats:
                 avg = player_stats.get('avg', '.000')
                 hr = player_stats.get('hr', '0')
                 rbi = player_stats.get('rbi', '0')
+                ops = player_stats.get('ops', '.000')
+                slg = player_stats.get('slg', '.000')
+                obp = player_stats.get('obp', '.000')
+                recent_avg = player_stats.get('recent_avg', '.000')
+                recent_hr = player_stats.get('recent_hr', '0')
+                recent_rbi = player_stats.get('recent_rbi', '0')
+                
+                # Determine player performance level
+                avg_float = float(avg) if avg != '.000' else 0
+                ops_float = float(ops) if ops != '.000' else 0
+                
+                if avg_float >= 0.300:
+                    performance_level = "🔥 HOT"
+                elif avg_float >= 0.280:
+                    performance_level = "✅ SOLID"
+                elif avg_float >= 0.250:
+                    performance_level = "📊 AVERAGE"
+                else:
+                    performance_level = "❄️ COLD"
+                
                 analysis_parts.append(
-                    f"Player {player} is hitting {avg} this season with {hr} HRs and {rbi} RBIs.")
-            elif player != 'TBD':
-                analysis_parts.append(
-                    f"Player {player} has strong potential in this matchup.")
+                    f"🎯 {player} ({performance_level}): Hitting {avg} with {hr} HRs, {rbi} RBIs, {ops} OPS this season."
+                )
+                
+                # Add recent performance if available
+                if recent_avg != '.000' and recent_avg != avg:
+                    recent_avg_float = float(recent_avg)
+                    if recent_avg_float > avg_float:
+                        analysis_parts.append(f"📈 RECENT FORM: {recent_avg} in last 7 days - trending UP!")
+                    elif recent_avg_float < avg_float:
+                        analysis_parts.append(f"📉 RECENT FORM: {recent_avg} in last 7 days - trending down.")
+                
+                # Add specific prop analysis
+                if 'hits' in description.lower() or 'total bases' in description.lower():
+                    analysis_parts.append(f"📈 {player} has a {slg} slugging percentage, showing power potential.")
+                elif 'runs' in description.lower() or 'rbi' in description.lower():
+                    analysis_parts.append(f"🏃 {player} has driven in {rbi} runs with a {obp} on-base percentage.")
+                elif 'home run' in description.lower():
+                    analysis_parts.append(f"💪 {player} has {hr} home runs with a {slg} slugging percentage.")
 
-            # Team trends
+            # Team Performance Analysis
+            if team_stats:
+                away_record = team_stats.get('away_record', '0-0')
+                home_record = team_stats.get('home_record', '0-0')
+                away_pitcher = team_stats.get('away_pitcher', 'TBD')
+                home_pitcher = team_stats.get('home_pitcher', 'TBD')
+                recent_wins = team_stats.get('recent_wins', 0)
+                recent_losses = team_stats.get('recent_losses', 0)
+                recent_runs_per_game = team_stats.get('recent_runs_per_game', 0)
+                
+                analysis_parts.append(f"🏟️ {away_team} ({away_record}) @ {home_team} ({home_record})")
+                
+                # Add recent team performance
+                if recent_wins > 0 or recent_losses > 0:
+                    recent_record = f"{recent_wins}-{recent_losses}"
+                    if recent_wins > recent_losses:
+                        analysis_parts.append(f"🔥 {away_team} is {recent_record} in last 10 games - HOT streak!")
+                    elif recent_losses > recent_wins:
+                        analysis_parts.append(f"❄️ {away_team} is {recent_record} in last 10 games - struggling.")
+                
+                if recent_runs_per_game > 0:
+                    analysis_parts.append(f"⚡ {away_team} averaging {recent_runs_per_game:.1f} runs per game recently.")
+                
+                if away_pitcher != 'TBD' and home_pitcher != 'TBD':
+                    analysis_parts.append(f"⚾ Pitching: {away_pitcher} vs {home_pitcher}")
+
+            # Recent Team Trends
             if trends and trends != 'Data unavailable':
-                analysis_parts.append(trends)
+                analysis_parts.append(f"📊 {trends}")
 
-            # Weather conditions
+            # Weather Impact Analysis
             if weather and weather != 'TBD':
-                analysis_parts.append(
-                    f"The weather conditions are {weather} which should be favorable for hitting.")
+                weather_lower = weather.lower()
+                if 'clear' in weather_lower or 'sunny' in weather_lower:
+                    analysis_parts.append("☀️ Clear weather conditions are favorable for hitting.")
+                elif 'wind' in weather_lower:
+                    if 'out' in weather_lower:
+                        analysis_parts.append("💨 Wind blowing out - great for home runs and extra base hits.")
+                    elif 'in' in weather_lower:
+                        analysis_parts.append("💨 Wind blowing in - may suppress power numbers.")
+                elif 'rain' in weather_lower:
+                    analysis_parts.append("🌧️ Rain in forecast - may affect game conditions.")
 
-            # Context
+            # Bet Type Specific Analysis
+            if 'over' in description.lower():
+                analysis_parts.append("📈 OVER PLAY: Both teams showing strong offensive potential.")
+            elif 'under' in description.lower():
+                analysis_parts.append("📉 UNDER PLAY: Pitching matchup favors lower scoring.")
+            elif 'moneyline' in description.lower() or 'ml' in description.lower():
+                analysis_parts.append("💰 MONEYLINE: Team has strong matchup advantages.")
+
+            # Context Integration
             if context and context.strip():
-                analysis_parts.append(context)
-            else:
-                analysis_parts.append(
-                    "Based on current form and matchup analysis, this pick has strong value at the given odds.")
+                analysis_parts.append(f"💭 {context}")
+
+            # Final Analysis Summary
+            if not analysis_parts:
+                analysis_parts.append("📊 Analysis based on current form and matchup data.")
+            
+            # Add confidence indicator
+            confidence = "🔒 HIGH CONFIDENCE" if len(analysis_parts) > 3 else "📊 MODERATE CONFIDENCE"
+            analysis_parts.append(f"\n{confidence} - Strong value at current odds.")
 
             return '\n\n'.join(analysis_parts)
 
