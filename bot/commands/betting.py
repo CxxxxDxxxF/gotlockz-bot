@@ -502,12 +502,14 @@ Analysis will be enhanced with AI features in future updates."""
             # Generate analysis based on live data
             analysis = await self._generate_analysis(bet_data, mlb_data, context)
 
-            # Standardize date/time format
-            formatted_time = f"{current_date} {current_time} PM EST"
+            # Format date/time without leading zeros
+            formatted_date = self._format_date_no_zeros(current_date)
+            formatted_time = self._format_time_no_zeros(current_time)
+            game_time = f"{formatted_date} {formatted_time} PM EST"
 
             if pick_type == "vip":
-                return f"""🔒 | VIP PLAY #{self.pick_counters[pick_type]} 🏆 – {current_date}
-⚾ | Game: {away_team} @ {home_team} ({formatted_time})
+                return f"""🔒 | VIP PLAY #{self.pick_counters[pick_type]} 🏆 – {formatted_date}
+⚾ | Game: {away_team} @ {home_team} ({game_time})
 🏆 | {player} – {description} ({odds})
 💵 | Unit Size: {units}
 👇 | Analysis Below:
@@ -515,8 +517,8 @@ Analysis will be enhanced with AI features in future updates."""
 {analysis}"""
 
             elif pick_type == "free":
-                return f"""FREE PLAY – {current_date}
-⚾ | Game: {away_team} @ {home_team} ({formatted_time})
+                return f"""FREE PLAY – {formatted_date}
+⚾ | Game: {away_team} @ {home_team} ({game_time})
 🏆 | {player} – {description} ({odds})
 👇 | Analysis Below:
 
@@ -527,17 +529,74 @@ LOCK IT. 🔒🔥"""
             elif pick_type == "lotto":
                 # Generate multiple picks for lotto
                 picks = await self._generate_lotto_picks(bet_data, mlb_data)
-                return f"""🔒 | LOTTO TICKET 🎰 – {current_date}
+                return f"""🔒 | LOTTO TICKET 🎰 – {formatted_date}
 {picks}
 💰 | Parlayed: {odds}
 🍀 | GOOD LUCK TO ALL TAILING
 ( THESE ARE 1 UNIT PLAYS )"""
+
+            elif pick_type == "parlay":
+                # Handle parlay with individual legs
+                if bet_data.get('is_parlay', False) and bet_data.get('legs'):
+                    legs_content = []
+                    for i, leg in enumerate(bet_data['legs'], 1):
+                        legs_content.append(f"🏆 | {leg.get('player', 'TBD')} – {leg.get('description', 'TBD')} ({leg.get('odds', 'TBD')})")
+                    
+                    legs_text = '\n'.join(legs_content)
+                    return f"""FREE PLAY – {formatted_date}
+⚾ | Game: {away_team} @ {home_team} ({game_time})
+
+{legs_text}
+💰 | Parlayed: {odds}
+
+👇 | Analysis Below:
+
+{analysis}
+
+LOCK IT. 🔒🔥"""
+                else:
+                    # Fallback for single parlay
+                    return f"""FREE PLAY – {formatted_date}
+⚾ | Game: {away_team} @ {home_team} ({game_time})
+🏆 | {player} – {description} ({odds})
+👇 | Analysis Below:
+
+{analysis}
+
+LOCK IT. 🔒🔥"""
 
             return "Error generating content"
 
         except Exception as e:
             logger.error(f"Error generating pick content: {e}")
             return f"❌ Error generating {pick_type} pick content. Please try again."
+
+    def _format_date_no_zeros(self, date_str: str) -> str:
+        """Format date without leading zeros (e.g., '06/22/25' -> '6/22/25')."""
+        try:
+            if '/' in date_str:
+                parts = date_str.split('/')
+                if len(parts) == 3:
+                    month = str(int(parts[0]))  # Remove leading zero
+                    day = str(int(parts[1]))    # Remove leading zero
+                    year = parts[2]
+                    return f"{month}/{day}/{year}"
+        except:
+            pass
+        return date_str
+
+    def _format_time_no_zeros(self, time_str: str) -> str:
+        """Format time without leading zeros (e.g., '04:15' -> '4:15')."""
+        try:
+            if ':' in time_str:
+                parts = time_str.split(':')
+                if len(parts) == 2:
+                    hour = str(int(parts[0]))   # Remove leading zero
+                    minute = parts[1]
+                    return f"{hour}:{minute}"
+        except:
+            pass
+        return time_str
 
     async def _generate_analysis(
             self,
