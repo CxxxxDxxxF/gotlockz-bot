@@ -34,18 +34,28 @@ class GotLockzBot(commands.Bot):
         self._load_counters()
         
         # Channel configuration
-        self.vip_channel_id = int(os.getenv("VIP_CHANNEL_ID", "0"))
-        self.lotto_channel_id = int(os.getenv("LOTTO_CHANNEL_ID", "0"))
-        self.free_channel_id = int(os.getenv("FREE_CHANNEL_ID", "0"))
-        self.analysis_channel_id = int(os.getenv("ANALYSIS_CHANNEL_ID", "0"))
+        self.vip_channel_id = int(os.getenv('VIP_CHANNEL_ID', 0)) if os.getenv('VIP_CHANNEL_ID') else None
+        self.lotto_channel_id = int(os.getenv('LOTTO_CHANNEL_ID', 0)) if os.getenv('LOTTO_CHANNEL_ID') else None
+        self.free_channel_id = int(os.getenv('FREE_CHANNEL_ID', 0)) if os.getenv('FREE_CHANNEL_ID') else None
+        self.analysis_channel_id = int(os.getenv('ANALYSIS_CHANNEL_ID', 0)) if os.getenv('ANALYSIS_CHANNEL_ID') else None
+        self.log_channel_id = int(os.getenv('LOG_CHANNEL_ID', 0)) if os.getenv('LOG_CHANNEL_ID') else None
+        
+        # Check if channels are configured
         self.channels_configured = all([
             self.vip_channel_id, self.lotto_channel_id, 
             self.free_channel_id, self.analysis_channel_id
         ])
         
         # Dashboard configuration
-        self.dashboard_url = os.getenv("DASHBOARD_URL", "")
+        self.dashboard_url = os.getenv('DASHBOARD_URL')
         self.dashboard_enabled = bool(self.dashboard_url)
+        
+        # Pick counters
+        self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}
+        self._load_counters()
+        
+        # Bot start time for uptime tracking
+        self.start_time = datetime.now()
 
     def _load_counters(self):
         """Load pick counters from file."""

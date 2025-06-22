@@ -1,0 +1,71 @@
+name: Deploy GotLockz Bot
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio
+    
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+    
+    - name: Lint code
+      run: |
+        pip install flake8 black isort
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        black --check .
+        isort --check-only .
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to Render
+      uses: johnbeynon/render-deploy-action@v1.0.0
+      with:
+        service-id: ${{ secrets.RENDER_SERVICE_ID }}
+        api-key: ${{ secrets.RENDER_API_KEY }}
+    
+    - name: Deploy Dashboard to Hugging Face
+      run: |
+        # Clone the Hugging Face repo
+        git clone https://huggingface.co/spaces/${{ secrets.HF_USERNAME }}/gotlockz-dashboard
+        cd gotlockz-dashboard
+        
+        # Copy dashboard files
+        cp -r ../hf_deploy/* .
+        
+        # Commit and push
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config user.name "GitHub Actions"
+        git add .
+        git commit -m "Auto-deploy from GitHub Actions" || exit 0
+        git push
+        
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }} 
