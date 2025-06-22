@@ -105,37 +105,17 @@ class BettingCommands(app_commands.Group):
                 await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
                 return
             
-            # Create analysis embed
-            embed = discord.Embed(
-                title="📊 Bet Analysis",
-                description="Image analysis completed",
-                color=0x00ff00,
-                timestamp=datetime.now()
-            )
+            # Create plain text analysis
+            analysis_text = f"""📊 BET ANALYSIS
+📋 Image: {image.filename}
+📝 Context: {context or 'No context provided'}
+🤖 Status: ✅ Basic analysis completed
+📊 Image processed successfully
+
+Analysis will be enhanced with AI features in future updates."""
             
-            # Add image
-            embed.set_image(url=image.url)
-            
-            # Add basic info
-            embed.add_field(
-                name="📋 Image Details",
-                value=f"**Filename:** {image.filename}\n"
-                      f"**Type:** {image.content_type}\n"
-                      f"**Context:** {context or 'No context provided'}",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="🤖 Analysis Status",
-                value="✅ Basic analysis completed\n"
-                      "📊 Image processed successfully",
-                inline=True
-            )
-            
-            embed.set_footer(text="GotLockz Bot • Analysis")
-            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-            
-            await interaction.followup.send(embed=embed)
+            # Send message with image attachment
+            await interaction.followup.send(content=analysis_text, file=await image.to_file())
             
         except Exception as e:
             logger.error(f"Error in analyze command: {e}")
@@ -148,7 +128,7 @@ class BettingCommands(app_commands.Group):
         context: Optional[str],
         pick_type: str
     ):
-        """Post a pick to Discord."""
+        """Post a pick to Discord using plain-text templates."""
         await interaction.response.defer(thinking=True)
         
         try:
@@ -161,38 +141,43 @@ class BettingCommands(app_commands.Group):
             self.pick_counters[pick_type] += 1
             self._save_counters()
             
-            # Create embed
-            embed = discord.Embed(
-                title=f"🎯 {pick_type.upper()} PICK #{self.pick_counters[pick_type]}",
-                description=context or f"New {pick_type} pick posted!",
-                color=0x00ff00,
-                timestamp=datetime.now()
-            )
+            # Get current date
+            current_date = datetime.now().strftime("%m/%d/%y")
             
-            # Add image
-            embed.set_image(url=image.url)
+            # Create message content based on pick type
+            if pick_type == "vip":
+                message_content = f"""🔒 | VIP PLAY #{self.pick_counters[pick_type]} 🏆 – {current_date}
+⚾ | Game: {context or 'TBD'} @ {context or 'TBD'} ({current_date} {datetime.now().strftime('%I:%M')} PM EST)
+🏆 | {context or 'PLAYER'} – {context or 'description'} ({context or 'odds'})
+💵 | Unit Size: {context or 'units'}
+👇 | Analysis Below:
+
+{context or 'Analysis paragraph 1'}
+{context or 'Analysis paragraph 2'}"""
+                
+            elif pick_type == "free":
+                message_content = f"""FREE PLAY – {current_date}
+⚾ | Game: {context or 'TBD'} @ {context or 'TBD'} ({current_date} {datetime.now().strftime('%I:%M')} PM EST)
+🏆 | {context or 'PLAYER'} – {context or 'description'} ({context or 'odds'})
+👇 | Analysis Below:
+
+{context or 'Analysis paragraph 1'}
+{context or 'Analysis paragraph 2'}
+
+LOCK IT. 🔒🔥"""
+                
+            elif pick_type == "lotto":
+                message_content = f"""🔒 | LOTTO TICKET 🎰 – {current_date}
+🏆 | {context or 'Pick 1: Name – description (odds)'}
+🏆 | {context or 'Pick 2: Name – description (odds)'}
+🏆 | {context or 'Pick 3: Name – description (odds)'}
+🏆 | {context or 'Pick 4: Name – description (odds)'}
+💰 | Parlayed: {context or 'combined_odds'}
+🍀 | GOOD LUCK TO ALL TAILING
+( THESE ARE 1 UNIT PLAYS )"""
             
-            # Add details
-            embed.add_field(
-                name="📊 Pick Details",
-                value=f"**Type:** {pick_type.upper()}\n"
-                      f"**Number:** #{self.pick_counters[pick_type]}\n"
-                      f"**Context:** {context or 'No context provided'}",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="👤 Posted By",
-                value=f"**User:** {interaction.user.display_name}\n"
-                      f"**Channel:** <#{interaction.channel_id}>",
-                inline=True
-            )
-            
-            embed.set_footer(text=f"GotLockz Bot • {pick_type.upper()} Pick")
-            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-            
-            # Send to channel
-            await interaction.followup.send(embed=embed)
+            # Send message with image attachment
+            await interaction.followup.send(content=message_content, file=await image.to_file())
             
             logger.info(f"Posted {pick_type} pick #{self.pick_counters[pick_type]} by {interaction.user}")
             
@@ -215,77 +200,31 @@ class InfoCommands(app_commands.Group):
     @app_commands.command(name="status", description="Check bot status")
     async def status_command(self, interaction: discord.Interaction):
         """Check bot status."""
-        embed = discord.Embed(
-            title="🤖 Bot Status",
-            description="GotLockz Bot is running",
-            color=0x00ff00
-        )
+        status_text = f"""🤖 BOT STATUS
+✅ Status: Online
+⚡ Latency: {round(self.bot.latency * 1000)}ms
+⏰ Uptime: {self.bot.get_uptime()}
+🏠 Servers: {len(self.bot.guilds)}
+👥 Users: {len(self.bot.users)}
+🔧 Commands: {len(self.bot.tree.get_commands())}"""
         
-        embed.add_field(
-            name="Status",
-            value="✅ Online",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="Latency",
-            value=f"{round(self.bot.latency * 1000)}ms",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="Uptime",
-            value=self.bot.get_uptime(),
-            inline=True
-        )
-        
-        embed.add_field(
-            name="Servers",
-            value=str(len(self.bot.guilds)),
-            inline=True
-        )
-        
-        embed.add_field(
-            name="Users",
-            value=str(len(self.bot.users)),
-            inline=True
-        )
-        
-        embed.add_field(
-            name="Commands",
-            value=str(len(self.bot.tree.get_commands())),
-            inline=True
-        )
-        
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(content=status_text)
 
     @app_commands.command(name="stats", description="View bot statistics")
     async def stats_command(self, interaction: discord.Interaction):
         """View bot statistics."""
-        embed = discord.Embed(
-            title="📊 Bot Statistics",
-            color=0x00ff00
-        )
+        stats_text = f"""📊 BOT STATISTICS
+🎯 Pick Counters:
+   VIP: {self.bot.pick_counters['vip']}
+   Lotto: {self.bot.pick_counters['lotto']}
+   Free: {self.bot.pick_counters['free']}
+
+🤖 Bot Status:
+   Dashboard: {'✅' if self.bot.dashboard_enabled else '❌'}
+   Channels: {'✅' if self.bot.channels_configured else '❌'}
+   Uptime: {self.bot.get_uptime()}"""
         
-        # Pick counters
-        embed.add_field(
-            name="🎯 Pick Counters",
-            value=f"VIP: {self.bot.pick_counters['vip']}\n"
-                  f"Lotto: {self.bot.pick_counters['lotto']}\n"
-                  f"Free: {self.bot.pick_counters['free']}",
-            inline=True
-        )
-        
-        # Bot status
-        embed.add_field(
-            name="🤖 Bot Status",
-            value=f"Dashboard: {'✅' if self.bot.dashboard_enabled else '❌'}\n"
-                  f"Channels: {'✅' if self.bot.channels_configured else '❌'}\n"
-                  f"Uptime: {self.bot.get_uptime()}",
-            inline=True
-        )
-        
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(content=stats_text)
 
     @app_commands.command(name="force_sync", description="Force sync all commands")
     async def force_sync_command(self, interaction: discord.Interaction):
@@ -294,15 +233,11 @@ class InfoCommands(app_commands.Group):
         
         try:
             synced = await self.bot.tree.sync()
-            embed = discord.Embed(
-                title="🔄 Force Sync",
-                description=f"Synced {len(synced)} commands successfully!",
-                color=0x00ff00
-            )
-            embed.add_field(name="Status", value="✅ Commands synced", inline=True)
-            embed.add_field(name="Commands", value=str(len(synced)), inline=True)
+            sync_text = f"""🔄 FORCE SYNC
+✅ Status: Commands synced
+🔧 Commands: {len(synced)}"""
             
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(content=sync_text)
         except Exception as e:
             await interaction.followup.send(f"❌ Force sync failed: {e}")
 
