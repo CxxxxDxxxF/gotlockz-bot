@@ -6,6 +6,7 @@ Test script to verify commands.py syntax is correct.
 """
 import sys
 import os
+from datetime import datetime
 
 def test_imports():
     """Test if all imports work correctly."""
@@ -59,20 +60,27 @@ def test_command_classes():
     try:
         import commands
         
-        # Test BotLogger
+        # Test BettingCommands
         class MockBot:
             def __init__(self):
                 self.guilds = []
                 self.users = []
                 self.latency = 0.1
+                self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}
+                self.dashboard_enabled = False
+                self.channels_configured = False
+                self.start_time = datetime.now()
+            
+            def get_uptime(self):
+                return "1h 30m"
         
         mock_bot = MockBot()
-        logger = commands.BotLogger(mock_bot)
-        print("✅ BotLogger instantiated successfully")
+        betting_commands = commands.BettingCommands(mock_bot)
+        print("✅ BettingCommands instantiated successfully")
         
-        # Test PermissionsManager
-        permissions = commands.PermissionsManager(mock_bot)
-        print("✅ PermissionsManager instantiated successfully")
+        # Test InfoCommands
+        info_commands = commands.InfoCommands(mock_bot)
+        print("✅ InfoCommands instantiated successfully")
         
         return True
     except Exception as e:

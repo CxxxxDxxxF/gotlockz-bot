@@ -1,7 +1,13 @@
+#!/usr/bin/env python3
+"""
+bot.py - GotLockz Discord Bot Core
+
+Professional Discord bot implementation with proper command handling.
+"""
 import os
 import json
-import requests
 import logging
+import requests
 from datetime import datetime
 from typing import Optional
 
@@ -23,17 +29,35 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Set up Discord intents
-intents = discord.Intents.all()
-
 class GotLockzBot(commands.Bot):
-    def __init__(self, **kwargs):
-        super().__init__(command_prefix="!", intents=intents, **kwargs)
-        self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}
+    """Professional Discord bot for betting analysis and pick management."""
+    
+    def __init__(self):
+        # Set up intents
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True
+        
+        # Initialize bot
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            help_command=None
+        )
+        
+        # Bot configuration
         self.start_time = datetime.now()
+        self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}
+        
+        # Load configuration
+        self._load_config()
         self._load_counters()
         
-        # Channel configuration
+        logger.info("Bot initialized successfully")
+
+    def _load_config(self):
+        """Load bot configuration from environment variables."""
+        # Channel IDs
         self.vip_channel_id = int(os.getenv('VIP_CHANNEL_ID', 0)) if os.getenv('VIP_CHANNEL_ID') else None
         self.lotto_channel_id = int(os.getenv('LOTTO_CHANNEL_ID', 0)) if os.getenv('LOTTO_CHANNEL_ID') else None
         self.free_channel_id = int(os.getenv('FREE_CHANNEL_ID', 0)) if os.getenv('FREE_CHANNEL_ID') else None
@@ -50,36 +74,16 @@ class GotLockzBot(commands.Bot):
         self.dashboard_url = os.getenv('DASHBOARD_URL')
         self.dashboard_enabled = bool(self.dashboard_url)
         
-        # Pick counters
-        self.pick_counters = {"vip": 0, "lotto": 0, "free": 0}
-        self._load_counters()
-        
-        # Bot start time for uptime tracking
-        self.start_time = datetime.now()
-        
-        # Initialize permissions manager
-        try:
-            from commands import PermissionsManager
-            self.permissions = PermissionsManager(self)
-        except ImportError:
-            logger.warning("Permissions manager not available - using basic permissions")
-            self.permissions = None
-        
-        # Initialize logger
-        try:
-            from commands import BotLogger
-            self.logger = BotLogger(self)
-        except ImportError:
-            logger.warning("Bot logger not available - using basic logging")
-            self.logger = None
+        logger.info(f"Configuration loaded - Channels: {self.channels_configured}, Dashboard: {self.dashboard_enabled}")
 
     def _load_counters(self):
         """Load pick counters from file."""
         try:
             with open('counters.json', 'r') as f:
                 self.pick_counters = json.load(f)
+                logger.info(f"Counters loaded: {self.pick_counters}")
         except FileNotFoundError:
-            pass
+            logger.info("No counters file found, using defaults")
         except Exception as e:
             logger.error(f"Error loading counters: {e}")
 
@@ -91,52 +95,100 @@ class GotLockzBot(commands.Bot):
         except Exception as e:
             logger.error(f"Error saving counters: {e}")
 
-    async def on_ready(self):
-        print(f"Bot connected as {self.user}")
-        print(f"Dashboard URL: {self.dashboard_url}")
-        print(f"Dashboard enabled: {self.dashboard_enabled}")
-        print(f"Analysis enabled: {ANALYSIS_ENABLED}")
-        print(f"Channels configured: {self.channels_configured}")
-        
-        # Sync slash commands with Discord
-        print("🔄 Syncing slash commands...")
-        try:
-            synced = await self.tree.sync()
-            print(f"✅ Synced {len(synced)} command(s)")
-        except Exception as e:
-            print(f"❌ Command sync failed: {e}")
-        
-        # Test dashboard connection only if dashboard is enabled
-        if self.dashboard_enabled:
-            try:
-                # Test with Gradio API endpoint
-                response = requests.post(
-                    f"{self.dashboard_url}/run/api_ping",
-                    json={"data": []},
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    print("✅ Dashboard connection successful")
-                else:
-                    print("⚠️ Dashboard connection failed")
-            except Exception as e:
-                print(f"❌ Dashboard connection error: {e}")
-        else:
-            print("ℹ️ Dashboard disabled - using local mode")
-
     async def setup_hook(self):
         """Set up the bot's slash commands."""
-        print("🔄 Setting up slash commands...")
+        logger.info("🔄 Setting up slash commands...")
         
-        # Load commands from commands.py
         try:
+            # Load commands from commands.py
             from commands import setup as setup_commands
             await setup_commands(self)
-            print("✅ Commands loaded from commands.py")
+            logger.info("✅ Commands loaded successfully")
         except Exception as e:
-            print(f"❌ Failed to load commands: {e}")
-            # Fallback to basic commands
-            print("⚠️ Using fallback command setup")
+            logger.error(f"❌ Failed to load commands: {e}")
+            # Create fallback commands
+            await self._create_fallback_commands()
+
+    async def _create_fallback_commands(self):
+        """Create basic fallback commands if main commands fail."""
+        logger.info("Creating fallback commands...")
+        
+        @self.tree.command(name="ping", description="Test bot responsiveness")
+        async def ping(interaction: discord.Interaction):
+            await interaction.response.send_message("🏓 Pong! Bot is online!")
+        
+        @self.tree.command(name="status", description="Check bot status")
+        async def status(interaction: discord.Interaction):
+            embed = discord.Embed(
+                title="🤖 Bot Status",
+                description="GotLockz Bot is running",
+                color=0x00ff00
+            )
+            embed.add_field(name="Status", value="✅ Online", inline=True)
+            embed.add_field(name="Latency", value=f"{round(self.latency * 1000)}ms", inline=True)
+            embed.add_field(name="Servers", value=str(len(self.guilds)), inline=True)
+            await interaction.response.send_message(embed=embed)
+
+    async def on_ready(self):
+        """Called when the bot is ready."""
+        logger.info(f"✅ Bot connected as {self.user}")
+        logger.info(f"📊 Connected to {len(self.guilds)} guild(s)")
+        logger.info(f"👥 Serving {len(self.users)} user(s)")
+        
+        # Sync slash commands
+        logger.info("🔄 Syncing slash commands...")
+        try:
+            synced = await self.tree.sync()
+            logger.info(f"✅ Synced {len(synced)} command(s)")
+        except Exception as e:
+            logger.error(f"❌ Command sync failed: {e}")
+        
+        # Test dashboard connection
+        if self.dashboard_enabled:
+            try:
+                response = requests.get(f"{self.dashboard_url}/api/ping", timeout=10)
+                if response.status_code == 200:
+                    logger.info("✅ Dashboard connection successful")
+                else:
+                    logger.warning("⚠️ Dashboard connection failed")
+            except Exception as e:
+                logger.warning(f"⚠️ Dashboard connection error: {e}")
+        else:
+            logger.info("ℹ️ Dashboard disabled - using local mode")
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Handle application command errors."""
+        logger.error(f"Command error: {error}")
+        
+        if isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏰ Please wait {error.retry_after:.1f} seconds before using this command again.",
+                ephemeral=True
+            )
+        elif isinstance(error, app_commands.MissingPermissions):
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"❌ An error occurred: {str(error)}",
+                ephemeral=True
+            )
+
+    def get_uptime(self) -> str:
+        """Get bot uptime as a formatted string."""
+        uptime = datetime.now() - self.start_time
+        days = uptime.days
+        hours, remainder = divmod(uptime.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        elif hours > 0:
+            return f"{hours}h {minutes}m"
+        else:
+            return f"{minutes}m {seconds}s"
 
     async def _post_pick_with_analysis(self, interaction: discord.Interaction, image: discord.Attachment, context: str, pick_type: str, channel_id: Optional[int] = None):
         """Post a pick with analysis to the specified channel."""
@@ -293,39 +345,9 @@ class GotLockzBot(commands.Bot):
         
         return embed
 
-    def _get_uptime(self) -> str:
-        """Get bot uptime as a formatted string."""
-        uptime = datetime.now() - self.start_time
-        return f"{uptime.days}d {uptime.seconds//3600}h {(uptime.seconds//60)%60}m"
-
     async def on_message(self, message):
         # Don't respond to bot's own messages
         if message.author == self.user:
             return
         
         await self.process_commands(message)
-
-    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        """Handle application command errors."""
-        if isinstance(error, app_commands.CommandNotFound):
-            await interaction.response.send_message(
-                "❌ That command doesn't exist or was removed. Please try again or contact support.",
-                ephemeral=True
-            )
-        elif isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(
-                "❌ You don't have permission to use this command.",
-                ephemeral=True
-            )
-        elif isinstance(error, app_commands.CommandOnCooldown):
-            await interaction.response.send_message(
-                f"⏰ This command is on cooldown. Try again in {error.retry_after:.2f} seconds.",
-                ephemeral=True
-            )
-        else:
-            # Log the error for debugging
-            logger.exception(f"Unhandled app command error: {error}")
-            await interaction.response.send_message(
-                "❌ An unexpected error occurred. Please try again or contact support.",
-                ephemeral=True
-            )
