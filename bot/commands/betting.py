@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-commands.py - GotLockz Discord Bot Commands
+betting.py - Enhanced Betting Commands
 
-Clean, professional slash commands for betting analysis and pick management.
+Production-ready Discord bot commands for posting betting picks
+with OCR integration, MLB data analysis, and intelligent formatting.
 """
-import logging
-import json
-from datetime import datetime
-from typing import Optional
-import os
 
+import logging
 import discord
 from discord import app_commands
+from typing import Optional
+from datetime import datetime
+import os
+import re
 
-# Import utilities from new structure
+# Import utilities
 from bot.utils.ocr import ocr_parser
 from bot.utils.mlb import mlb_fetcher
 
@@ -21,37 +22,33 @@ logger = logging.getLogger(__name__)
 
 
 class BettingCommands(app_commands.Group):
-    """Betting-related slash commands."""
+    """Enhanced betting commands with OCR and MLB data integration."""
 
     def __init__(self, bot):
-        super().__init__(name="betting", description="Betting analysis and pick management")
+        super().__init__(name="betting", description="Betting pick commands")
         self.bot = bot
-        self.pick_counters = {"vip": 0, "lotto": 0, "free": 0, "parlay": 0}
-        self._load_counters()
+        self.pick_counters = self._load_counters()
 
     def _load_counters(self):
         """Load pick counters from file."""
         try:
-            counter_file = os.path.join(
-                os.path.dirname(__file__), '..', 'data', 'pick_counters.json')
+            import json
+            counter_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pick_counters.json')
             if os.path.exists(counter_file):
                 with open(counter_file, 'r') as f:
-                    self.pick_counters = json.load(f)
-            else:
-                self.pick_counters = {
-                    "vip": 0, "free": 0, "lotto": 0, "parlay": 0}
+                    return json.load(f)
         except Exception as e:
             logger.error(f"Error loading counters: {e}")
-            self.pick_counters = {"vip": 0, "free": 0, "lotto": 0, "parlay": 0}
+        return {'vip': 0, 'free': 0, 'lotto': 0, 'parlay': 0}
 
     def _save_counters(self):
         """Save pick counters to file."""
         try:
-            counter_file = os.path.join(
-                os.path.dirname(__file__), '..', 'data', 'pick_counters.json')
+            import json
+            counter_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pick_counters.json')
             os.makedirs(os.path.dirname(counter_file), exist_ok=True)
             with open(counter_file, 'w') as f:
-                json.dump(self.pick_counters, f, indent=2)
+                json.dump(self.pick_counters, f)
         except Exception as e:
             logger.error(f"Error saving counters: {e}")
 
@@ -66,7 +63,7 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment,
         context: Optional[str] = None
     ):
-        """Post a VIP pick."""
+        """Post a VIP pick with enhanced analysis."""
         await self._post_pick(interaction, image, context, "vip")
 
     @app_commands.command(name="lotto", description="Post a lotto pick")
@@ -80,7 +77,7 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment,
         context: Optional[str] = None
     ):
-        """Post a lotto pick."""
+        """Post a lotto pick with enhanced analysis."""
         await self._post_pick(interaction, image, context, "lotto")
 
     @app_commands.command(name="free", description="Post a free pick")
@@ -94,7 +91,7 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment,
         context: Optional[str] = None
     ):
-        """Post a free pick."""
+        """Post a free pick with enhanced analysis."""
         await self._post_pick(interaction, image, context, "free")
 
     @app_commands.command(name="parlay", description="Post a parlay pick")
@@ -108,7 +105,7 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment,
         context: Optional[str] = None
     ):
-        """Post a parlay pick with multi-leg formatting."""
+        """Post a parlay pick with enhanced analysis."""
         await self._post_pick(interaction, image, context, "parlay")
 
     @app_commands.command(name="analyze",
@@ -123,31 +120,47 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment,
         context: Optional[str] = None
     ):
-        """Analyze a betting slip image."""
+        """Analyze a betting slip image with detailed breakdown."""
         await interaction.response.defer(thinking=True)
 
         try:
             # Validate image
-            if not image.content_type or not image.content_type.startswith(
-                    'image/'):
+            if not image.content_type or not image.content_type.startswith('image/'):
                 await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
                 return
 
-            # Create plain text analysis
-            analysis_text = f"""📊 BET ANALYSIS
-📋 Image: {image.filename}
-📝 Context: {context or 'No context provided'}
-🤖 Status: ✅ Basic analysis completed
-📊 Image processed successfully
+            # Analyze the betting slip image
+            bet_data = await self._analyze_betting_slip(image)
 
-Analysis will be enhanced with AI features in future updates."""
+            # Fetch live MLB data
+            mlb_data = await self._fetch_mlb_data(bet_data)
 
-            # Send message with image attachment
-            await interaction.followup.send(content=analysis_text, file=await image.to_file())
+            # Generate analysis
+            analysis = await self._generate_analysis(bet_data, mlb_data, str(context or ""))
+
+            # Create detailed breakdown
+            breakdown = f"""📊 **BETTING SLIP ANALYSIS**
+
+🎯 **Bet Details:**
+• Player: {bet_data.get('player', 'TBD')}
+• Description: {bet_data.get('description', 'TBD')}
+• Odds: {bet_data.get('odds', 'TBD')}
+• Teams: {bet_data.get('teams', ['TBD', 'TBD'])[0]} @ {bet_data.get('teams', ['TBD', 'TBD'])[1]}
+• Type: {'Parlay' if bet_data.get('is_parlay') else 'Single'}
+
+📈 **Live Analysis:**
+{analysis}
+
+🔍 **Raw OCR Text:**
+```
+{await self._extract_text_from_image(await image.read())}
+```"""
+
+            await interaction.followup.send(content=breakdown, ephemeral=True)
 
         except Exception as e:
             logger.error(f"Error in analyze command: {e}")
-            await interaction.followup.send(f"❌ Analysis failed: {str(e)}", ephemeral=True)
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
 
     async def _post_pick(
         self,
@@ -161,8 +174,7 @@ Analysis will be enhanced with AI features in future updates."""
 
         try:
             # Validate image
-            if not image.content_type or not image.content_type.startswith(
-                    'image/'):
+            if not image.content_type or not image.content_type.startswith('image/'):
                 await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
                 return
 
@@ -298,8 +310,6 @@ Analysis will be enhanced with AI features in future updates."""
     def _parse_parlay_details(self, text: str, base_data: dict) -> dict:
         """Parse parlay bet details with multiple legs."""
         try:
-            import re
-
             # Initialize parlay data
             parlay_data = {
                 'teams': base_data.get('teams', ['TBD', 'TBD']),
@@ -342,64 +352,27 @@ Analysis will be enhanced with AI features in future updates."""
     def _extract_parlay_legs(self, text: str) -> list:
         """Extract individual legs from parlay text."""
         try:
-            import re
-
             legs = []
 
             # Common patterns for parlay legs
             patterns = [
                 # Pattern: Player - Prop (odds)
-                r'(\w+\s+\w+)\s*[-–]\s*([^()]+?)\s*\(([+-]\d+)\)',
-                # Pattern: Team @ Team - Prop (odds)
-                r'(\w+)\s+@\s+(\w+)\s*[-–]\s*([^()]+?)\s*\(([+-]\d+)\)',
-                # Pattern: Player Prop (odds)
-                r'(\w+\s+\w+)\s+([^()]+?)\s*\(([+-]\d+)\)',
+                r'([A-Za-z\s]+)\s*-\s*([^()]+)\s*\(([+-]?\d+)\)',
+                # Pattern: Team ML/Spread (odds)
+                r'([A-Za-z\s]+)\s+(ML|Spread|Total)\s*\(([+-]?\d+)\)',
+                # Pattern: Over/Under (odds)
+                r'(Over|Under)\s+([\d.]+)\s*\(([+-]?\d+)\)'
             ]
 
             for pattern in patterns:
                 matches = re.findall(pattern, text, re.IGNORECASE)
                 for match in matches:
-                    if len(match) >= 3:
-                        if len(match) == 3:
-                            # Player - Prop (odds)
-                            player, prop, odds = match
-                            legs.append({
-                                'player': player.strip(),
-                                'description': prop.strip(),
-                                'odds': odds.strip()
-                            })
-                        elif len(match) == 4:
-                            # Team @ Team - Prop (odds)
-                            team1, team2, prop, odds = match
-                            legs.append({
-                                'player': f"{team1} @ {team2}",
-                                'description': prop.strip(),
-                                'odds': odds.strip()
-                            })
-
-            # If no structured patterns found, try to extract from lines
-            if not legs:
-                lines = text.split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if ' - ' in line and ('+' in line or '-' in line):
-                        # Try to extract player, prop, odds from line
-                        parts = line.split(' - ')
-                        if len(parts) >= 2:
-                            player_part = parts[0].strip()
-                            rest_part = parts[1].strip()
-
-                            # Extract odds from the end
-                            odds_match = re.search(r'([+-]\d+)\s*$', rest_part)
-                            if odds_match:
-                                odds = odds_match.group(1)
-                                description = rest_part.replace(
-                                    odds, '').strip()
-                                legs.append({
-                                    'player': player_part,
-                                    'description': description,
-                                    'odds': odds
-                                })
+                    if len(match) == 3:
+                        legs.append({
+                            'player': match[0].strip(),
+                            'description': match[1].strip(),
+                            'odds': match[2].strip()
+                        })
 
             return legs
 
@@ -408,60 +381,72 @@ Analysis will be enhanced with AI features in future updates."""
             return []
 
     def _extract_combined_odds(self, text: str) -> str:
-        """Extract combined parlay odds."""
+        """Extract combined odds from parlay text."""
         try:
-            import re
             # Look for combined odds patterns
             patterns = [
-                r'parlayed?\s*:?\s*([+-]\d+)',
-                r'combined\s+odds?\s*:?\s*([+-]\d+)',
-                r'total\s+odds?\s*:?\s*([+-]\d+)',
-                r'final\s+odds?\s*:?\s*([+-]\d+)',
+                r'Combined\s+Odds:\s*([+-]?\d+)',
+                r'Total\s+Odds:\s*([+-]?\d+)',
+                r'Parlay\s+Odds:\s*([+-]?\d+)'
             ]
+
             for pattern in patterns:
                 match = re.search(pattern, text, re.IGNORECASE)
                 if match:
                     return match.group(1)
-            return ""
+
+            return 'TBD'
+
         except Exception as e:
             logger.error(f"Error extracting combined odds: {e}")
-            return ""
+            return 'TBD'
 
     async def _fetch_mlb_data(self, bet_data: dict) -> dict:
-        """Fetch live MLB stats and current talk."""
+        """Fetch live MLB stats and current talk from multiple sources."""
         try:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             player = bet_data.get('player', 'TBD')
 
-            # Fetch live data using the MLB utility
+            # Fetch live data using the enhanced MLB utility
             away_team_stats = await mlb_fetcher.get_team_stats(teams[0])
             home_team_stats = await mlb_fetcher.get_team_stats(teams[1])
             player_stats = await mlb_fetcher.get_player_stats(player)
             game_info = await mlb_fetcher.get_game_info(teams[0], teams[1])
 
+            # Get recent stats
+            recent_player_stats = await mlb_fetcher.get_recent_player_stats(player)
+            recent_away_stats = await mlb_fetcher.get_recent_team_stats(teams[0])
+
+            # Get live scores
+            live_scores = await mlb_fetcher.get_live_scores()
+
+            # Combine player stats
+            combined_player_stats = {**player_stats}
+            if recent_player_stats:
+                combined_player_stats.update(recent_player_stats)
+
+            # Combine team stats
+            combined_team_stats = {
+                'away_record': f"{away_team_stats.get('wins', 0)}-{away_team_stats.get('losses', 0)}",
+                'home_record': f"{home_team_stats.get('wins', 0)}-{home_team_stats.get('losses', 0)}",
+                'away_pitcher': game_info.get('away_pitcher', 'TBD'),
+                'home_pitcher': game_info.get('home_pitcher', 'TBD'),
+                'recent_wins': recent_away_stats.get('recent_wins', 0),
+                'recent_losses': recent_away_stats.get('recent_losses', 0),
+                'recent_runs_per_game': recent_away_stats.get('recent_runs_per_game', 0)
+            }
+
             return {
                 'away_team': teams[0],
                 'home_team': teams[1],
-                'player_stats': player_stats,
-                'team_stats': {
-                    'away_record': f"{away_team_stats.get('wins', 0)}-{away_team_stats.get('losses', 0)}",
-                    'home_record': f"{home_team_stats.get('wins', 0)}-{home_team_stats.get('losses', 0)}",
-                    'away_pitcher': game_info.get(
-                        'away_pitcher',
-                        'TBD'),
-                    'home_pitcher': game_info.get(
-                        'home_pitcher',
-                        'TBD')},
+                'player_stats': combined_player_stats,
+                'team_stats': combined_team_stats,
                 'current_trends': f"{teams[0]} is {away_team_stats.get('win_pct', 0):.3f} this season",
-                'weather': game_info.get(
-                    'weather',
-                    'Clear, 72°F'),
-                'venue': game_info.get(
-                    'venue',
-                    'TBD Stadium'),
-                'game_time': game_info.get(
-                    'game_time',
-                    'TBD')}
+                'weather': game_info.get('weather', 'Clear, 72°F'),
+                'venue': game_info.get('venue', 'TBD Stadium'),
+                'game_time': game_info.get('game_time', 'TBD'),
+                'live_scores': live_scores.get('live_games', [])
+            }
         except Exception as e:
             logger.error(f"Error fetching MLB data: {e}")
             return {
@@ -471,7 +456,8 @@ Analysis will be enhanced with AI features in future updates."""
                 'team_stats': {},
                 'current_trends': 'Data unavailable',
                 'weather': 'TBD',
-                'venue': 'TBD'
+                'venue': 'TBD',
+                'live_scores': []
             }
 
     async def _generate_pick_content(
@@ -486,14 +472,8 @@ Analysis will be enhanced with AI features in future updates."""
 
         try:
             # Extract data with fallbacks
-            away_team = mlb_data.get(
-                'away_team', bet_data.get(
-                    'teams', [
-                        'TBD', 'TBD'])[0]) or 'TBD'
-            home_team = mlb_data.get(
-                'home_team', bet_data.get(
-                    'teams', [
-                        'TBD', 'TBD'])[1]) or 'TBD'
+            away_team = mlb_data.get('away_team', bet_data.get('teams', ['TBD', 'TBD'])[0]) or 'TBD'
+            home_team = mlb_data.get('home_team', bet_data.get('teams', ['TBD', 'TBD'])[1]) or 'TBD'
             player = bet_data.get('player', 'TBD') or 'TBD'
             description = bet_data.get('description', 'TBD') or 'TBD'
             odds = bet_data.get('odds', 'TBD') or 'TBD'
@@ -539,9 +519,9 @@ LOCK IT. 🔒🔥"""
                 # Handle parlay with individual legs
                 if bet_data.get('is_parlay', False) and bet_data.get('legs'):
                     legs_content = []
-                    for i, leg in enumerate(bet_data['legs'], 1):
+                    for leg in bet_data['legs']:
                         legs_content.append(f"🏆 | {leg.get('player', 'TBD')} – {leg.get('description', 'TBD')} ({leg.get('odds', 'TBD')})")
-                    
+
                     legs_text = '\n'.join(legs_content)
                     return f"""FREE PLAY – {formatted_date}
 ⚾ | Game: {away_team} @ {home_team} ({game_time})
@@ -581,7 +561,7 @@ LOCK IT. 🔒🔥"""
                     day = str(int(parts[1]))    # Remove leading zero
                     year = parts[2]
                     return f"{month}/{day}/{year}"
-        except:
+        except (ValueError, IndexError):
             pass
         return date_str
 
@@ -594,7 +574,7 @@ LOCK IT. 🔒🔥"""
                     hour = str(int(parts[0]))   # Remove leading zero
                     minute = parts[1]
                     return f"{hour}:{minute}"
-        except:
+        except (ValueError, IndexError):
             pass
         return time_str
 
@@ -603,7 +583,7 @@ LOCK IT. 🔒🔥"""
             bet_data: dict,
             mlb_data: dict,
             context: str) -> str:
-        """Generate intelligent analysis based on live data."""
+        """Generate intelligent analysis based on live data from multiple sources."""
         try:
             player = bet_data.get('player', 'TBD') or 'TBD'
             player_stats = mlb_data.get('player_stats', {}) or {}
@@ -613,9 +593,17 @@ LOCK IT. 🔒🔥"""
             away_team = mlb_data.get('away_team', 'TBD') or 'TBD'
             home_team = mlb_data.get('home_team', 'TBD') or 'TBD'
             description = bet_data.get('description', 'TBD') or 'TBD'
+            live_scores = mlb_data.get('live_scores', []) or []
 
             # Build comprehensive analysis
             analysis_parts = []
+
+            # Live Game Status
+            if live_scores:
+                for game in live_scores:
+                    if (away_team.lower() in game.get('away_team', '').lower() or 
+                        home_team.lower() in game.get('home_team', '').lower()):
+                        analysis_parts.append(f"🔥 LIVE GAME: {game.get('away_team', '')} {game.get('away_score', 0)} - {game.get('home_team', '')} {game.get('home_score', 0)} (Inning {game.get('inning', 0)})")
 
             # Player Performance Analysis
             if player != 'TBD' and player_stats:
@@ -626,13 +614,10 @@ LOCK IT. 🔒🔥"""
                 slg = player_stats.get('slg', '.000')
                 obp = player_stats.get('obp', '.000')
                 recent_avg = player_stats.get('recent_avg', '.000')
-                recent_hr = player_stats.get('recent_hr', '0')
-                recent_rbi = player_stats.get('recent_rbi', '0')
-                
+
                 # Determine player performance level
                 avg_float = float(avg) if avg != '.000' else 0
-                ops_float = float(ops) if ops != '.000' else 0
-                
+
                 if avg_float >= 0.300:
                     performance_level = "🔥 HOT"
                 elif avg_float >= 0.280:
@@ -641,11 +626,11 @@ LOCK IT. 🔒🔥"""
                     performance_level = "📊 AVERAGE"
                 else:
                     performance_level = "❄️ COLD"
-                
+
                 analysis_parts.append(
                     f"🎯 {player} ({performance_level}): Hitting {avg} with {hr} HRs, {rbi} RBIs, {ops} OPS this season."
                 )
-                
+
                 # Add recent performance if available
                 if recent_avg != '.000' and recent_avg != avg:
                     recent_avg_float = float(recent_avg)
@@ -653,7 +638,7 @@ LOCK IT. 🔒🔥"""
                         analysis_parts.append(f"📈 RECENT FORM: {recent_avg} in last 7 days - trending UP!")
                     elif recent_avg_float < avg_float:
                         analysis_parts.append(f"📉 RECENT FORM: {recent_avg} in last 7 days - trending down.")
-                
+
                 # Add specific prop analysis
                 if 'hits' in description.lower() or 'total bases' in description.lower():
                     analysis_parts.append(f"📈 {player} has a {slg} slugging percentage, showing power potential.")
@@ -671,9 +656,9 @@ LOCK IT. 🔒🔥"""
                 recent_wins = team_stats.get('recent_wins', 0)
                 recent_losses = team_stats.get('recent_losses', 0)
                 recent_runs_per_game = team_stats.get('recent_runs_per_game', 0)
-                
+
                 analysis_parts.append(f"🏟️ {away_team} ({away_record}) @ {home_team} ({home_record})")
-                
+
                 # Add recent team performance
                 if recent_wins > 0 or recent_losses > 0:
                     recent_record = f"{recent_wins}-{recent_losses}"
@@ -681,10 +666,10 @@ LOCK IT. 🔒🔥"""
                         analysis_parts.append(f"🔥 {away_team} is {recent_record} in last 10 games - HOT streak!")
                     elif recent_losses > recent_wins:
                         analysis_parts.append(f"❄️ {away_team} is {recent_record} in last 10 games - struggling.")
-                
+
                 if recent_runs_per_game > 0:
                     analysis_parts.append(f"⚡ {away_team} averaging {recent_runs_per_game:.1f} runs per game recently.")
-                
+
                 if away_pitcher != 'TBD' and home_pitcher != 'TBD':
                     analysis_parts.append(f"⚾ Pitching: {away_pitcher} vs {home_pitcher}")
 
@@ -720,9 +705,21 @@ LOCK IT. 🔒🔥"""
             # Final Analysis Summary
             if not analysis_parts:
                 analysis_parts.append("📊 Analysis based on current form and matchup data.")
-            
-            # Add confidence indicator
-            confidence = "🔒 HIGH CONFIDENCE" if len(analysis_parts) > 3 else "📊 MODERATE CONFIDENCE"
+
+            # Add confidence indicator based on data availability
+            data_sources = 0
+            if player_stats: data_sources += 1
+            if team_stats: data_sources += 1
+            if live_scores: data_sources += 1
+            if weather != 'TBD': data_sources += 1
+
+            if data_sources >= 3:
+                confidence = "🔒 HIGH CONFIDENCE"
+            elif data_sources >= 2:
+                confidence = "📊 MODERATE CONFIDENCE"
+            else:
+                confidence = "⚠️ LOW CONFIDENCE"
+
             analysis_parts.append(f"\n{confidence} - Strong value at current odds.")
 
             return '\n\n'.join(analysis_parts)
