@@ -7,7 +7,7 @@ Fetch live MLB stats, team data, and current trends using multiple free APIs.
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-import MLB_StatsAPI as statsapi
+import statsapi
 import requests
 
 logger = logging.getLogger(__name__)
