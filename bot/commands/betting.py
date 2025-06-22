@@ -66,9 +66,9 @@ class BettingCommands(app_commands.Group):
         unitsize: int = 0
     ):
         """Post a pick with custom units and channel specification."""
-        await interaction.response.defer(thinking=True)
-
         try:
+            await interaction.response.defer(thinking=True)
+
             # Validate inputs
             if not image.content_type or not image.content_type.startswith('image/'):
                 await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
@@ -110,6 +110,12 @@ class BettingCommands(app_commands.Group):
                 ephemeral=True
             )
 
+        except discord.errors.NotFound:
+            logger.error("Interaction timed out and could not be found.")
+            await interaction.followup.send(
+                "❌ The command took too long to respond and timed out. Please try again.",
+                ephemeral=True
+            )
         except Exception as e:
             logger.error(f"Error in postpick command: {e}")
             await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)

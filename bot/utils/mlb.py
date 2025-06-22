@@ -22,16 +22,71 @@ class MLBDataFetcher:
         self.session.headers.update({
             'User-Agent': 'GotLockz Bot/1.0'
         })
+        self.team_abbreviations = {
+            "ARI": "Arizona Diamondbacks", "AZ": "Arizona Diamondbacks",
+            "ATL": "Atlanta Braves",
+            "BAL": "Baltimore Orioles",
+            "BOS": "Boston Red Sox",
+            "CHW": "Chicago White Sox", "SOX": "Chicago White Sox",
+            "CHC": "Chicago Cubs", "CUBS": "Chicago Cubs",
+            "CIN": "Cincinnati Reds",
+            "CLE": "Cleveland Guardians", "GUARDS": "Cleveland Guardians",
+            "COL": "Colorado Rockies",
+            "DET": "Detroit Tigers",
+            "HOU": "Houston Astros",
+            "KC": "Kansas City Royals",
+            "LAA": "Los Angeles Angels", "ANGELS": "Los Angeles Angels",
+            "LAD": "Los Angeles Dodgers", "DODGERS": "Los Angeles Dodgers",
+            "MIA": "Miami Marlins",
+            "MIL": "Milwaukee Brewers",
+            "MIN": "Minnesota Twins",
+            "NYM": "New York Mets", "METS": "New York Mets",
+            "NYY": "New York Yankees", "YANKEES": "New York Yankees",
+            "OAK": "Oakland Athletics", "A'S": "Oakland Athletics",
+            "PHI": "Philadelphia Phillies",
+            "PIT": "Pittsburgh Pirates",
+            "SD": "San Diego Padres", "PADRES": "San Diego Padres", "SAN": "San Diego Padres",
+            "SF": "San Francisco Giants", "GIANTS": "San Francisco Giants",
+            "SEA": "Seattle Mariners",
+            "STL": "St. Louis Cardinals", "CARDS": "St. Louis Cardinals",
+            "TB": "Tampa Bay Rays",
+            "TEX": "Texas Rangers",
+            "TOR": "Toronto Blue Jays", "JAYS": "Toronto Blue Jays",
+            "WSH": "Washington Nationals", "NATS": "Washington Nationals",
+        }
+        self.ambiguous_names = {
+            "SOX": "Chicago White Sox",
+            "JAYS": "Toronto Blue Jays",
+            "PADRES": "San Diego Padres",
+            "GIANTS": "San Francisco Giants",
+            "METS": "New York Mets",
+            "YANKEES": "New York Yankees",
+            "CARDS": "St. Louis Cardinals",
+            "NATS": "Washington Nationals",
+        }
+
+    def _resolve_team_name(self, name: str) -> str:
+        """Resolve team abbreviations or nicknames to official names."""
+        name_upper = name.upper()
+        if name_upper in self.team_abbreviations:
+            return self.team_abbreviations[name_upper]
+        if name_upper in self.ambiguous_names:
+            return self.ambiguous_names[name_upper]
+        for key, value in self.team_abbreviations.items():
+            if name_upper in value.upper():
+                return value
+        return name
 
     async def get_team_stats(self, team_name: str) -> Dict[str, Any]:
         """Get team statistics from multiple sources."""
         try:
+            resolved_name = self._resolve_team_name(team_name)
             # Primary: MLB Stats API
-            team_stats = await self._get_team_stats_mlb(team_name)
+            team_stats = await self._get_team_stats_mlb(resolved_name)
             
             # Fallback: Sportsipy (if available)
             if not team_stats:
-                team_stats = await self._get_team_stats_sportsipy(team_name)
+                team_stats = await self._get_team_stats_sportsipy(resolved_name)
             
             return team_stats
 
@@ -58,8 +113,11 @@ class MLBDataFetcher:
     async def get_game_info(self, away_team: str, home_team: str) -> Dict[str, Any]:
         """Get game information including weather, venue, etc."""
         try:
+            resolved_away = self._resolve_team_name(away_team)
+            resolved_home = self._resolve_team_name(home_team)
+
             # Primary: MLB Stats API
-            game_info = await self._get_game_info_mlb(away_team, home_team)
+            game_info = await self._get_game_info_mlb(resolved_away, resolved_home)
             
             # Enhance with additional data
             if game_info:
