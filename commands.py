@@ -17,6 +17,7 @@ from datetime import datetime
 import discord
 from discord import app_commands
 from discord.ext import commands
+import requests
 
 from config import (
     GUILD_ID, ANALYSIS_CHANNEL_ID, VIP_CHANNEL_ID, 
@@ -27,6 +28,177 @@ from ai_analysis import analyze_bet_slip, generate_pick_summary, validate_analys
 from data_enrichment import enrich_bet_analysis
 
 logger = logging.getLogger(__name__)
+
+
+class GotLockzCommands(app_commands.Group):
+    """GotLockz Bot slash commands."""
+    
+    def __init__(self, bot):
+        super().__init__(name="gotlockz", description="GotLockz Bot commands")
+        self.bot = bot
+
+    @app_commands.command(name="ping", description="Test bot responsiveness")
+    async def ping(self, interaction: discord.Interaction):
+        """Test bot responsiveness"""
+        await interaction.response.send_message("🏓 Pong! Bot is online!")
+
+    @app_commands.command(name="debug", description="Debug bot status and configuration")
+    async def debug(self, interaction: discord.Interaction):
+        """Debug bot status and configuration."""
+        try:
+            await interaction.response.defer(thinking=True)
+        except discord.errors.NotFound:
+            return
+            
+        try:
+            embed = discord.Embed(
+                title="🔧 Bot Debug Information",
+                color=0x00ff00
+            )
+            
+            # Basic info
+            embed.add_field(
+                name="🤖 Bot Info",
+                value=f"User: {self.bot.user}\n"
+                      f"Guilds: {len(self.bot.guilds)}\n"
+                      f"Latency: {round(self.bot.latency * 1000)}ms",
+                inline=True
+            )
+            
+            # Environment
+            embed.add_field(
+                name="⚙️ Environment",
+                value=f"Dashboard URL: {self.bot.dashboard_url or 'Not set'}\n"
+                      f"Dashboard Enabled: {self.bot.dashboard_enabled}\n"
+                      f"Analysis Enabled: {getattr(self.bot, 'ANALYSIS_ENABLED', False)}",
+                inline=True
+            )
+            
+            # Channels
+            embed.add_field(
+                name="📺 Channels",
+                value=f"VIP: {self.bot.vip_channel_id or 'Not set'}\n"
+                      f"Lotto: {self.bot.lotto_channel_id or 'Not set'}\n"
+                      f"Free: {self.bot.free_channel_id or 'Not set'}\n"
+                      f"Analysis: {self.bot.analysis_channel_id or 'Not set'}",
+                inline=True
+            )
+            
+            # Test dashboard connection
+            if self.bot.dashboard_enabled:
+                try:
+                    response = requests.get(f"{self.bot.dashboard_url}/", timeout=5)
+                    dashboard_status = f"✅ Online ({response.status_code})"
+                except Exception as e:
+                    dashboard_status = f"❌ Error: {str(e)[:50]}"
+            else:
+                dashboard_status = "❌ Disabled"
+            
+            embed.add_field(
+                name="🌐 Dashboard Status",
+                value=dashboard_status,
+                inline=False
+            )
+            
+            await interaction.followup.send(embed=embed)
+            
+        except discord.errors.NotFound:
+            logger.warning("Interaction expired before bot could respond")
+        except Exception as e:
+            logger.exception("Error in debug command")
+            try:
+                await interaction.followup.send(f"❌ Debug error: {str(e)}", ephemeral=True)
+            except discord.errors.NotFound:
+                pass
+
+    @app_commands.command(name="stats", description="View bot statistics")
+    async def stats(self, interaction: discord.Interaction):
+        """Show bot statistics."""
+        try:
+            await interaction.response.defer(thinking=True)
+        except discord.errors.NotFound:
+            return
+            
+        try:
+            embed = discord.Embed(
+                title="📊 GotLockz Bot Statistics",
+                color=0x00ff00
+            )
+            
+            # Pick counters
+            embed.add_field(
+                name="🎯 Pick Counters",
+                value=f"VIP: {self.bot.pick_counters['vip']}\n"
+                      f"Lotto: {self.bot.pick_counters['lotto']}\n"
+                      f"Free: {self.bot.pick_counters['free']}",
+                inline=True
+            )
+            
+            # Bot status
+            embed.add_field(
+                name="🤖 Bot Status",
+                value=f"Analysis: {'✅' if getattr(self.bot, 'ANALYSIS_ENABLED', False) else '❌'}\n"
+                      f"Dashboard: {'✅' if self.bot.dashboard_enabled else '❌'}\n"
+                      f"Channels: {'✅' if self.bot.channels_configured else '❌'}",
+                inline=True
+            )
+            
+            # Uptime
+            uptime = datetime.now() - self.bot.start_time
+            embed.add_field(
+                name="⏰ Uptime",
+                value=f"{uptime.days}d {uptime.seconds//3600}h {(uptime.seconds//60)%60}m",
+                inline=True
+            )
+            
+            await interaction.followup.send(embed=embed)
+            
+        except discord.errors.NotFound:
+            logger.warning("Interaction expired before bot could respond")
+        except Exception as e:
+            logger.exception("Error in stats command")
+            try:
+                await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
+            except discord.errors.NotFound:
+                pass
+
+    @app_commands.command(name="status", description="Check bot and dashboard status")
+    async def status(self, interaction: discord.Interaction):
+        """Check bot and dashboard status."""
+        try:
+            await interaction.response.defer(thinking=True)
+        except discord.errors.NotFound:
+            return
+        
+        if not self.bot.dashboard_enabled:
+            try:
+                await interaction.followup.send("ℹ️ Bot Status: 🟢 Online (Dashboard disabled)")
+            except discord.errors.NotFound:
+                return
+            return
+            
+        try:
+            response = requests.post(
+                f"{self.bot.dashboard_url}/run/api_bot_status",
+                json={"data": []},
+                timeout=10
+            )
+            if response.status_code == 200:
+                result = response.json()
+                data = json.loads(result.get('data', [{}])[0]) if result.get('data') else {}
+                status = "🟢 Online" if data.get('bot_running') else "🔴 Offline"
+                await interaction.followup.send(f"Bot Status: {status}")
+            else:
+                await interaction.followup.send("❌ Dashboard not responding")
+        except requests.exceptions.ConnectionError:
+            await interaction.followup.send("❌ Cannot connect to dashboard. Check DASHBOARD_URL setting.")
+        except discord.errors.NotFound:
+            logger.warning("Interaction expired before bot could respond")
+        except Exception as e:
+            try:
+                await interaction.followup.send(f"❌ Status check failed: {str(e)}")
+            except discord.errors.NotFound:
+                pass
 
 
 class BettingCommands(commands.Cog):
@@ -418,4 +590,5 @@ class BettingCommands(commands.Cog):
 
 async def setup(bot):
     """Setup function for the commands cog."""
+    await bot.add_cog(GotLockzCommands(bot))
     await bot.add_cog(BettingCommands(bot))
