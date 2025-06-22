@@ -56,4 +56,4 @@ fi
 
 # Start the bot
 echo "🤖 Starting GotLockz bot..."
-python main.py
+python bot/main.py

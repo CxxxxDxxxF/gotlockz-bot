@@ -7,9 +7,7 @@ Bot status, statistics, and utility commands.
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 import logging
-from datetime import datetime
 import os
 import platform
 import psutil
@@ -51,8 +49,6 @@ class InfoCommands(app_commands.Group):
             disk = psutil.disk_usage('/')
 
             # Get bot info
-            uptime = datetime.now() - self.bot.start_time if hasattr(self.bot,
-                                                                     'start_time') else 'Unknown'
             guild_count = len(self.bot.guilds)
 
             status_msg = f"""🤖 **Bot Status**
@@ -125,7 +121,7 @@ class InfoCommands(app_commands.Group):
                     ephemeral=True
                 )
                 return
-                
+
             member = interaction.guild.get_member(interaction.user.id)
             if not member or not member.guild_permissions.administrator:
                 await interaction.response.send_message(

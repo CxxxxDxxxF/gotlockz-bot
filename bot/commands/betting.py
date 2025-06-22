@@ -63,7 +63,7 @@ class BettingCommands(app_commands.Group):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
         image: discord.Attachment,
-        unitsize: Optional[int] = 0
+        unitsize: int = 0
     ):
         """Post a pick with custom units and channel specification."""
         await interaction.response.defer(thinking=True)
@@ -134,14 +134,14 @@ class BettingCommands(app_commands.Group):
         channel_type: Optional[str]
     ) -> str:
         """Generate channel-specific pick content with appropriate template."""
-        
+
         # Format date and time without leading zeros
         formatted_date = self._format_date_no_zeros(current_date)
         formatted_time = self._format_time_no_zeros(current_time)
-        
+
         # Determine pick type based on bet data
         pick_type = "PARLAY" if bet_data.get('is_parlay') else "FREE PLAY"
-        
+
         # Get channel-specific template
         if channel_type == "vip":
             return await self._generate_vip_template(
@@ -171,16 +171,16 @@ class BettingCommands(app_commands.Group):
         pick_type: str
     ) -> str:
         """Generate VIP channel template with premium formatting."""
-        
+
         # Build the header
         header = f"**VIP PLAY – {formatted_date}**"
         if unitsize > 0:
             header += f"  \n💰 **{unitsize} UNITS**"
-        
+
         # Game information
         teams = bet_data.get('teams', ['TBD', 'TBD'])
         game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({formatted_date} {formatted_time} EST)"
-        
+
         # Bet details
         bet_details = []
         if bet_data.get('is_parlay'):
@@ -190,7 +190,7 @@ class BettingCommands(app_commands.Group):
                 description = leg.get('description', 'TBD')
                 odds = leg.get('odds', 'TBD')
                 bet_details.append(f"🏆 | Player {chr(64+i)} – {player} {description} ({odds})")
-            
+
             combined_odds = bet_data.get('combined_odds', 'TBD')
             bet_details.append(f"💰 | Parlayed: {combined_odds}")
         else:
@@ -198,13 +198,13 @@ class BettingCommands(app_commands.Group):
             description = bet_data.get('description', 'TBD')
             odds = bet_data.get('odds', 'TBD')
             bet_details.append(f"🏆 | {player} – {description} ({odds})")
-        
+
         # Analysis section
         analysis = await self._generate_analysis(bet_data, mlb_data, "")
-        
+
         # Live stats section
         live_stats = await self._generate_live_stats_section(bet_data, mlb_data)
-        
+
         # Build the complete message
         message_parts = [
             header,
@@ -212,26 +212,26 @@ class BettingCommands(app_commands.Group):
             game_info,
             ""
         ]
-        
+
         # Add bet details
         message_parts.extend(bet_details)
         message_parts.append("")
-        
+
         # Add analysis
         message_parts.append("👇 | VIP Analysis Below:")
         message_parts.append("")
         message_parts.append(analysis)
-        
+
         # Add live stats if available
         if live_stats:
             message_parts.append("")
             message_parts.append("📊 | Live Stats:")
             message_parts.append(live_stats)
-        
+
         # Add VIP closing
         message_parts.append("")
         message_parts.append("🔒 VIP LOCK. 🔥")
-        
+
         return "\n".join(message_parts)
 
     async def _generate_lotto_template(
@@ -244,25 +244,25 @@ class BettingCommands(app_commands.Group):
         pick_type: str
     ) -> str:
         """Generate LOTTO channel template with lottery-style formatting."""
-        
+
         # Build the header
         header = f"**LOTTO TICKET – {formatted_date}**"
         if unitsize > 0:
             header += f"  \n💰 **{unitsize} UNITS**"
-        
+
         # Game information
         teams = bet_data.get('teams', ['TBD', 'TBD'])
         game_info = f"🎰 | Game: {teams[0]} @ {teams[1]} ({formatted_date} {formatted_time} EST)"
-        
+
         # Generate lotto picks
         lotto_picks = await self._generate_lotto_picks(bet_data, mlb_data)
-        
+
         # Analysis section
         analysis = await self._generate_analysis(bet_data, mlb_data, "")
-        
+
         # Live stats section
         live_stats = await self._generate_live_stats_section(bet_data, mlb_data)
-        
+
         # Build the complete message
         message_parts = [
             header,
@@ -276,17 +276,17 @@ class BettingCommands(app_commands.Group):
             "",
             analysis
         ]
-        
+
         # Add live stats if available
         if live_stats:
             message_parts.append("")
             message_parts.append("📊 | Live Stats:")
             message_parts.append(live_stats)
-        
+
         # Add lotto closing
         message_parts.append("")
         message_parts.append("🎰 HIT THE LOTTO! 🔥")
-        
+
         return "\n".join(message_parts)
 
     async def _generate_free_template(
@@ -299,16 +299,16 @@ class BettingCommands(app_commands.Group):
         pick_type: str
     ) -> str:
         """Generate FREE channel template with free play formatting."""
-        
+
         # Build the header
         header = f"**FREE PLAY – {formatted_date}**"
         if unitsize > 0:
             header += f"  \n💰 **{unitsize} UNITS**"
-        
+
         # Game information
         teams = bet_data.get('teams', ['TBD', 'TBD'])
         game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({formatted_date} {formatted_time} EST)"
-        
+
         # Bet details
         bet_details = []
         if bet_data.get('is_parlay'):
@@ -318,7 +318,7 @@ class BettingCommands(app_commands.Group):
                 description = leg.get('description', 'TBD')
                 odds = leg.get('odds', 'TBD')
                 bet_details.append(f"🏆 | Player {chr(64+i)} – {player} {description} ({odds})")
-            
+
             combined_odds = bet_data.get('combined_odds', 'TBD')
             bet_details.append(f"💰 | Parlayed: {combined_odds}")
         else:
@@ -326,13 +326,13 @@ class BettingCommands(app_commands.Group):
             description = bet_data.get('description', 'TBD')
             odds = bet_data.get('odds', 'TBD')
             bet_details.append(f"🏆 | {player} – {description} ({odds})")
-        
+
         # Analysis section
         analysis = await self._generate_analysis(bet_data, mlb_data, "")
-        
+
         # Live stats section
         live_stats = await self._generate_live_stats_section(bet_data, mlb_data)
-        
+
         # Build the complete message
         message_parts = [
             header,
@@ -340,26 +340,26 @@ class BettingCommands(app_commands.Group):
             game_info,
             ""
         ]
-        
+
         # Add bet details
         message_parts.extend(bet_details)
         message_parts.append("")
-        
+
         # Add analysis
         message_parts.append("👇 | Analysis Below:")
         message_parts.append("")
         message_parts.append(analysis)
-        
+
         # Add live stats if available
         if live_stats:
             message_parts.append("")
             message_parts.append("📊 | Live Stats:")
             message_parts.append(live_stats)
-        
+
         # Add free play closing
         message_parts.append("")
         message_parts.append("LOCK IT. 🔒🔥")
-        
+
         return "\n".join(message_parts)
 
     async def _generate_default_template(
@@ -372,16 +372,16 @@ class BettingCommands(app_commands.Group):
         pick_type: str
     ) -> str:
         """Generate default template for other channels."""
-        
+
         # Build the header
         header = f"**{pick_type} – {formatted_date}**"
         if unitsize > 0:
             header += f"  \n💰 **{unitsize} UNITS**"
-        
+
         # Game information
         teams = bet_data.get('teams', ['TBD', 'TBD'])
         game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({formatted_date} {formatted_time} EST)"
-        
+
         # Bet details
         bet_details = []
         if bet_data.get('is_parlay'):
@@ -391,7 +391,7 @@ class BettingCommands(app_commands.Group):
                 description = leg.get('description', 'TBD')
                 odds = leg.get('odds', 'TBD')
                 bet_details.append(f"🏆 | Player {chr(64+i)} – {player} {description} ({odds})")
-            
+
             combined_odds = bet_data.get('combined_odds', 'TBD')
             bet_details.append(f"💰 | Parlayed: {combined_odds}")
         else:
@@ -399,13 +399,13 @@ class BettingCommands(app_commands.Group):
             description = bet_data.get('description', 'TBD')
             odds = bet_data.get('odds', 'TBD')
             bet_details.append(f"🏆 | {player} – {description} ({odds})")
-        
+
         # Analysis section
         analysis = await self._generate_analysis(bet_data, mlb_data, "")
-        
+
         # Live stats section
         live_stats = await self._generate_live_stats_section(bet_data, mlb_data)
-        
+
         # Build the complete message
         message_parts = [
             header,
@@ -413,26 +413,26 @@ class BettingCommands(app_commands.Group):
             game_info,
             ""
         ]
-        
+
         # Add bet details
         message_parts.extend(bet_details)
         message_parts.append("")
-        
+
         # Add analysis
         message_parts.append("👇 | Analysis Below:")
         message_parts.append("")
         message_parts.append(analysis)
-        
+
         # Add live stats if available
         if live_stats:
             message_parts.append("")
             message_parts.append("📊 | Live Stats:")
             message_parts.append(live_stats)
-        
+
         # Add closing
         message_parts.append("")
         message_parts.append("LOCK IT. 🔒🔥")
-        
+
         return "\n".join(message_parts)
 
     async def _analyze_betting_slip(self, image: discord.Attachment) -> dict:
@@ -700,8 +700,9 @@ class BettingCommands(app_commands.Group):
             # Live Game Status
             if live_scores:
                 for game in live_scores:
-                    if (away_team.lower() in game.get('away_team', '').lower() or 
-                        home_team.lower() in game.get('home_team', '').lower()):
+                    away_match = away_team.lower() in game.get('away_team', '').lower()
+                    home_match = home_team.lower() in game.get('home_team', '').lower()
+                    if away_match or home_match:
                         analysis_parts.append(f"🔥 LIVE GAME: {game.get('away_team', '')} {game.get('away_score', 0)} - {game.get('home_team', '')} {game.get('home_score', 0)} (Inning {game.get('inning', 0)})")
 
             # Player Performance Analysis
@@ -807,10 +808,14 @@ class BettingCommands(app_commands.Group):
 
             # Add confidence indicator based on data availability
             data_sources = 0
-            if player_stats: data_sources += 1
-            if team_stats: data_sources += 1
-            if live_scores: data_sources += 1
-            if weather != 'TBD': data_sources += 1
+            if player_stats:
+                data_sources += 1
+            if team_stats:
+                data_sources += 1
+            if live_scores:
+                data_sources += 1
+            if weather != 'TBD':
+                data_sources += 1
 
             if data_sources >= 3:
                 confidence = "🔒 HIGH CONFIDENCE"
@@ -857,15 +862,15 @@ class BettingCommands(app_commands.Group):
         """Generate live stats section for the pick."""
         if not mlb_data or not mlb_data.get('player_stats'):
             return "Live stats unavailable"
-        
+
         stats_lines = []
         player_stats = mlb_data.get('player_stats', {})
-        
+
         # Handle the case where player_stats is a dict with player name as key
         if isinstance(player_stats, dict) and player_stats:
             # Get the player name from bet_data
             player_name = bet_data.get('player', 'Player')
-            
+
             stats_lines.append(f"**{player_name}:**")
             if player_stats.get('batting_avg'):
                 stats_lines.append(f"• AVG: {player_stats['batting_avg']}")
@@ -880,7 +885,7 @@ class BettingCommands(app_commands.Group):
             if player_stats.get('slg'):
                 stats_lines.append(f"• SLG: {player_stats['slg']}")
             stats_lines.append("")
-        
+
         return "\n".join(stats_lines) if stats_lines else "Live stats unavailable"
 
     def _format_date_no_zeros(self, date_str: str) -> str:
