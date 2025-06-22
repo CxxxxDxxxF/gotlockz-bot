@@ -34,4 +34,3 @@ MLB-StatsAPI>=1.8.0
 pybaseball>=2.2.0
 opencv-python>=4.8.0
 sportsipy>=0.6.0
-# Updated Sun Jun 22 13:02:07 EDT 2025
