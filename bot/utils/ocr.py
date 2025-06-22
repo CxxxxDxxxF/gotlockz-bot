@@ -9,6 +9,7 @@ import io
 from typing import Dict, Any, Optional
 from PIL import Image
 import pytesseract
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,11 @@ class OCRParser:
 
     async def extract_text_from_image(self, image_bytes: bytes) -> str:
         """Extract text from image using OCR."""
+        if not shutil.which('tesseract'):
+            error_msg = "Tesseract OCR engine is not installed or not in your system's PATH."
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+            
         try:
             # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
