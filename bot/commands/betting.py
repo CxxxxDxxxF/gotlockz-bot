@@ -162,6 +162,62 @@ class BettingCommands(app_commands.Group):
             logger.error(f"Error in analyze command: {e}")
             await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
 
+    @app_commands.command(name="postpick", description="Post a pick with custom units and channel")
+    @app_commands.describe(
+        unitsize="Number of units (optional - if 0, units won't be shown)",
+        channel="Channel to post the pick in",
+        image="Upload a betting slip image"
+    )
+    async def postpick_command(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        image: discord.Attachment,
+        unitsize: Optional[int] = 0
+    ):
+        """Post a pick with custom units and channel specification."""
+        await interaction.response.defer(thinking=True)
+
+        try:
+            # Validate inputs
+            if not image.content_type or not image.content_type.startswith('image/'):
+                await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
+                return
+
+            # Check if user has permission to post in the specified channel
+            member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
+            if member and not channel.permissions_for(member).send_messages:
+                await interaction.followup.send(f"❌ You don't have permission to post in {channel.mention}!", ephemeral=True)
+                return
+
+            # Analyze the betting slip image
+            bet_data = await self._analyze_betting_slip(image)
+
+            # Fetch live MLB data
+            mlb_data = await self._fetch_mlb_data(bet_data)
+
+            # Get current date and time
+            current_date = datetime.now().strftime("%m/%d/%y")
+            current_time = datetime.now().strftime("%I:%M")
+
+            # Generate the pick content with units if specified
+            message_content = await self._generate_custom_pick_content(
+                bet_data, mlb_data, current_date, current_time, unitsize or 0
+            )
+
+            # Post to the specified channel
+            await channel.send(content=message_content)
+
+            # Confirm to the user
+            await interaction.followup.send(
+                f"✅ Pick posted successfully in {channel.mention}!",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            logger.error(f"Error in postpick command: {e}")
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
+
     async def _post_pick(
         self,
         interaction: discord.Interaction,
@@ -763,6 +819,113 @@ LOCK IT. 🔒🔥"""
         elif pick_type == "free":
             return self.bot.free_channel_id
         return None
+
+    async def _generate_custom_pick_content(
+        self,
+        bet_data: dict,
+        mlb_data: dict,
+        current_date: str,
+        current_time: str,
+        unitsize: int
+    ) -> str:
+        """Generate custom pick content with optional units display."""
+        
+        # Format date and time without leading zeros
+        formatted_date = self._format_date_no_zeros(current_date)
+        formatted_time = self._format_time_no_zeros(current_time)
+        
+        # Determine pick type based on bet data
+        pick_type = "PARLAY" if bet_data.get('is_parlay') else "FREE PLAY"
+        
+        # Build the header
+        header = f"**{pick_type} – {formatted_date}**"
+        
+        # Add units if specified and greater than 0
+        if unitsize > 0:
+            header += f"  \n💰 **{unitsize} UNITS**"
+        
+        # Game information
+        teams = bet_data.get('teams', ['TBD', 'TBD'])
+        game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({formatted_date} {formatted_time} EST)"
+        
+        # Bet details
+        bet_details = []
+        if bet_data.get('is_parlay'):
+            # Handle parlay bets
+            legs = bet_data.get('parlay_legs', [])
+            for i, leg in enumerate(legs, 1):
+                player = leg.get('player', 'TBD')
+                description = leg.get('description', 'TBD')
+                odds = leg.get('odds', 'TBD')
+                bet_details.append(f"🏆 | Player {chr(64+i)} – {player} {description} ({odds})")
+            
+            # Combined odds
+            combined_odds = bet_data.get('combined_odds', 'TBD')
+            bet_details.append(f"💰 | Parlayed: {combined_odds}")
+        else:
+            # Handle single bets
+            player = bet_data.get('player', 'TBD')
+            description = bet_data.get('description', 'TBD')
+            odds = bet_data.get('odds', 'TBD')
+            bet_details.append(f"🏆 | {player} – {description} ({odds})")
+        
+        # Analysis section
+        analysis = await self._generate_analysis(bet_data, mlb_data, "")
+        
+        # Live stats section
+        live_stats = await self._generate_live_stats_section(bet_data, mlb_data)
+        
+        # Build the complete message
+        message_parts = [
+            header,
+            "",
+            game_info,
+            ""
+        ]
+        
+        # Add bet details
+        message_parts.extend(bet_details)
+        message_parts.append("")
+        
+        # Add analysis
+        message_parts.append("👇 | Analysis Below:")
+        message_parts.append("")
+        message_parts.append(analysis)
+        
+        # Add live stats if available
+        if live_stats:
+            message_parts.append("")
+            message_parts.append("📊 | Live Stats:")
+            message_parts.append(live_stats)
+        
+        # Add closing
+        message_parts.append("")
+        message_parts.append("LOCK IT. 🔒🔥")
+        
+        return "\n".join(message_parts)
+
+    async def _generate_live_stats_section(self, bet_data: dict, mlb_data: dict) -> str:
+        """Generate live stats section for the pick."""
+        if not mlb_data or not mlb_data.get('player_stats'):
+            return "Live stats unavailable"
+        
+        stats_lines = []
+        player_stats = mlb_data.get('player_stats', {})
+        
+        for player_name, stats in player_stats.items():
+            if stats:
+                stats_lines.append(f"**{player_name}:**")
+                if stats.get('batting_avg'):
+                    stats_lines.append(f"• AVG: {stats['batting_avg']}")
+                if stats.get('hr'):
+                    stats_lines.append(f"• HR: {stats['hr']}")
+                if stats.get('rbi'):
+                    stats_lines.append(f"• RBI: {stats['rbi']}")
+                if stats.get('obp'):
+                    stats_lines.append(f"• OBP: {stats['obp']}")
+                stats_lines.append("")
+        
+        return "\n".join(stats_lines) if stats_lines else "Live stats unavailable"
 
 
 class InfoCommands(app_commands.Group):
