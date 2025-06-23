@@ -95,19 +95,29 @@ class OCRService:
         
         # Check for common OCR artifacts that indicate garbled text
         garbled_indicators = [
-            'Sed Fanatics',  # Should be "Fanatics"
-            'Sportsoook',    # Should be "Sportsbook"
-            'Ketel Martet',  # Should be "Ketel Marte"
-            'AQT Hits',      # Should be "ALT Hits"
-            'Ruws Rls',      # Should be "Runs + RBIs"
-            'Atzona Diemoncbachks',  # Should be "Arizona Diamondbacks"
-            'Catesacls Reckias',     # Should be "Colorado Rockies"
-            'GAMELING FROELEME CAML' # Should be "GAMBLING PROBLEM CALL"
+            'sedfanatics',  # Should be "Fanatics"
+            'sporjtsbooks', # Should be "Sportsbook"
+            'ketalmertias', # Should be "Ketel Marte"
+            'iketelmarteysig', # Should be "Ketel Marte"
+            'authitsrumso', # Should be "ALT Hits + Runs"
+            'ecizonadiemanchackesat', # Should be "Arizona Diamondbacks at Colorado"
+            'celeradorecdias', # Should be "Colorado Rockies"
+            'musteb2i', # Should be "MUST WIN"
+            'camelingfroelem', # Should be "GAMBLING PROBLEM"
+            'sed fanatics',  # Should be "Fanatics"
+            'sportsoook',    # Should be "Sportsbook"
+            'ketel martet',  # Should be "Ketel Marte"
+            'aqt hits',      # Should be "ALT Hits"
+            'ruws rls',      # Should be "Runs + RBIs"
+            'atzona diemoncbachks',  # Should be "Arizona Diamondbacks"
+            'catesacls reckias',     # Should be "Colorado Rockies"
+            'gameling froelem caml' # Should be "GAMBLING PROBLEM CALL"
         ]
         
         # If any of these garbled patterns are found, consider it garbled
         for indicator in garbled_indicators:
             if indicator.lower() in text.lower():
+                logger.info(f"Garbled text detected: found '{indicator}' in text")
                 return True
         
         # Count non-alphanumeric characters
@@ -117,9 +127,26 @@ class OCRService:
         if total_chars == 0:
             return True
         
-        # If more than 25% are non-alphanumeric, likely garbled
+        # If more than 20% are non-alphanumeric, likely garbled
         garbled_ratio = non_alpha_count / total_chars
-        return garbled_ratio > 0.25
+        if garbled_ratio > 0.2:
+            logger.info(f"Garbled text detected: {garbled_ratio:.2%} non-alphanumeric characters")
+            return True
+        
+        # Check for excessive character repetition (common OCR artifact)
+        if len(text) > 50:
+            char_counts = {}
+            for char in text.lower():
+                if char.isalnum():
+                    char_counts[char] = char_counts.get(char, 0) + 1
+            
+            # If any character appears more than 30% of the time, likely garbled
+            for char, count in char_counts.items():
+                if count / len(text) > 0.3:
+                    logger.info(f"Garbled text detected: excessive repetition of '{char}'")
+                    return True
+        
+        return False
     
     async def _extract_text_ocr_space(self, image_bytes: bytes) -> str:
         """Extract text using OCR.space API."""
