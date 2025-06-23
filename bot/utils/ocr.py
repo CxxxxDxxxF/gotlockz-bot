@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-ocr_parser.py - OCR Image Processing
+ocr_parser.py - Simplified OCR Image Processing
 
-Extract text from betting slip images using OCR.
+Extract text from betting slip images using OCR with maximum reliability.
 """
 import logging
 import io
@@ -10,60 +10,45 @@ from typing import Dict, Any, Optional
 from PIL import Image
 import pytesseract
 import shutil
-import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 class OCRParser:
-    """Parse betting slip images using OCR."""
+    """Parse betting slip images using OCR with simplified approach."""
 
     def __init__(self):
-        # Configure Tesseract path if needed
-        # pytesseract.pytesseract.tesseract_cmd = r'/usr/local/bin/tesseract'
+        # Check if Tesseract is available
+        if not shutil.which('tesseract'):
+            logger.warning("Tesseract OCR engine is not installed. OCR will not work.")
         pass
 
     async def extract_text_from_image(self, image_bytes: bytes) -> str:
-        """Extract text from image using OCR with preprocessing for better accuracy."""
-        if not shutil.which('tesseract'):
-            error_msg = "Tesseract OCR engine is not installed or not in your system's PATH."
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-            
+        """Extract text from image using OCR with error handling."""
         try:
-            # Wrap OCR processing in a timeout
-            return await asyncio.wait_for(
-                self._perform_ocr(image_bytes), 
-                timeout=5.0  # 5 second timeout for OCR
-            )
-        except asyncio.TimeoutError:
-            logger.error("OCR processing timed out")
-            return ""
+            # Check if Tesseract is available
+            if not shutil.which('tesseract'):
+                logger.error("Tesseract OCR engine is not installed")
+                return "Tesseract not available"
+            
+            # Convert bytes to PIL Image
+            image = Image.open(io.BytesIO(image_bytes))
+
+            # Simple preprocessing
+            processed_image = self._preprocess_image_simple(image)
+
+            # Extract text using Tesseract
+            text = pytesseract.image_to_string(processed_image)
+
+            logger.info(f"OCR extracted text: {text[:100]}...")
+            return text.strip()
+
         except Exception as e:
             logger.error(f"OCR extraction failed: {e}")
-            return ""
+            return "OCR failed"
 
-    async def _perform_ocr(self, image_bytes: bytes) -> str:
-        """Perform the actual OCR processing."""
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        # --- Image Preprocessing for improved OCR accuracy ---
-        # 1. Convert to grayscale
-        image = image.convert('L')
-        
-        # 2. Apply a threshold to get a binary image. This helps with contrast.
-        image = image.point(lambda x: 0 if x < 127 else 255, '1')
-
-        # 3. Use Tesseract with a specific Page Segmentation Mode (PSM)
-        # PSM 6: Assume a single uniform block of text, which is good for snippets.
-        custom_config = r'--oem 3 --psm 6'
-        text = pytesseract.image_to_string(image, config=custom_config)
-        
-        logger.info(f"OCR extracted text (post-processing): {text.strip()}")
-        return text
-
-    def _preprocess_image(self, image: Image.Image) -> Image.Image:
-        """Preprocess image for better OCR results."""
+    def _preprocess_image_simple(self, image: Image.Image) -> Image.Image:
+        """Simple image preprocessing for better OCR results."""
         try:
             # Convert to grayscale
             if image.mode != 'L':
@@ -73,11 +58,6 @@ class OCRParser:
             if image.size[0] < 800 or image.size[1] < 600:
                 image = image.resize(
                     (image.size[0] * 2, image.size[1] * 2), Image.Resampling.LANCZOS)
-
-            # Enhance contrast
-            from PIL import ImageEnhance
-            enhancer = ImageEnhance.Contrast(image)
-            image = enhancer.enhance(2.0)
 
             return image
 
@@ -96,7 +76,6 @@ class OCRParser:
                 'odds': 'TBD',
                 'units': '1',
                 'game_time': 'TBD',
-                'game_date': None,
                 'sport': 'MLB'
             }
 
@@ -126,11 +105,6 @@ class OCRParser:
             if game_time:
                 bet_data['game_time'] = game_time
 
-            # Extract game date
-            game_date = self._extract_date(text)
-            if game_date:
-                bet_data['game_date'] = game_date
-
             logger.info(f"Parsed bet data: {bet_data}")
             return bet_data
 
@@ -143,12 +117,11 @@ class OCRParser:
                 'odds': 'TBD',
                 'units': '1',
                 'game_time': 'TBD',
-                'game_date': None,
                 'sport': 'MLB'
             }
 
-    def _extract_teams(self, text: str) -> Optional[list[str]]:
-        """Extract teams from OCR text."""
+    def _extract_teams(self, text: str) -> Optional[list]:
+        """Extract team names from text."""
         import re
 
         # Common team patterns
@@ -240,20 +213,6 @@ class OCRParser:
 
         return None
 
-    def _extract_date(self, text: str) -> Optional[str]:
-        """Extract game date from text and return in YYYY-MM-DD format."""
-        import re
-        # Look for MM/DD/YY or MM/DD/YYYY, common in bet slips
-        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{2,4})', text)
-        if match:
-            month, day, year = match.groups()
-            if len(year) == 2:
-                year = f"20{year}"  # Assume 21st century for 2-digit years
-            
-            # Format to YYYY-MM-DD for the stats API
-            return f"{year}-{int(month):02d}-{int(day):02d}"
-        return None
 
-
-# Global instance
+# Create a global instance
 ocr_parser = OCRParser()

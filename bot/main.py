@@ -4,8 +4,7 @@
 """
 main.py - GotLockz Discord Bot Entry Point
 
-Production-ready Discord bot with enhanced betting commands,
-OCR integration, and MLB data analysis.
+Simplified, reliable Discord bot with betting commands and OCR integration.
 """
 
 from commands.info import InfoCommands
@@ -24,9 +23,6 @@ import sys
 # Add the bot directory to Python path
 bot_dir = Path(__file__).parent
 
-
-# Import bot modules
-
 # Load environment variables
 load_dotenv()
 
@@ -43,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 class GotLockzBot(commands.Bot):
-    """Enhanced Discord bot with betting commands and AI integration."""
+    """Simplified Discord bot with betting commands."""
 
     def __init__(self):
         intents = discord.Intents.default()

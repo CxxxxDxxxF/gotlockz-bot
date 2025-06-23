@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-betting.py - Bulletproof Betting Commands
+betting_simple.py - Bulletproof Betting Commands
 
 A simplified, reliable Discord bot command for posting betting picks
 with minimal dependencies and maximum reliability.
