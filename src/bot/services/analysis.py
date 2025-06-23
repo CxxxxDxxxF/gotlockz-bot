@@ -4,6 +4,7 @@ Analysis Service - AI-powered MLB betting analysis
 import logging
 from typing import Dict, Any, Optional
 import openai
+import random
 
 from config.settings import settings
 
@@ -81,41 +82,45 @@ class AnalysisService:
             return "Error building analysis context"
     
     async def _generate_ai_analysis(self, context: str) -> str:
-        """Generate AI analysis using OpenAI with a mature, organic, stats-driven, confident, and witty voice for a 21+ audience."""
+        """Generate AI analysis using OpenAI with a dynamic intro, bolded key phrases, and three concise paragraphs."""
         try:
+            intros = [
+                "GotLockz family, Free Play is here!",
+                "Free Play drop for the squad!",
+                "Let's get into today's edge!",
+                "Alright team, here's today's Free Play!",
+                "Lockz fam, let's break down today's best spot!"
+            ]
+            intro = random.choice(intros)
             prompt = f"""
-Write as if you're a sharp, trusted MLB bettor talking to your 21+ Discord community. Start with 'GotLockz family, Free Play is here!' or a similar organic intro. Use a mature, confident, stats-driven, and slightly witty tone—no corny or kid language, no forced hype. Use stats and context to make your case, keep it real and conversational, and use emojis only for emphasis (not as punchlines or filler). End with a strong, simple call to action like 'Let's cash.' or 'Lock it in.'
+Write as if you're a sharp, trusted MLB bettor talking to your 21+ Discord community. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs:
+1. Why this matchup/bet is interesting
+2. The key stats/factors (pitching, park, weather, odds)
+3. A confident, concise call to action
+Each paragraph should be 2-3 sentences, direct and to the point. Use a mature, confident, stats-driven, and slightly witty tone. No corny or kid language. Use emojis only for emphasis, not as filler or punchlines. End with 'Let's cash.' or 'Lock it in.'
+Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph.
 
 Here's the context for the bet:
 {context}
-
-Format:
-- Start with 'GotLockz family, Free Play is here!' or a similar organic intro
-- Give a sharp, stats-driven breakdown of the matchup and why it's a good spot
-- Mention park/weather factors if relevant
-- Explain what the odds/market are telling us
-- End with a strong, simple call to action: 'Let's cash.' or 'Lock it in.'
-- Use line breaks for readability
-- Keep it under 200 words
 """
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a sharp, trusted MLB bettor writing for a 21+ Discord audience. Use a mature, confident, stats-driven, and slightly witty tone. Avoid corny or kid language and forced hype. Use emojis only for emphasis, not as punchlines or filler. End with a strong, simple call to action like 'Let's cash.' or 'Lock it in.'"},
+                    {"role": "system", "content": "You are a sharp, trusted MLB bettor writing for a 21+ Discord audience. Use a mature, confident, stats-driven, and slightly witty tone. Avoid corny or kid language and forced hype. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs as described. Use emojis only for emphasis. Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph. End with 'Let's cash.' or 'Lock it in.'"},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=350,
-                temperature=0.78
+                temperature=0.76
             )
             if response and response.choices and len(response.choices) > 0:
                 message_content = response.choices[0].message.content
                 if message_content:
                     analysis = message_content.strip()
-                    return analysis
+                    return f"{intro}\n\n{analysis}"
                 else:
-                    return "AI analysis temporarily unavailable. Please check the betting data manually."
+                    return f"{intro}\n\nAI analysis temporarily unavailable. Please check the betting data manually."
             else:
-                return "AI analysis temporarily unavailable. Please check the betting data manually."
+                return f"{intro}\n\nAI analysis temporarily unavailable. Please check the betting data manually."
         except Exception as e:
             logger.error(f"Error generating AI analysis: {e}")
             return "AI analysis temporarily unavailable. Please check the betting data manually."
