@@ -13,6 +13,7 @@ import json
 import re
 import asyncio
 import time
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class MLBDataFetcher:
         self.statsapi = statsapi
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'GotLockz Bot/1.0'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
         
         # Add caching
@@ -33,6 +34,10 @@ class MLBDataFetcher:
         
         # ESPN API endpoints
         self.espn_base_url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
+        
+        # MLB.com scraping endpoints
+        self.mlb_base_url = "https://www.mlb.com"
+        self.mlb_stats_url = "https://www.mlb.com/stats"
         
         self.team_abbreviations = {
             "ARI": "Arizona Diamondbacks", "AZ": "Arizona Diamondbacks",
@@ -657,6 +662,568 @@ class MLBDataFetcher:
     def _set_cached_data(self, cache_key: str, data: Any):
         """Store data in cache with timestamp."""
         self._cache[cache_key] = (data, time.time())
+
+    async def scrape_mlb_live_stats(self, team_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Scrape live MLB stats from mlb.com/stats as a fallback data source.
+        
+        Args:
+            team_name: Optional team name to filter stats for
+            
+        Returns:
+            Dict containing live stats data
+        """
+        cache_key = self._get_cache_key("mlb_scraped_stats", team_name or "all")
+        cached_data = self._get_cached_data(cache_key)
+        if cached_data:
+            return cached_data
+
+        try:
+            logger.info(f"Scraping MLB.com live stats for {team_name or 'all teams'}")
+            
+            # Scrape the main stats page
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: self.session.get(self.mlb_stats_url, timeout=15)
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch MLB stats page: {response.status_code}")
+                return {}
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Debug: Log page structure
+            logger.info(f"Page title: {soup.title.string if soup.title else 'No title'}")
+            
+            # Try multiple approaches to find data
+            live_games = []
+            team_stats = []
+            player_stats = []
+            
+            # Approach 1: Look for specific MLB.com data structures
+            live_games = await self._extract_live_games_advanced(soup)
+            team_stats = await self._extract_team_stats_advanced(soup, team_name)
+            player_stats = await self._extract_player_stats_advanced(soup, team_name)
+            
+            # Approach 2: If no data found, try alternative endpoints
+            if not live_games and not team_stats and not player_stats:
+                logger.info("No data found on main stats page, trying alternative endpoints...")
+                
+                # Try the scoreboard page
+                scoreboard_data = await self._scrape_scoreboard_page()
+                if scoreboard_data:
+                    live_games = scoreboard_data.get('live_games', [])
+                
+                # Try the standings page
+                standings_data = await self._scrape_standings_page()
+                if standings_data:
+                    team_stats = standings_data.get('team_stats', [])
+            
+            scraped_data = {
+                'live_games': live_games,
+                'team_stats': team_stats,
+                'player_stats': player_stats,
+                'scraped_at': datetime.now().isoformat(),
+                'source': 'mlb.com'
+            }
+            
+            self._set_cached_data(cache_key, scraped_data)
+            return scraped_data
+            
+        except Exception as e:
+            logger.error(f"Error scraping MLB.com stats: {e}")
+            return {}
+
+    async def _extract_live_games_advanced(self, soup: BeautifulSoup) -> list:
+        """Advanced extraction of live game information from MLB.com."""
+        live_games = []
+        
+        try:
+            # Look for various live game indicators
+            live_patterns = [
+                r'LIVE',
+                r'In Progress', 
+                r'Top \d+',
+                r'Bottom \d+',
+                r'Final',
+                r'Postponed',
+                r'Delayed'
+            ]
+            
+            for pattern in live_patterns:
+                live_elements = soup.find_all(string=re.compile(pattern, re.IGNORECASE))
+                for element in live_elements:
+                    # Find the closest game container
+                    game_container = element.find_parent(['div', 'section', 'article'])
+                    if game_container:
+                        game_data = self._parse_game_container_advanced(game_container)
+                        if game_data and game_data not in live_games:
+                            live_games.append(game_data)
+            
+            # Also look for scoreboard widgets
+            scoreboard_selectors = [
+                'div[class*="scoreboard"]',
+                'div[class*="game"]',
+                'div[class*="match"]',
+                'section[class*="scoreboard"]',
+                'div[data-testid*="scoreboard"]'
+            ]
+            
+            for selector in scoreboard_selectors:
+                scoreboards = soup.select(selector)
+                for scoreboard in scoreboards:
+                    game_data = self._parse_scoreboard_advanced(scoreboard)
+                    if game_data and game_data not in live_games:
+                        live_games.append(game_data)
+                        
+        except Exception as e:
+            logger.error(f"Error in advanced live games extraction: {e}")
+            
+        return live_games
+
+    async def _extract_team_stats_advanced(self, soup: BeautifulSoup, team_name: Optional[str] = None) -> list:
+        """Advanced extraction of team statistics from MLB.com."""
+        team_stats = []
+        
+        try:
+            # Look for various table structures
+            table_selectors = [
+                'table[class*="stats"]',
+                'table[class*="team"]',
+                'table[class*="standings"]',
+                'div[class*="stats-table"] table',
+                'section[class*="stats"] table'
+            ]
+            
+            for selector in table_selectors:
+                tables = soup.select(selector)
+                for table in tables:
+                    rows = table.find_all('tr')
+                    for row in rows[1:]:  # Skip header
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 3:
+                            team_data = self._parse_team_row_advanced(cells, team_name)
+                            if team_data and team_data not in team_stats:
+                                team_stats.append(team_data)
+                                
+        except Exception as e:
+            logger.error(f"Error in advanced team stats extraction: {e}")
+            
+        return team_stats
+
+    async def _extract_player_stats_advanced(self, soup: BeautifulSoup, team_name: Optional[str] = None) -> list:
+        """Advanced extraction of player statistics from MLB.com."""
+        player_stats = []
+        
+        try:
+            # Look for various player stat structures
+            player_selectors = [
+                'table[class*="player"]',
+                'table[class*="batting"]',
+                'table[class*="pitching"]',
+                'div[class*="player-stats"] table',
+                'section[class*="player"] table'
+            ]
+            
+            for selector in player_selectors:
+                tables = soup.select(selector)
+                for table in tables:
+                    rows = table.find_all('tr')
+                    for row in rows[1:]:  # Skip header
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 5:
+                            player_data = self._parse_player_row_advanced(cells, team_name)
+                            if player_data and player_data not in player_stats:
+                                player_stats.append(player_data)
+                                
+        except Exception as e:
+            logger.error(f"Error in advanced player stats extraction: {e}")
+            
+        return player_stats
+
+    async def _scrape_scoreboard_page(self) -> Optional[Dict[str, Any]]:
+        """Scrape the MLB scoreboard page for live games."""
+        try:
+            scoreboard_url = "https://www.mlb.com/scores"
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: self.session.get(scoreboard_url, timeout=15)
+            )
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                live_games = await self._extract_live_games_advanced(soup)
+                return {'live_games': live_games}
+                
+        except Exception as e:
+            logger.error(f"Error scraping scoreboard page: {e}")
+            
+        return None
+
+    async def _scrape_standings_page(self) -> Optional[Dict[str, Any]]:
+        """Scrape the MLB standings page for team stats."""
+        try:
+            standings_url = "https://www.mlb.com/standings"
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: self.session.get(standings_url, timeout=15)
+            )
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                team_stats = await self._extract_team_stats_advanced(soup)
+                return {'team_stats': team_stats}
+                
+        except Exception as e:
+            logger.error(f"Error scraping standings page: {e}")
+            
+        return None
+
+    def _parse_game_container_advanced(self, container) -> Optional[Dict[str, Any]]:
+        """Advanced parsing of game container for live game data."""
+        try:
+            # Get all text content
+            text_content = container.get_text()
+            
+            # Look for team patterns
+            team_pattern = r'([A-Z]{2,3}|[A-Za-z\s]+(?:Diamondbacks|Braves|Orioles|Red Sox|White Sox|Cubs|Reds|Guardians|Rockies|Tigers|Astros|Royals|Angels|Dodgers|Marlins|Brewers|Twins|Mets|Yankees|Athletics|Phillies|Pirates|Padres|Giants|Mariners|Cardinals|Rays|Rangers|Blue Jays|Nationals))'
+            teams = re.findall(team_pattern, text_content)
+            
+            # Look for score patterns
+            score_pattern = r'(\d+)\s*-\s*(\d+)'
+            score_match = re.search(score_pattern, text_content)
+            
+            # Look for inning/status patterns
+            inning_patterns = [
+                r'(Top|Bottom)\s+(\d+)',
+                r'(\d+)(?:st|nd|rd|th)\s+(Top|Bottom)',
+                r'(Final|Live|Postponed|Delayed)'
+            ]
+            
+            inning = "Unknown"
+            status = "Unknown"
+            
+            for pattern in inning_patterns:
+                match = re.search(pattern, text_content, re.IGNORECASE)
+                if match:
+                    if 'Final' in match.group(0) or 'Postponed' in match.group(0) or 'Delayed' in match.group(0):
+                        status = match.group(0)
+                    else:
+                        inning = match.group(0)
+                        status = "Live"
+                    break
+            
+            if len(teams) >= 2 and score_match:
+                return {
+                    'away_team': teams[0].strip(),
+                    'home_team': teams[1].strip(),
+                    'away_score': int(score_match.group(1)),
+                    'home_score': int(score_match.group(2)),
+                    'inning': inning,
+                    'status': status
+                }
+                
+        except Exception as e:
+            logger.error(f"Error parsing game container advanced: {e}")
+            
+        return None
+
+    def _parse_scoreboard_advanced(self, scoreboard) -> Optional[Dict[str, Any]]:
+        """Advanced parsing of scoreboard element for game data."""
+        try:
+            return self._parse_game_container_advanced(scoreboard)
+        except Exception as e:
+            logger.error(f"Error parsing scoreboard advanced: {e}")
+            return None
+
+    def _parse_team_row_advanced(self, cells, team_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Advanced parsing of team statistics row."""
+        try:
+            if len(cells) < 3:
+                return None
+                
+            team_cell = cells[0].get_text().strip()
+            
+            # Clean up team name - remove garbage characters and normalize
+            team_cell = self._clean_team_name(team_cell)
+            
+            # Skip if team name is still garbage after cleaning
+            if len(team_cell) < 2 or not team_cell.replace(' ', '').isalpha():
+                return None
+            
+            # Filter by team name if specified
+            if team_name and team_name.lower() not in team_cell.lower():
+                return None
+                
+            stats = {}
+            stat_names = ['wins', 'losses', 'win_pct', 'games_back', 'runs_scored', 'runs_allowed', 'run_diff']
+            
+            for i, cell in enumerate(cells[1:], 1):
+                cell_text = cell.get_text().strip()
+                if cell_text:
+                    # Try to parse as number
+                    try:
+                        if '.' in cell_text:
+                            value = float(cell_text)
+                        else:
+                            value = int(cell_text)
+                        
+                        stat_name = stat_names[i-1] if i-1 < len(stat_names) else f'stat_{i}'
+                        stats[stat_name] = value
+                    except ValueError:
+                        # Not a number, skip
+                        continue
+                    
+            if stats:
+                return {
+                    'team': team_cell,
+                    'stats': stats
+                }
+                
+        except Exception as e:
+            logger.error(f"Error parsing team row advanced: {e}")
+            
+        return None
+
+    def _parse_player_row_advanced(self, cells, team_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Advanced parsing of player statistics row."""
+        try:
+            if len(cells) < 5:
+                return None
+                
+            player_name = cells[0].get_text().strip()
+            team_cell = cells[1].get_text().strip() if len(cells) > 1 else ""
+            
+            # Clean up names
+            player_name = self._clean_player_name(player_name)
+            team_cell = self._clean_team_name(team_cell)
+            
+            # Skip if names are garbage after cleaning
+            if len(player_name) < 2 or not player_name.replace(' ', '').isalpha():
+                return None
+            
+            # Filter by team name if specified
+            if team_name and team_name.lower() not in team_cell.lower():
+                return None
+                
+            stats = {}
+            stat_names = ['avg', 'hr', 'rbi', 'obp', 'slg', 'ops', 'era', 'whip', 'k', 'bb']
+            
+            for i, cell in enumerate(cells[2:], 2):
+                cell_text = cell.get_text().strip()
+                if cell_text:
+                    # Try to parse as number
+                    try:
+                        if '.' in cell_text:
+                            value = float(cell_text)
+                        else:
+                            value = int(cell_text)
+                        
+                        stat_name = stat_names[i-2] if i-2 < len(stat_names) else f'stat_{i}'
+                        stats[stat_name] = value
+                    except ValueError:
+                        # Not a number, skip
+                        continue
+                    
+            if stats:
+                return {
+                    'player': player_name,
+                    'team': team_cell,
+                    'stats': stats
+                }
+                
+        except Exception as e:
+            logger.error(f"Error parsing player row advanced: {e}")
+            
+        return None
+
+    def _clean_team_name(self, team_name: str) -> str:
+        """Clean up team name by removing garbage characters and normalizing."""
+        try:
+            # Remove common garbage characters and patterns
+            cleaned = team_name
+            
+            # Remove unicode control characters and invisible characters
+            import unicodedata
+            cleaned = ''.join(char for char in cleaned if unicodedata.category(char)[0] != 'C')
+            
+            # Remove common garbage patterns
+            import re
+            cleaned = re.sub(r'[0-9]+[A-Za-z]+[A-Za-z]+[0-9]+', '', cleaned)  # Remove patterns like "1CalC1"
+            cleaned = re.sub(r'\u200c+', '', cleaned)  # Remove zero-width characters
+            cleaned = re.sub(r'[^\w\s\-\.]', '', cleaned)  # Keep only alphanumeric, spaces, hyphens, dots
+            
+            # Normalize whitespace
+            cleaned = ' '.join(cleaned.split())
+            
+            # Map common variations to official team names
+            team_mapping = {
+                'nyy': 'New York Yankees',
+                'nyyankees': 'New York Yankees',
+                'yankees': 'New York Yankees',
+                'bos': 'Boston Red Sox',
+                'redsox': 'Boston Red Sox',
+                'red sox': 'Boston Red Sox',
+                'lad': 'Los Angeles Dodgers',
+                'dodgers': 'Los Angeles Dodgers',
+                'hou': 'Houston Astros',
+                'astros': 'Houston Astros',
+                'atl': 'Atlanta Braves',
+                'braves': 'Atlanta Braves',
+                'chc': 'Chicago Cubs',
+                'cubs': 'Chicago Cubs',
+                'chw': 'Chicago White Sox',
+                'whitesox': 'Chicago White Sox',
+                'white sox': 'Chicago White Sox',
+                'ny': 'New York Mets',
+                'mets': 'New York Mets',
+                'sf': 'San Francisco Giants',
+                'giants': 'San Francisco Giants',
+                'stl': 'St. Louis Cardinals',
+                'cardinals': 'St. Louis Cardinals',
+                'cards': 'St. Louis Cardinals',
+                'mil': 'Milwaukee Brewers',
+                'brewers': 'Milwaukee Brewers',
+                'min': 'Minnesota Twins',
+                'twins': 'Minnesota Twins',
+                'tb': 'Tampa Bay Rays',
+                'rays': 'Tampa Bay Rays',
+                'oak': 'Oakland Athletics',
+                'athletics': 'Oakland Athletics',
+                'a\'s': 'Oakland Athletics',
+                'as': 'Oakland Athletics',
+                'tex': 'Texas Rangers',
+                'rangers': 'Texas Rangers',
+                'cle': 'Cleveland Guardians',
+                'guardians': 'Cleveland Guardians',
+                'cin': 'Cincinnati Reds',
+                'reds': 'Cincinnati Reds',
+                'kc': 'Kansas City Royals',
+                'royals': 'Kansas City Royals',
+                'col': 'Colorado Rockies',
+                'rockies': 'Colorado Rockies',
+                'ari': 'Arizona Diamondbacks',
+                'diamondbacks': 'Arizona Diamondbacks',
+                'dbacks': 'Arizona Diamondbacks',
+                'sea': 'Seattle Mariners',
+                'mariners': 'Seattle Mariners',
+                'det': 'Detroit Tigers',
+                'tigers': 'Detroit Tigers',
+                'phi': 'Philadelphia Phillies',
+                'phillies': 'Philadelphia Phillies',
+                'pit': 'Pittsburgh Pirates',
+                'pirates': 'Pittsburgh Pirates',
+                'sd': 'San Diego Padres',
+                'padres': 'San Diego Padres',
+                'bal': 'Baltimore Orioles',
+                'orioles': 'Baltimore Orioles',
+                'tor': 'Toronto Blue Jays',
+                'bluejays': 'Toronto Blue Jays',
+                'blue jays': 'Toronto Blue Jays',
+                'jays': 'Toronto Blue Jays',
+                'was': 'Washington Nationals',
+                'nationals': 'Washington Nationals',
+                'nats': 'Washington Nationals',
+                'laa': 'Los Angeles Angels',
+                'angels': 'Los Angeles Angels',
+                'ana': 'Los Angeles Angels',
+                'mia': 'Miami Marlins',
+                'marlins': 'Miami Marlins'
+            }
+            
+            # Check if cleaned name matches any known variations
+            cleaned_lower = cleaned.lower().replace(' ', '')
+            for variation, official_name in team_mapping.items():
+                if cleaned_lower == variation or cleaned_lower in variation or variation in cleaned_lower:
+                    return official_name
+            
+            return cleaned
+            
+        except Exception as e:
+            logger.error(f"Error cleaning team name '{team_name}': {e}")
+            return team_name
+
+    def _clean_player_name(self, player_name: str) -> str:
+        """Clean up player name by removing garbage characters and normalizing."""
+        try:
+            # Remove common garbage characters and patterns
+            cleaned = player_name
+            
+            # Remove unicode control characters and invisible characters
+            import unicodedata
+            cleaned = ''.join(char for char in cleaned if unicodedata.category(char)[0] != 'C')
+            
+            # Remove common garbage patterns
+            import re
+            cleaned = re.sub(r'[0-9]+[A-Za-z]+[A-Za-z]+[0-9]+', '', cleaned)  # Remove patterns like "1CalC1"
+            cleaned = re.sub(r'\u200c+', '', cleaned)  # Remove zero-width characters
+            cleaned = re.sub(r'[^\w\s\-\.]', '', cleaned)  # Keep only alphanumeric, spaces, hyphens, dots
+            
+            # Normalize whitespace
+            cleaned = ' '.join(cleaned.split())
+            
+            # Title case for proper name formatting
+            cleaned = cleaned.title()
+            
+            return cleaned
+            
+        except Exception as e:
+            logger.error(f"Error cleaning player name '{player_name}': {e}")
+            return player_name
+
+    async def get_live_stats_with_fallback(self, team_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get live stats with multiple fallback sources including MLB.com scraping.
+        
+        Args:
+            team_name: Optional team name to filter stats for
+            
+        Returns:
+            Dict containing live stats from best available source
+        """
+        try:
+            # Try ESPN API first (fastest) - with timeout
+            try:
+                espn_data = await asyncio.wait_for(
+                    self.get_live_scores(team_name),
+                    timeout=1.5  # Very short timeout for fastest source
+                )
+                if espn_data and espn_data.get('live_games'):
+                    espn_data['source'] = 'espn'
+                    return espn_data
+            except asyncio.TimeoutError:
+                logger.warning("ESPN API timed out, trying next source")
+            
+            # Try MLB Stats API - with timeout
+            try:
+                mlb_data = await asyncio.wait_for(
+                    self.get_live_scores(team_name),
+                    timeout=1.5  # Very short timeout for second fastest source
+                )
+                if mlb_data and mlb_data.get('live_games'):
+                    mlb_data['source'] = 'mlb_stats_api'
+                    return mlb_data
+            except asyncio.TimeoutError:
+                logger.warning("MLB Stats API timed out, trying scraping")
+            
+            # Fallback to MLB.com scraping - with timeout
+            try:
+                scraped_data = await asyncio.wait_for(
+                    self.scrape_mlb_live_stats(team_name),
+                    timeout=2.0  # Slightly longer timeout for scraping
+                )
+                if scraped_data:
+                    return scraped_data
+            except asyncio.TimeoutError:
+                logger.warning("MLB.com scraping timed out")
+            
+            # Return empty result if all sources fail
+            return {'live_games': [], 'source': 'none'}
+            
+        except Exception as e:
+            logger.error(f"Error getting live stats with fallback: {e}")
+            return {'live_games': [], 'source': 'error'}
 
 
 # Global instance

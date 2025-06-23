@@ -72,13 +72,13 @@ class BettingCommands(app_commands.Group):
         await interaction.response.defer(thinking=True)
         
         try:
-            # Increase timeout to 25 seconds for complex operations
+            # Increase timeout to 15 seconds for complex operations (reduced from 25)
             try:
                 await asyncio.wait_for(self._process_command_async(
                     interaction, channel, image, unitsize
-                ), timeout=25.0)
+                ), timeout=15.0)  # Reduced from 25.0 to 15.0 seconds
             except asyncio.TimeoutError:
-                logger.error("Command processing timed out after 25 seconds")
+                logger.error("Command processing timed out after 15 seconds")
                 await interaction.followup.send(
                     "❌ Processing took too long. Please try again with a clearer image or check if the game is available.",
                     ephemeral=True
@@ -119,7 +119,7 @@ class BettingCommands(app_commands.Group):
 
         # Download image with timeout
         try:
-            image_bytes = await asyncio.wait_for(image.read(), timeout=3.0)
+            image_bytes = await asyncio.wait_for(image.read(), timeout=2.0)  # Reduced from 3.0 to 2.0 seconds
         except asyncio.TimeoutError:
             await interaction.followup.send(
                 "❌ Image download timed out. Please try again.",
@@ -131,7 +131,7 @@ class BettingCommands(app_commands.Group):
         try:
             bet_data = await asyncio.wait_for(
                 self._analyze_betting_slip(image), 
-                timeout=4.0
+                timeout=3.0  # Reduced from 4.0 to 3.0 seconds
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -144,7 +144,7 @@ class BettingCommands(app_commands.Group):
         try:
             mlb_data = await asyncio.wait_for(
                 self._fetch_mlb_data(bet_data), 
-                timeout=5.0
+                timeout=8.0  # Reduced from 5.0 to 8.0 seconds (but this includes the 6s MLB timeout)
             )
         except asyncio.TimeoutError:
             logger.warning("MLB data fetch timed out, continuing with basic data")
@@ -172,7 +172,7 @@ class BettingCommands(app_commands.Group):
                 self._generate_channel_specific_content(
                     bet_data, mlb_data, current_date, current_time, unitsize, channel_type
                 ),
-                timeout=3.0
+                timeout=2.0  # Reduced from 3.0 to 2.0 seconds
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -185,7 +185,7 @@ class BettingCommands(app_commands.Group):
         try:
             await asyncio.wait_for(
                 channel.send(content=message_content),
-                timeout=3.0
+                timeout=2.0  # Reduced from 3.0 to 2.0 seconds
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -705,38 +705,36 @@ class BettingCommands(app_commands.Group):
             return 'TBD'
 
     async def _fetch_mlb_data(self, bet_data: dict) -> dict:
-        """Fetch live MLB stats and current talk from multiple sources concurrently."""
+        """Fetch live MLB stats and current talk from multiple sources concurrently, using fallback scraping if needed."""
         try:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             player = bet_data.get('player', 'TBD')
             game_date = bet_data.get('game_date')  # Get date from parsed bet data
 
-            # Start all API calls concurrently
+            # Use new fallback method for live stats (includes scraping) - REDUCED TIMEOUT
+            try:
+                live_stats_data = await asyncio.wait_for(
+                    mlb_fetcher.get_live_stats_with_fallback(teams[0]),
+                    timeout=3.0  # Reduced from no timeout to 3 seconds
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Live stats fetch timed out, using empty data")
+                live_stats_data = {'live_games': [], 'source': 'timeout'}
+
+            # Start all API calls concurrently for other data - REDUCED TIMEOUT
             tasks = [
-                # ESPN live data
-                mlb_fetcher.get_live_game_data(teams[0], teams[1]),
-                # Team stats (both teams)
                 mlb_fetcher.get_team_stats(teams[0]),
                 mlb_fetcher.get_team_stats(teams[1]),
-                # Player stats
                 mlb_fetcher.get_player_stats(player),
-                # Game info
                 mlb_fetcher.get_game_info(teams[0], teams[1], game_date=game_date)
             ]
 
-            # Wait for all tasks with timeout
             try:
                 results = await asyncio.wait_for(
                     asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=12.0
+                    timeout=6.0  # Reduced from 12.0 to 6.0 seconds
                 )
-                
-                live_game_data, away_team_stats, home_team_stats, player_stats, game_info = results
-                
-                # Handle any exceptions in results
-                if isinstance(live_game_data, Exception):
-                    logger.warning(f"ESPN live data failed: {live_game_data}")
-                    live_game_data = None
+                away_team_stats, home_team_stats, player_stats, game_info = results
                 if isinstance(away_team_stats, Exception):
                     logger.warning(f"Away team stats failed: {away_team_stats}")
                     away_team_stats = {}
@@ -749,43 +747,21 @@ class BettingCommands(app_commands.Group):
                 if isinstance(game_info, Exception):
                     logger.warning(f"Game info failed: {game_info}")
                     game_info = {}
-                
             except asyncio.TimeoutError:
                 logger.warning("MLB data fetch timed out, using fallback data")
-                live_game_data = None
                 away_team_stats = {}
                 home_team_stats = {}
                 player_stats = {}
                 game_info = {}
 
-            # Use ESPN live data if available
-            if live_game_data and isinstance(live_game_data, dict):
-                logger.info(f"Found live game data: {live_game_data.get('away_team')} vs {live_game_data.get('home_team')}")
-                
-                return {
-                    'away_team_stats': away_team_stats,
-                    'home_team_stats': home_team_stats,
-                    'player_stats': player_stats,
-                    'live_data': live_game_data,
-                    'game_info': {
-                        'game_time': live_game_data.get('game_status', 'TBD'),
-                        'venue': live_game_data.get('venue', 'TBD'),
-                        'weather': live_game_data.get('weather', 'Clear, 72°F'),
-                        'away_pitcher': live_game_data.get('away_pitcher', 'TBD'),
-                        'home_pitcher': live_game_data.get('home_pitcher', 'TBD')
-                    }
-                }
-            else:
-                # Use MLB Stats API data
-                logger.info("Using MLB Stats API data")
-                return {
-                    'away_team_stats': away_team_stats,
-                    'home_team_stats': home_team_stats,
-                    'player_stats': player_stats,
-                    'game_info': game_info,
-                    'live_data': None
-                }
-
+            # Compose the mlb_data dict for template population
+            return {
+                'away_team_stats': away_team_stats,
+                'home_team_stats': home_team_stats,
+                'player_stats': player_stats,
+                'game_info': game_info,
+                'live_data': live_stats_data
+            }
         except Exception as e:
             logger.error(f"Error fetching MLB data: {e}")
             return {
@@ -978,18 +954,26 @@ class BettingCommands(app_commands.Group):
             return "🏆 | Pick 1: TBD – TBD (TBD)\n🏆 | Pick 2: TBD – TBD (TBD)\n🏆 | Pick 3: TBD – TBD (TBD)\n🏆 | Pick 4: TBD – TBD (TBD)"
 
     async def _generate_live_stats_section(self, bet_data: dict, mlb_data: dict) -> str:
-        """Generate live stats section using ESPN data."""
+        """Generate live stats section using fallback MLB.com scraping if needed."""
         try:
             live_data = mlb_data.get('live_data')
             if not live_data:
                 return "📊 Live stats unavailable"
-            
-            # Check if game is live
+
+            # If scraped data, format accordingly
+            if live_data.get('source') == 'mlb.com':
+                games = live_data.get('live_games', [])
+                if not games:
+                    return "📊 No live games found on MLB.com"
+                lines = []
+                for game in games:
+                    lines.append(f"🏟️ {game.get('away_team', '?')} {game.get('away_score', '?')} - {game.get('home_score', '?')} {game.get('home_team', '?')} | {game.get('status', '')} {game.get('inning', '')}")
+                return '\n'.join(lines)
+
+            # Otherwise, use the default ESPN/statsapi format
             is_live = live_data.get('is_live', False)
             if not is_live:
                 return "📊 Game not yet started"
-            
-            # Build live stats
             away_team = live_data.get('away_team', 'Unknown')
             home_team = live_data.get('home_team', 'Unknown')
             away_score = live_data.get('away_score', '0')
@@ -999,8 +983,6 @@ class BettingCommands(app_commands.Group):
             venue = live_data.get('venue', 'Unknown')
             weather = live_data.get('weather', 'Clear, 72°F')
             last_updated = live_data.get('last_updated', 'Unknown')
-            
-            # Format the live stats
             stats_lines = [
                 f"🏟️ **{away_team} {away_score} - {home_score} {home_team}**",
                 f"📡 **Status**: {game_status}",
@@ -1009,9 +991,7 @@ class BettingCommands(app_commands.Group):
                 f"🌤️ **Weather**: {weather}",
                 f"🕐 **Updated**: {last_updated}"
             ]
-            
             return "\n".join(stats_lines)
-            
         except Exception as e:
             logger.error(f"Error generating live stats section: {e}")
             return "📊 Live stats unavailable"
