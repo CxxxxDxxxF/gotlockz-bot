@@ -788,6 +788,7 @@ class BettingCommands(app_commands.Group):
             home_team = mlb_data.get('home_team', 'TBD') or 'TBD'
             description = bet_data.get('description', 'TBD') or 'TBD'
             live_scores = mlb_data.get('live_scores', []) or []
+            teams = bet_data.get('teams', ['TBD', 'TBD'])
 
             # Build comprehensive analysis
             analysis_parts = []
@@ -800,8 +801,14 @@ class BettingCommands(app_commands.Group):
                     if away_match or home_match:
                         analysis_parts.append(f"🔥 LIVE GAME: {game.get('away_team', '')} {game.get('away_score', 0)} - {game.get('home_team', '')} {game.get('home_score', 0)} (Inning {game.get('inning', 0)})")
 
+            # Team Information (use bet_data teams if mlb_data teams are TBD)
+            if away_team == 'TBD' and len(teams) >= 2:
+                away_team = teams[0]
+            if home_team == 'TBD' and len(teams) >= 2:
+                home_team = teams[1]
+
             # Player Performance Analysis
-            if player != 'TBD' and player_stats:
+            if player != 'TBD' and player != 'PARLAY' and player_stats:
                 avg = player_stats.get('batting_avg', '.000')
                 hr = player_stats.get('hr', '0')
                 rbi = player_stats.get('rbi', '0')
@@ -868,6 +875,10 @@ class BettingCommands(app_commands.Group):
                 if away_pitcher != 'TBD' and home_pitcher != 'TBD':
                     analysis_parts.append(f"⚾ Pitching: {away_pitcher} vs {home_pitcher}")
 
+            # Basic team info if no detailed stats available
+            elif away_team != 'TBD' and home_team != 'TBD':
+                analysis_parts.append(f"🏟️ {away_team} @ {home_team}")
+
             # Recent Team Trends
             if trends and trends != 'Data unavailable':
                 analysis_parts.append(f"📊 {trends}")
@@ -892,6 +903,8 @@ class BettingCommands(app_commands.Group):
                 analysis_parts.append("📉 UNDER PLAY: Pitching matchup favors lower scoring.")
             elif 'moneyline' in description.lower() or 'ml' in description.lower():
                 analysis_parts.append("💰 MONEYLINE: Team has strong matchup advantages.")
+            elif 'parlay' in description.lower():
+                analysis_parts.append("🎯 PARLAY: Multiple legs provide value and higher payout potential.")
 
             # Context Integration
             if context and context.strip():
@@ -899,7 +912,11 @@ class BettingCommands(app_commands.Group):
 
             # Final Analysis Summary
             if not analysis_parts:
-                analysis_parts.append("📊 Analysis based on current form and matchup data.")
+                # Provide basic analysis based on available data
+                if away_team != 'TBD' and home_team != 'TBD':
+                    analysis_parts.append(f"📊 Analysis for {away_team} @ {home_team} based on current form and matchup data.")
+                else:
+                    analysis_parts.append("📊 Analysis based on current form and matchup data.")
 
             # Add confidence indicator based on data availability
             data_sources = 0
@@ -925,7 +942,12 @@ class BettingCommands(app_commands.Group):
 
         except Exception as e:
             logger.error(f"Error generating analysis: {e}")
-            return f"{context or 'Analysis based on current form and matchup data.'}"
+            # Provide fallback analysis
+            teams = bet_data.get('teams', ['TBD', 'TBD'])
+            if teams[0] != 'TBD' and teams[1] != 'TBD':
+                return f"📊 Analysis for {teams[0]} @ {teams[1]} based on current form and matchup data.\n\n📊 MODERATE CONFIDENCE - Strong value at current odds."
+            else:
+                return f"{context or 'Analysis based on current form and matchup data.'}\n\n📊 MODERATE CONFIDENCE - Strong value at current odds."
 
     async def _generate_lotto_picks(
             self,

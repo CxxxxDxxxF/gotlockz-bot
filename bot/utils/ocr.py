@@ -66,7 +66,7 @@ class OCRParser:
             return image
 
     def parse_betting_details(self, text: str) -> Dict[str, Any]:
-        """Parse betting details from OCR text."""
+        """Parse betting details from OCR text with improved logic."""
         try:
             # Initialize default values
             bet_data = {
@@ -79,33 +79,44 @@ class OCRParser:
                 'sport': 'MLB'
             }
 
-            # Extract teams (look for common patterns)
-            teams = self._extract_teams(text)
+            # Clean and normalize text
+            text = text.strip()
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            
+            logger.info(f"Processing {len(lines)} lines of OCR text")
+            
+            # Extract teams first (most important)
+            teams = self._extract_teams_improved(text, lines)
             if teams:
                 bet_data['teams'] = teams
+                logger.info(f"Extracted teams: {teams}")
 
-            # Extract player and description
-            player_info = self._extract_player_info(text)
-            if player_info:
-                bet_data['player'] = player_info.get('player', 'TBD')
-                bet_data['description'] = player_info.get('description', 'TBD')
+            # Extract bet type and description
+            bet_info = self._extract_bet_info_improved(text, lines)
+            if bet_info:
+                bet_data['description'] = bet_info.get('description', 'TBD')
+                bet_data['player'] = bet_info.get('player', 'TBD')
+                logger.info(f"Extracted bet info: {bet_info}")
 
             # Extract odds
-            odds = self._extract_odds(text)
+            odds = self._extract_odds_improved(text, lines)
             if odds:
                 bet_data['odds'] = odds
+                logger.info(f"Extracted odds: {odds}")
 
             # Extract units
-            units = self._extract_units(text)
+            units = self._extract_units_improved(text, lines)
             if units:
                 bet_data['units'] = units
+                logger.info(f"Extracted units: {units}")
 
             # Extract game time
-            game_time = self._extract_game_time(text)
+            game_time = self._extract_game_time_improved(text, lines)
             if game_time:
                 bet_data['game_time'] = game_time
+                logger.info(f"Extracted game time: {game_time}")
 
-            logger.info(f"Parsed bet data: {bet_data}")
+            logger.info(f"Final parsed bet data: {bet_data}")
             return bet_data
 
         except Exception as e:
@@ -120,98 +131,258 @@ class OCRParser:
                 'sport': 'MLB'
             }
 
-    def _extract_teams(self, text: str) -> Optional[list]:
-        """Extract team names from text."""
+    def _extract_teams_improved(self, text: str, lines: list) -> Optional[list]:
+        """Extract team names with improved logic."""
         import re
-
-        # Common team patterns
-        team_patterns = [
-            r'(\w+)\s+(?:vs|@)\s+(\w+)',
-            r'(\w+)\s+at\s+(\w+)',
-            r'(\w+)\s+-\s+(\w+)'
-        ]
-
-        for pattern in team_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return [match.group(1).strip(), match.group(2).strip()]
-
+        
+        # Look for "at" pattern first (most common in betting slips)
+        at_pattern = r'(\w+(?:\s+\w+)*)\s+at\s+(\w+(?:\s+\w+)*)'
+        match = re.search(at_pattern, text, re.IGNORECASE)
+        if match:
+            away_team = match.group(1).strip()
+            home_team = match.group(2).strip()
+            
+            # Clean up team names
+            away_team = self._clean_team_name(away_team)
+            home_team = self._clean_team_name(home_team)
+            
+            return [away_team, home_team]
+        
+        # Look for "vs" pattern
+        vs_pattern = r'(\w+(?:\s+\w+)*)\s+vs\s+(\w+(?:\s+\w+)*)'
+        match = re.search(vs_pattern, text, re.IGNORECASE)
+        if match:
+            team1 = match.group(1).strip()
+            team2 = match.group(2).strip()
+            
+            team1 = self._clean_team_name(team1)
+            team2 = self._clean_team_name(team2)
+            
+            return [team1, team2]
+        
+        # Look for team names in individual lines
+        team_names = []
+        for line in lines:
+            # Skip lines that are clearly not team names
+            if any(skip in line.lower() for skip in ['sportsbook', 'money', 'line', 'odds', 'units', 'time']):
+                continue
+                
+            # Look for potential team names
+            if len(line.split()) >= 2 and not line.isdigit():
+                team_names.append(line.strip())
+        
+        if len(team_names) >= 2:
+            return [self._clean_team_name(team_names[0]), self._clean_team_name(team_names[1])]
+        
         return None
 
-    def _extract_player_info(self, text: str) -> Optional[Dict[str, str]]:
-        """Extract player name and description from text."""
+    def _extract_bet_info_improved(self, text: str, lines: list) -> Optional[Dict[str, str]]:
+        """Extract bet type and description with improved logic."""
         import re
-
-        # Look for player patterns
-        player_patterns = [
-            r'(\w+\s+\w+)\s*[-–]\s*(.+)',
-            r'(\w+\s+\w+)\s+(.+)',
-        ]
-
-        for pattern in player_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return {
-                    'player': match.group(1).strip(),
-                    'description': match.group(2).strip()
-                }
-
+        
+        # Look for common bet types
+        bet_types = ['money line', 'moneyline', 'ml', 'over', 'under', 'total', 'spread']
+        
+        for line in lines:
+            line_lower = line.lower()
+            
+            # Check if this line contains a bet type
+            for bet_type in bet_types:
+                if bet_type in line_lower:
+                    return {
+                        'description': line.strip(),
+                        'player': 'TBD'  # No player for team bets
+                    }
+        
+        # Look for player props
+        for line in lines:
+            # Skip lines that are clearly not player names
+            if any(skip in line.lower() for skip in ['sportsbook', 'money', 'line', 'odds', 'units', 'time']):
+                continue
+                
+            # If line looks like a player name (2-3 words, no numbers)
+            words = line.split()
+            if 2 <= len(words) <= 3 and not any(word.isdigit() for word in words):
+                # Look for the next line as description
+                line_index = lines.index(line)
+                if line_index + 1 < len(lines):
+                    description = lines[line_index + 1]
+                    return {
+                        'player': line.strip(),
+                        'description': description.strip()
+                    }
+        
         return None
 
-    def _extract_odds(self, text: str) -> Optional[str]:
-        """Extract odds from text."""
+    def _extract_odds_improved(self, text: str, lines: list) -> Optional[str]:
+        """Extract odds with improved logic."""
         import re
-
+        
         # Look for odds patterns
         odds_patterns = [
-            r'[+-]\d+',
+            r'([+-]\d+)',  # +150, -110
             r'odds?\s*:?\s*([+-]\d+)',
             r'([+-]\d+)\s*odds?'
         ]
-
+        
         for pattern in odds_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1) if len(
-                    match.groups()) > 0 else match.group(0)
-
+                odds = match.group(1) if len(match.groups()) > 0 else match.group(0)
+                return odds
+        
+        # Look in individual lines
+        for line in lines:
+            match = re.search(r'([+-]\d+)', line)
+            if match:
+                return match.group(1)
+        
         return None
 
-    def _extract_units(self, text: str) -> Optional[str]:
-        """Extract unit size from text."""
+    def _extract_units_improved(self, text: str, lines: list) -> Optional[str]:
+        """Extract unit size with improved logic."""
         import re
-
+        
         # Look for unit patterns
         unit_patterns = [
             r'(\d+(?:\.\d+)?)\s*units?',
             r'units?\s*:?\s*(\d+(?:\.\d+)?)',
             r'(\d+(?:\.\d+)?)\s*u'
         ]
-
+        
         for pattern in unit_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1)
-
+        
+        # Look in individual lines
+        for line in lines:
+            if 'unit' in line.lower():
+                match = re.search(r'(\d+(?:\.\d+)?)', line)
+                if match:
+                    return match.group(1)
+        
         return None
 
-    def _extract_game_time(self, text: str) -> Optional[str]:
-        """Extract game time from text."""
+    def _extract_game_time_improved(self, text: str, lines: list) -> Optional[str]:
+        """Extract game time with improved logic."""
         import re
-
+        
         # Look for time patterns
         time_patterns = [
             r'(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))',
             r'(\d{1,2}:\d{2})',
             r'(\d{1,2}:\d{2}\s*EST)'
         ]
-
+        
         for pattern in time_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1)
-
+        
+        # Look in individual lines
+        for line in lines:
+            if any(time_word in line.lower() for time_word in ['am', 'pm', 'est', 'pst']):
+                match = re.search(r'(\d{1,2}:\d{2})', line)
+                if match:
+                    return match.group(1)
+        
         return None
+
+    def _clean_team_name(self, team_name: str) -> str:
+        """Clean and normalize team names."""
+        # Remove common prefixes/suffixes
+        team_name = team_name.strip()
+        
+        # Map common abbreviations to full names
+        team_mapping = {
+            'sox': 'Boston Red Sox',
+            'red sox': 'Boston Red Sox',
+            'bos': 'Boston Red Sox',
+            'giants': 'San Francisco Giants',
+            'sf': 'San Francisco Giants',
+            'san fra': 'San Francisco Giants',
+            'san fran': 'San Francisco Giants',
+            'yankees': 'New York Yankees',
+            'nyy': 'New York Yankees',
+            'dodgers': 'Los Angeles Dodgers',
+            'lad': 'Los Angeles Dodgers',
+            'astros': 'Houston Astros',
+            'hou': 'Houston Astros',
+            'braves': 'Atlanta Braves',
+            'atl': 'Atlanta Braves',
+            'cubs': 'Chicago Cubs',
+            'chc': 'Chicago Cubs',
+            'white sox': 'Chicago White Sox',
+            'chw': 'Chicago White Sox',
+            'mets': 'New York Mets',
+            'nym': 'New York Mets',
+            'cardinals': 'St. Louis Cardinals',
+            'stl': 'St. Louis Cardinals',
+            'brewers': 'Milwaukee Brewers',
+            'mil': 'Milwaukee Brewers',
+            'twins': 'Minnesota Twins',
+            'min': 'Minnesota Twins',
+            'rays': 'Tampa Bay Rays',
+            'tb': 'Tampa Bay Rays',
+            'athletics': 'Oakland Athletics',
+            'oak': 'Oakland Athletics',
+            'rangers': 'Texas Rangers',
+            'tex': 'Texas Rangers',
+            'guardians': 'Cleveland Guardians',
+            'cle': 'Cleveland Guardians',
+            'reds': 'Cincinnati Reds',
+            'cin': 'Cincinnati Reds',
+            'royals': 'Kansas City Royals',
+            'kc': 'Kansas City Royals',
+            'rockies': 'Colorado Rockies',
+            'col': 'Colorado Rockies',
+            'diamondbacks': 'Arizona Diamondbacks',
+            'ari': 'Arizona Diamondbacks',
+            'mariners': 'Seattle Mariners',
+            'sea': 'Seattle Mariners',
+            'tigers': 'Detroit Tigers',
+            'det': 'Detroit Tigers',
+            'phillies': 'Philadelphia Phillies',
+            'phi': 'Philadelphia Phillies',
+            'pirates': 'Pittsburgh Pirates',
+            'pit': 'Pittsburgh Pirates',
+            'padres': 'San Diego Padres',
+            'sd': 'San Diego Padres',
+            'orioles': 'Baltimore Orioles',
+            'bal': 'Baltimore Orioles',
+            'blue jays': 'Toronto Blue Jays',
+            'tor': 'Toronto Blue Jays',
+            'nationals': 'Washington Nationals',
+            'was': 'Washington Nationals',
+            'angels': 'Los Angeles Angels',
+            'laa': 'Los Angeles Angels',
+            'marlins': 'Miami Marlins',
+            'mia': 'Miami Marlins'
+        }
+        
+        # Check if the team name matches any mapping
+        team_lower = team_name.lower()
+        for abbrev, full_name in team_mapping.items():
+            if team_lower == abbrev or team_lower in abbrev or abbrev in team_lower:
+                return full_name
+        
+        # Handle partial team names by checking if they start with known prefixes
+        if team_lower.startswith('san fra'):
+            return 'San Francisco Giants'
+        elif team_lower.startswith('san die'):
+            return 'San Diego Padres'
+        elif team_lower.startswith('los ang'):
+            return 'Los Angeles Dodgers'
+        elif team_lower.startswith('new york'):
+            return 'New York Yankees'
+        elif team_lower.startswith('chicago'):
+            return 'Chicago Cubs'
+        elif team_lower.startswith('boston'):
+            return 'Boston Red Sox'
+        
+        # If no mapping found, return the original name
+        return team_name
 
 
 # Create a global instance
