@@ -72,15 +72,15 @@ class BettingCommands(app_commands.Group):
         await interaction.response.defer(thinking=True)
         
         try:
-            # Reduce timeout to 10 seconds for complex operations
+            # Two-phase approach: immediate response + async enhancement
             try:
                 await asyncio.wait_for(self._process_command_async(
                     interaction, channel, image, unitsize
-                ), timeout=10.0)  # Reduced from 15.0 to 10.0 seconds
+                ), timeout=5.0)  # Reduced to 5 seconds since we post immediately
             except asyncio.TimeoutError:
-                logger.error("Command processing timed out after 10 seconds")
+                logger.error("Command processing timed out after 5 seconds")
                 await interaction.followup.send(
-                    "❌ Processing took too long. Please try again with a clearer image or check if the game is available.",
+                    "❌ Processing took too long. Please try again with a clearer image.",
                     ephemeral=True
                 )
                 
@@ -108,98 +108,136 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment, 
         unitsize: int
     ):
-        """Process the command asynchronously with aggressive timeout protection."""
-        # Validate inputs with timeout
-        if not image.content_type or not image.content_type.startswith('image/'):
-            await interaction.followup.send(
-                "❌ Please provide a valid image file.",
-                ephemeral=True
-            )
-            return
-
-        # Download image with timeout
+        """Process the command with two-phase approach: immediate response + async enhancement."""
+        
+        # PHASE 1: Immediate Response (under 3s)
         try:
-            image_bytes = await asyncio.wait_for(image.read(), timeout=1.5)  # Reduced from 2.0 to 1.5 seconds
+            # Download image with timeout
+            image_bytes = await asyncio.wait_for(image.read(), timeout=1.5)
         except asyncio.TimeoutError:
-            await interaction.followup.send(
-                "❌ Image download timed out. Please try again.",
-                ephemeral=True
-            )
+            await interaction.followup.send("❌ Image download timed out. Please try again.", ephemeral=True)
             return
         
         # Process the bet slip with timeout
         try:
             bet_data = await asyncio.wait_for(
                 self._analyze_betting_slip(image), 
-                timeout=2.0  # Reduced from 3.0 to 2.0 seconds
+                timeout=1.5  # Reduced for faster response
             )
         except asyncio.TimeoutError:
-            await interaction.followup.send(
-                "❌ Image processing timed out. Please try with a clearer image.",
-                ephemeral=True
-            )
+            await interaction.followup.send("❌ Image processing timed out. Please try with a clearer image.", ephemeral=True)
             return
-        
-        # Fetch live data with timeout
-        try:
-            mlb_data = await asyncio.wait_for(
-                self._fetch_mlb_data(bet_data), 
-                timeout=4.0  # Reduced from 8.0 to 4.0 seconds
-            )
-        except asyncio.TimeoutError:
-            logger.warning("MLB data fetch timed out, continuing with basic data")
-            mlb_data = {
-                'away_team_stats': {},
-                'home_team_stats': {},
-                'player_stats': {},
-                'game_info': {},
-                'live_data': None,
-                'is_historical': False
-            }
         
         # Get current date and time
         current_date = datetime.now().strftime("%m/%d/%y")
         current_time = datetime.now().strftime("%I:%M")
-
+        
         # Determine channel type and increment counter
         channel_type = self._get_channel_type(channel.id)
         if channel_type:
             self.pick_counters[channel_type] += 1
             self._save_counters()
-
-        # Generate the pick content with channel-specific template
+        
+        # Generate basic pick content (no API calls)
         try:
-            message_content = await asyncio.wait_for(
-                self._generate_channel_specific_content(
-                    bet_data, mlb_data, current_date, current_time, unitsize, channel_type
-                ),
-                timeout=1.5  # Reduced from 2.0 to 1.5 seconds
+            basic_content = await asyncio.wait_for(
+                self._generate_basic_content(bet_data, current_date, current_time, unitsize, channel_type),
+                timeout=0.5  # Very fast template lookup
             )
         except asyncio.TimeoutError:
-            await interaction.followup.send(
-                "❌ Message generation timed out. Please try again.",
-                ephemeral=True
-            )
+            await interaction.followup.send("❌ Template generation timed out. Please try again.", ephemeral=True)
             return
-
-        # Post to the specified channel
+        
+        # Post basic pick immediately
         try:
-            await asyncio.wait_for(
-                channel.send(content=message_content),
-                timeout=1.0  # Reduced from 2.0 to 1.0 seconds
+            message = await asyncio.wait_for(
+                channel.send(content=basic_content),
+                timeout=1.0
             )
         except asyncio.TimeoutError:
-            await interaction.followup.send(
-                "❌ Failed to post message. Please check channel permissions.",
-                ephemeral=True
-            )
+            await interaction.followup.send("❌ Failed to post message. Please check channel permissions.", ephemeral=True)
             return
-
+        
         # Confirm to the user
-        await interaction.followup.send(
-            f"✅ Pick posted successfully in {channel.mention}!",
-            ephemeral=True
-        )
+        await interaction.followup.send(f"✅ Pick posted successfully in {channel.mention}!", ephemeral=True)
+        
+        # PHASE 2: Async Enhancement (no timeout constraint)
+        asyncio.create_task(self._enhance_message_async(message, bet_data, channel_type))
+
+    async def _generate_basic_content(
+        self,
+        bet_data: dict,
+        current_date: str,
+        current_time: str,
+        unitsize: int,
+        channel_type: Optional[str]
+    ) -> str:
+        """Generate basic pick content without API calls."""
+        
+        # Format date and time
+        formatted_date = self._format_date_no_zeros(current_date)
+        formatted_time = self._format_time_no_zeros(current_time)
+        
+        # Get basic info
+        teams = bet_data.get('teams', ['TBD', 'TBD'])
+        description = bet_data.get('description', 'TBD')
+        odds = bet_data.get('odds', 'TBD')
+        units = bet_data.get('units', '1')
+        pick_type = "PARLAY" if bet_data.get('is_parlay') else "FREE PLAY"
+        
+        # Build basic header
+        header = f"**{pick_type} – {formatted_date}**"
+        if unitsize > 0:
+            header += f"  \n💰 **{unitsize} UNITS**"
+        
+        # Basic game info
+        game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({formatted_date} {formatted_time} EST)"
+        
+        # Basic bet info
+        bet_info = f"🎯 | Bet: {description}"
+        if odds != 'TBD':
+            bet_info += f" | Odds: {odds}"
+        if units != '1':
+            bet_info += f" | Units: {units}"
+        
+        # Basic analysis placeholder
+        analysis = "📊 Analysis: Loading live data and statistics..."
+        
+        # Combine content
+        content = f"{header}\n\n{game_info}\n{bet_info}\n\n{analysis}"
+        
+        return content
+
+    async def _enhance_message_async(
+        self,
+        message: discord.Message,
+        bet_data: dict,
+        channel_type: Optional[str]
+    ):
+        """Enhance the message with live data asynchronously."""
+        try:
+            logger.info("Starting async message enhancement")
+            
+            # Fetch live data (no timeout constraint)
+            mlb_data = await self._fetch_mlb_data(bet_data)
+            
+            # Get current date and time
+            current_date = datetime.now().strftime("%m/%d/%y")
+            current_time = datetime.now().strftime("%I:%M")
+            
+            # Generate enhanced content
+            enhanced_content = await self._generate_channel_specific_content(
+                bet_data, mlb_data, current_date, current_time, 0, channel_type
+            )
+            
+            # Edit the message with enhanced content
+            await message.edit(content=enhanced_content)
+            
+            logger.info("Message enhancement completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error in async message enhancement: {e}")
+            # Don't fail the original command if enhancement fails
 
     def _get_channel_type(self, channel_id: int) -> Optional[str]:
         """Determine the type of channel based on channel ID."""
