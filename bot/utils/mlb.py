@@ -12,6 +12,7 @@ import requests
 import json
 import re
 import asyncio
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,10 @@ class MLBDataFetcher:
         self.session.headers.update({
             'User-Agent': 'GotLockz Bot/1.0'
         })
+        
+        # Add caching
+        self._cache = {}
+        self._cache_timeout = 300  # 5 minutes
         
         # ESPN API endpoints
         self.espn_base_url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
@@ -85,7 +90,12 @@ class MLBDataFetcher:
         return name
 
     async def get_team_stats(self, team_name: str) -> Dict[str, Any]:
-        """Get team statistics from multiple sources."""
+        """Get team statistics from multiple sources with caching."""
+        cache_key = self._get_cache_key("team_stats", team_name)
+        cached_data = self._get_cached_data(cache_key)
+        if cached_data:
+            return cached_data
+
         try:
             resolved_name = self._resolve_team_name(team_name)
             # Primary: MLB Stats API
@@ -95,6 +105,7 @@ class MLBDataFetcher:
             if not team_stats:
                 team_stats = await self._get_team_stats_sportsipy(resolved_name)
             
+            self._set_cached_data(cache_key, team_stats)
             return team_stats
 
         except Exception as e:
@@ -102,7 +113,12 @@ class MLBDataFetcher:
             return {}
 
     async def get_player_stats(self, player_name: str) -> Dict[str, Any]:
-        """Get player statistics from multiple sources."""
+        """Get player statistics from multiple sources with caching."""
+        cache_key = self._get_cache_key("player_stats", player_name)
+        cached_data = self._get_cached_data(cache_key)
+        if cached_data:
+            return cached_data
+
         try:
             # Primary: MLB Stats API
             player_stats = await self._get_player_stats_mlb(player_name)
@@ -111,6 +127,7 @@ class MLBDataFetcher:
             if not player_stats:
                 player_stats = await self._get_player_stats_sportsipy(player_name)
             
+            self._set_cached_data(cache_key, player_stats)
             return player_stats
 
         except Exception as e:
@@ -622,6 +639,24 @@ class MLBDataFetcher:
         except Exception as e:
             logger.error(f"Error fetching ESPN team stats: {e}")
             return {}
+
+    def _get_cache_key(self, method: str, *args) -> str:
+        """Generate cache key for method and arguments."""
+        return f"{method}:{':'.join(str(arg) for arg in args)}"
+
+    def _get_cached_data(self, cache_key: str) -> Optional[Any]:
+        """Get data from cache if not expired."""
+        if cache_key in self._cache:
+            data, timestamp = self._cache[cache_key]
+            if time.time() - timestamp < self._cache_timeout:
+                return data
+            else:
+                del self._cache[cache_key]
+        return None
+
+    def _set_cached_data(self, cache_key: str, data: Any):
+        """Store data in cache with timestamp."""
+        self._cache[cache_key] = (data, time.time())
 
 
 # Global instance
