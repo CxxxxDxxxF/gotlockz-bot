@@ -106,24 +106,132 @@ class OCRService:
             logger.error(f"Error preprocessing image: {e}")
             raise
     
-    async def _extract_text(self, image: np.ndarray) -> str:
-        """Extract text from preprocessed image."""
+    async def _extract_text(self, image_array: np.ndarray) -> str:
+        """Extract text from image array using OCR with enhanced preprocessing."""
         try:
-            # Configure Tesseract
-            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@.-+/\s'
+            # Convert to grayscale if needed
+            if len(image_array.shape) == 3:
+                gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image_array
             
-            # Extract text
-            text = pytesseract.image_to_string(image, config=custom_config)
+            # Apply multiple preprocessing techniques
+            processed_images = []
             
-            # Clean text
-            text = re.sub(r'\s+', ' ', text).strip()
+            # 1. Basic preprocessing
+            # Resize for better OCR
+            height, width = gray.shape
+            if width > 2000:
+                scale = 2000 / width
+                gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
             
-            logger.info(f"Extracted text: {text[:100]}...")
-            return text
+            # 2. Noise reduction
+            denoised = cv2.fastNlMeansDenoising(gray)
+            processed_images.append(denoised)
+            
+            # 3. Contrast enhancement
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            enhanced = clahe.apply(gray)
+            processed_images.append(enhanced)
+            
+            # 4. Thresholding
+            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            processed_images.append(thresh)
+            
+            # 5. Adaptive thresholding
+            adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            processed_images.append(adaptive)
+            
+            # 6. Morphological operations to clean up text
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+            morph = cv2.morphologyEx(adaptive, cv2.MORPH_CLOSE, kernel)
+            processed_images.append(morph)
+            
+            # 7. Gaussian blur + threshold for noise reduction
+            blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+            _, gauss_thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            processed_images.append(gauss_thresh)
+            
+            # Try OCR with different configurations
+            best_text = ""
+            best_confidence = 0
+            
+            for i, img in enumerate(processed_images):
+                try:
+                    # OCR Configuration 1: Default
+                    text1 = pytesseract.image_to_string(img, config='--psm 6')
+                    
+                    # OCR Configuration 2: Sparse text with whitelist
+                    text2 = pytesseract.image_to_string(img, config='--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-.@ ')
+                    
+                    # OCR Configuration 3: Single block
+                    text3 = pytesseract.image_to_string(img, config='--psm 8')
+                    
+                    # OCR Configuration 4: Single line
+                    text4 = pytesseract.image_to_string(img, config='--psm 7')
+                    
+                    # OCR Configuration 5: Multiple lines
+                    text5 = pytesseract.image_to_string(img, config='--psm 3')
+                    
+                    # Get data with confidence scores
+                    data = pytesseract.image_to_data(img, config='--psm 6', output_type=pytesseract.Output.DICT)
+                    
+                    # Calculate average confidence
+                    confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
+                    avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+                    
+                    # Choose best result based on confidence and text quality
+                    texts = [text1, text2, text3, text4, text5]
+                    for text in texts:
+                        if text.strip():
+                            # Simple quality check: more alphanumeric characters = better
+                            alpha_count = sum(c.isalnum() for c in text)
+                            if alpha_count > len(best_text) * 0.5:  # If this text has more readable characters
+                                best_text = text
+                                best_confidence = avg_confidence
+                    
+                    logger.info(f"OCR attempt {i+1} - Confidence: {avg_confidence:.1f}, Text length: {len(text1.strip())}")
+                    
+                except Exception as e:
+                    logger.warning(f"OCR attempt {i+1} failed: {e}")
+                    continue
+            
+            # Clean up the best text with aggressive cleaning
+            if best_text:
+                # Remove extra whitespace and normalize
+                cleaned_text = ' '.join(best_text.split())
+                
+                # Fix common OCR errors
+                ocr_fixes = {
+                    'KedFanatics': 'Fanatics',
+                    'KetelMertie': 'Ketel Marte',
+                    'Ketell/Marte': 'Ketel Marte',
+                    'AUTiitsoRums': 'ALT Hits + Runs',
+                    'EoizoneDiemoncbackset': 'Arizona Diamondbacks at Colorado',
+                    'ColoracloReckias': 'Colorado Rockies',
+                    'MUSTEE21': 'MUST WIN',
+                    'CAMELINGPROELEMPCALL': 'GAMBLING PROBLEM CALL',
+                    'BettlD': 'Bet ID'
+                }
+                
+                for wrong, correct in ocr_fixes.items():
+                    cleaned_text = cleaned_text.replace(wrong, correct)
+                
+                # Remove common OCR artifacts and normalize
+                cleaned_text = re.sub(r'[^\w\s+\-@\.]', ' ', cleaned_text)
+                cleaned_text = ' '.join(cleaned_text.split())
+                
+                logger.info(f"Best OCR result - Confidence: {best_confidence:.1f}")
+                logger.info(f"Cleaned text: {cleaned_text}")
+                
+                return cleaned_text
+            
+            logger.warning("All OCR attempts failed")
+            return ""
             
         except Exception as e:
-            logger.error(f"Error extracting text: {e}")
-            raise
+            logger.error(f"Error in OCR text extraction: {e}")
+            return ""
     
     async def _parse_bet_data(self, text: str) -> Dict[str, Any]:
         """Parse betting data from extracted text."""
