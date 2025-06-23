@@ -1,0 +1,1 @@
+# GotLockz Bot V2 - Config Package 

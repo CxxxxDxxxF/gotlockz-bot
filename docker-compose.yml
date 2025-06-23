@@ -2,23 +2,23 @@ version: '3.8'
 
 services:
   gotlockz-bot:
-    build: .
-    container_name: gotlockz-discord-bot
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: gotlockz-bot-v2
     restart: unless-stopped
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - VIP_CHANNEL_ID=${VIP_CHANNEL_ID}
-      - FREE_CHANNEL_ID=${FREE_CHANNEL_ID}
-      - LOTTO_CHANNEL_ID=${LOTTO_CHANNEL_ID}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GUILD_ID=${GUILD_ID}
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
     volumes:
-      - ./bot/data:/app/bot/data
       - ./logs:/app/logs
-    networks:
-      - gotlockz-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,280 +1,133 @@
-# 🏆 GotLockz Discord Bot
+# 🏆 GotLockz Bot V2
 
-**Professional Discord bot for betting analysis and pick management with OCR integration and live MLB data.**
+**Modern Discord bot for betting pick management with OCR, live stats, and AI analysis.**
 
 ## 🚀 Features
 
-### Core Betting Commands
-- **`/betting vip`** - Post VIP picks with intelligent analysis
-- **`/betting free`** - Post free picks with live stats
-- **`/lotto-ticket-bets`** - Post lotto ticket picks with multiple selections
+### Core Functionality
+- **OCR Image Processing** - Extract betting data from slip images
+- **Live MLB Stats** - Real-time team and player statistics
+- **AI Analysis** - Contextual insights using OpenAI GPT-4
+- **Two-Phase Processing** - Immediate response + async enhancement
+- **Cloud Deployment** - Render-ready with health monitoring
 
-### Advanced Features
-- **🔍 OCR Integration** - Automatically reads betting slip images
-- **📊 Live MLB Data** - Fetches real-time player and team statistics
-- **🤖 AI Analysis** - Generates contextual analysis based on live data
-- **📱 Plain-Text Templates** - Clean, consistent formatting
-- **🔄 Channel Routing** - Automatically posts to appropriate channels
-- **📈 Pick Counters** - Tracks and displays pick statistics
-
-### Bot Management
-- **`/info ping`** - Test bot responsiveness
-- **`/info status`** - Check bot and system status
-- **`/info stats`** - View pick statistics and usage
-- **`/info force_sync`** - Force sync slash commands (Admin only)
+### Commands
+- `/pick` - Post a betting pick with image analysis
+- `/stats` - Get live team/player statistics
+- `/status` - Bot health and system status
+- `/help` - Command documentation
 
 ## 🏗️ Architecture
 
 ```
-gotlockz-bot/
-├── bot/                    # Main bot source code
-│   ├── main.py            # Bot entry point
-│   ├── config.py          # Configuration management
-│   ├── commands/          # Command modules
-│   │   ├── betting.py     # Betting commands
-│   │   └── info.py        # Info/utility commands
-│   ├── utils/             # Utility modules
-│   │   ├── ocr.py         # OCR processing
-│   │   ├── mlb.py         # MLB data integration
-│   │   └── ...            # Other utilities
-│   ├── services/          # External integrations
-│   ├── templates/         # Text templates
-│   └── data/              # Persistent data
-├── tests/                 # Test suite
-├── scripts/               # Deployment scripts
-├── dashboard/             # Web dashboard
-├── Dockerfile             # Production container
-├── docker-compose.yml     # Container orchestration
-└── requirements.txt       # Python dependencies
+gotlockz-v2/
+├── src/
+│   ├── bot/
+│   │   ├── main.py          # Bot entry point
+│   │   ├── commands/        # Discord commands
+│   │   ├── services/        # External integrations
+│   │   └── utils/           # Utilities
+│   ├── api/                 # Health check endpoints
+│   └── config/              # Configuration
+├── tests/                   # Test suite
+├── docker/                  # Container files
+├── requirements.txt         # Dependencies
+└── README.md               # This file
 ```
 
-## 🛠️ Installation
+## 🛠️ Tech Stack
 
-### Prerequisites
-- Python 3.11+
-- Discord Bot Token
-- Tesseract OCR (for image processing)
+- **Language**: Python 3.11+
+- **Framework**: Discord.py 2.3+
+- **OCR**: Tesseract + OpenCV
+- **APIs**: ESPN, MLB Stats, OpenAI
+- **Deployment**: Render + Docker
+- **Monitoring**: Health checks + logging
 
-### Quick Start
+## 🚀 Quick Start
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd gotlockz-bot
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Set up environment variables**
-   ```bash
-   cp env.example .env
-   # Edit .env with your Discord token and channel IDs
-   ```
-
-4. **Run the bot**
-   ```bash
-   python bot/main.py
-   ```
-
-### Docker Deployment
-
-1. **Build and run with Docker Compose**
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Or build manually**
-   ```bash
-   docker build -t gotlockz-bot .
-   docker run -d --env-file .env gotlockz-bot
-   ```
-
-## ⚙️ Configuration
-
-### Required Environment Variables
-
+### 1. Setup Environment
 ```bash
-# Discord Bot Token (Required)
-DISCORD_TOKEN=your_discord_bot_token_here
+# Clone repository
+git clone <your-repo>
+cd gotlockz-v2
 
-# Channel IDs (Required)
-VIP_CHANNEL_ID=1234567890123456789
-FREE_CHANNEL_ID=1234567890123456789
-LOTTO_CHANNEL_ID=1234567890123456789
-```
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-### Optional Configuration
-
-```bash
-# Environment
-ENVIRONMENT=production
-LOG_LEVEL=INFO
-
-# Advanced Features
-OPENAI_API_KEY=sk-your_openai_api_key_here
-GUILD_ID=1234567890123456789
-OWNER_ID=1234567890123456789
-```
-
-## 📋 Usage
-
-### Posting Picks
-
-1. **VIP Pick**
-   ```
-   /betting vip
-   Image: [Upload betting slip]
-   Context: [Optional analysis notes]
-   ```
-
-2. **Free Pick**
-   ```
-   /betting free
-   Image: [Upload betting slip]
-   Context: [Optional analysis notes]
-   ```
-
-3. **Lotto Ticket**
-   ```
-   /lotto-ticket-bets
-   Image: [Upload betting slip]
-   Context: [Optional analysis notes]
-   ```
-
-### Bot Management
-
-- **Check Status**: `/info status`
-- **View Statistics**: `/info stats`
-- **Test Connection**: `/info ping`
-- **Sync Commands**: `/info force_sync` (Admin only)
-
-## 🧪 Testing
-
-### Run All Tests
-```bash
-pytest tests/
-```
-
-### Run Specific Test Suite
-```bash
-pytest tests/test_betting_commands.py
-pytest tests/test_enhanced_commands.py
-```
-
-### Test Coverage
-```bash
-pytest --cov=bot tests/
-```
-
-## 🚀 Deployment
-
-### Render (Recommended)
-1. Connect your GitHub repository
-2. Set environment variables in Render dashboard
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `python bot/main.py`
-
-### Docker
-```bash
-# Production
-docker-compose -f docker-compose.yml up -d
-
-# Development
-docker-compose -f docker-compose.dev.yml up
-```
-
-### Manual Deployment
-```bash
 # Install dependencies
 pip install -r requirements.txt
+```
 
-# Set environment variables
-export DISCORD_TOKEN=your_token
-export VIP_CHANNEL_ID=your_channel_id
+### 2. Configuration
+```bash
+# Copy environment template
+cp .env.example .env
 
-# Run bot
-python bot/main.py
+# Edit with your tokens
+DISCORD_TOKEN=your_discord_token
+OPENAI_API_KEY=your_openai_key
+```
+
+### 3. Run Bot
+```bash
+python src/bot/main.py
+```
+
+## 📦 Docker Deployment
+
+```bash
+# Build and run
+docker build -t gotlockz-v2 .
+docker run --env-file .env gotlockz-v2
+
+# Or with docker-compose
+docker-compose up -d
 ```
 
 ## 🔧 Development
 
 ### Project Structure
-- **`bot/commands/`** - Command implementations
-- **`bot/utils/`** - Utility functions and helpers
-- **`bot/services/`** - External API integrations
-- **`tests/`** - Unit and integration tests
-- **`scripts/`** - Deployment and utility scripts
+- **Clean Architecture** - Separation of concerns
+- **Type Hints** - Full type safety
+- **Async/Await** - Non-blocking operations
+- **Error Handling** - Graceful degradation
+- **Testing** - Comprehensive test suite
 
-### Adding New Commands
-1. Create command in `bot/commands/`
-2. Add to bot setup in `bot/main.py`
-3. Write tests in `tests/`
-4. Update documentation
+### Key Principles
+1. **Reliability First** - Never timeout or crash
+2. **Performance** - Fast response times
+3. **Maintainability** - Clean, documented code
+4. **Scalability** - Cloud-ready architecture
 
-### Code Style
-- Follow PEP 8
-- Use type hints
-- Add docstrings
-- Write unit tests
-- Use async/await for I/O operations
+## 📊 Performance Targets
 
-## 📊 Monitoring
+- **Command Response**: < 3 seconds (Discord requirement)
+- **OCR Processing**: < 2 seconds
+- **API Calls**: < 1 second each
+- **Uptime**: 99.9% availability
 
-### Logs
-- Application logs: `bot/data/bot.log`
-- Error logs: `bot/data/error_logs.txt`
-- Pick counters: `bot/data/pick_counters.json`
+## 🎯 Roadmap
 
-### Health Checks
-- Bot responsiveness: `/info ping`
-- System status: `/info status`
-- Docker health check included
+### Phase 1: Core Bot ✅
+- [x] Basic Discord integration
+- [x] OCR image processing
+- [x] Live stats integration
+- [x] AI analysis
 
-## 🔒 Security
+### Phase 2: Enhancement 🚧
+- [ ] Database integration
+- [ ] Caching layer
+- [ ] Advanced analytics
+- [ ] Team dashboard
 
-- Non-root Docker user
-- Environment variable configuration
-- Input validation and sanitization
-- Error handling and logging
-- Rate limiting (Discord enforced)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📝 Changelog
-
-### v2.0.0 (Current)
-- ✅ Professional code structure
-- ✅ Enhanced OCR integration
-- ✅ Live MLB data fetching
-- ✅ Plain-text templates
-- ✅ Docker deployment
-- ✅ Comprehensive testing
-- ✅ Production-ready error handling
-
-### v1.0.0
-- Basic Discord bot functionality
-- Simple betting commands
-- Embed-based responses
-
-## 📞 Support
-
-- **Issues**: Create a GitHub issue
-- **Discord**: Join our support server
-- **Email**: support@gotlockz.com
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Phase 3: Enterprise 🎯
+- [ ] Multi-server support
+- [ ] Advanced monitoring
+- [ ] Performance optimization
+- [ ] Security hardening
 
 ---
 
-**Built with ❤️ by the GotLockz Team**
+**Built with ❤️ for the GotLockz team**
