@@ -1187,36 +1187,43 @@ class MLBDataFetcher:
             try:
                 espn_data = await asyncio.wait_for(
                     self.get_live_scores(team_name),
-                    timeout=1.5  # Very short timeout for fastest source
+                    timeout=1.0  # Reduced from 1.5 to 1.0 seconds
                 )
                 if espn_data and espn_data.get('live_games'):
                     espn_data['source'] = 'espn'
                     return espn_data
             except asyncio.TimeoutError:
-                logger.warning("ESPN API timed out, trying next source")
-            
-            # Try MLB Stats API - with timeout
+                logger.warning("ESPN API timeout, trying MLB Stats API")
+            except Exception as e:
+                logger.warning(f"ESPN API failed: {e}")
+
+            # Try MLB Stats API second - with timeout
             try:
                 mlb_data = await asyncio.wait_for(
                     self.get_live_scores(team_name),
-                    timeout=1.5  # Very short timeout for second fastest source
+                    timeout=1.0  # Reduced from 1.5 to 1.0 seconds
                 )
                 if mlb_data and mlb_data.get('live_games'):
-                    mlb_data['source'] = 'mlb_stats_api'
+                    mlb_data['source'] = 'mlb_stats'
                     return mlb_data
             except asyncio.TimeoutError:
-                logger.warning("MLB Stats API timed out, trying scraping")
-            
-            # Fallback to MLB.com scraping - with timeout
+                logger.warning("MLB Stats API timeout, trying scraping")
+            except Exception as e:
+                logger.warning(f"MLB Stats API failed: {e}")
+
+            # Try MLB.com scraping as final fallback - with timeout
             try:
                 scraped_data = await asyncio.wait_for(
                     self.scrape_mlb_live_stats(team_name),
-                    timeout=2.0  # Slightly longer timeout for scraping
+                    timeout=2.0  # Reduced from 3.0 to 2.0 seconds
                 )
                 if scraped_data:
+                    scraped_data['source'] = 'mlb_scraping'
                     return scraped_data
             except asyncio.TimeoutError:
-                logger.warning("MLB.com scraping timed out")
+                logger.warning("MLB scraping timeout")
+            except Exception as e:
+                logger.warning(f"MLB scraping failed: {e}")
             
             # Return empty result if all sources fail
             return {'live_games': [], 'source': 'none'}

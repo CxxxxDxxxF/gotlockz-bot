@@ -72,13 +72,13 @@ class BettingCommands(app_commands.Group):
         await interaction.response.defer(thinking=True)
         
         try:
-            # Increase timeout to 15 seconds for complex operations (reduced from 25)
+            # Reduce timeout to 10 seconds for complex operations
             try:
                 await asyncio.wait_for(self._process_command_async(
                     interaction, channel, image, unitsize
-                ), timeout=15.0)  # Reduced from 25.0 to 15.0 seconds
+                ), timeout=10.0)  # Reduced from 15.0 to 10.0 seconds
             except asyncio.TimeoutError:
-                logger.error("Command processing timed out after 15 seconds")
+                logger.error("Command processing timed out after 10 seconds")
                 await interaction.followup.send(
                     "❌ Processing took too long. Please try again with a clearer image or check if the game is available.",
                     ephemeral=True
@@ -119,7 +119,7 @@ class BettingCommands(app_commands.Group):
 
         # Download image with timeout
         try:
-            image_bytes = await asyncio.wait_for(image.read(), timeout=2.0)  # Reduced from 3.0 to 2.0 seconds
+            image_bytes = await asyncio.wait_for(image.read(), timeout=1.5)  # Reduced from 2.0 to 1.5 seconds
         except asyncio.TimeoutError:
             await interaction.followup.send(
                 "❌ Image download timed out. Please try again.",
@@ -131,7 +131,7 @@ class BettingCommands(app_commands.Group):
         try:
             bet_data = await asyncio.wait_for(
                 self._analyze_betting_slip(image), 
-                timeout=3.0  # Reduced from 4.0 to 3.0 seconds
+                timeout=2.0  # Reduced from 3.0 to 2.0 seconds
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -144,7 +144,7 @@ class BettingCommands(app_commands.Group):
         try:
             mlb_data = await asyncio.wait_for(
                 self._fetch_mlb_data(bet_data), 
-                timeout=8.0  # Reduced from 5.0 to 8.0 seconds (but this includes the 6s MLB timeout)
+                timeout=4.0  # Reduced from 8.0 to 4.0 seconds
             )
         except asyncio.TimeoutError:
             logger.warning("MLB data fetch timed out, continuing with basic data")
@@ -153,7 +153,8 @@ class BettingCommands(app_commands.Group):
                 'home_team_stats': {},
                 'player_stats': {},
                 'game_info': {},
-                'live_data': None
+                'live_data': None,
+                'is_historical': False
             }
         
         # Get current date and time
@@ -172,7 +173,7 @@ class BettingCommands(app_commands.Group):
                 self._generate_channel_specific_content(
                     bet_data, mlb_data, current_date, current_time, unitsize, channel_type
                 ),
-                timeout=2.0  # Reduced from 3.0 to 2.0 seconds
+                timeout=1.5  # Reduced from 2.0 to 1.5 seconds
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -185,7 +186,7 @@ class BettingCommands(app_commands.Group):
         try:
             await asyncio.wait_for(
                 channel.send(content=message_content),
-                timeout=2.0  # Reduced from 3.0 to 2.0 seconds
+                timeout=1.0  # Reduced from 2.0 to 1.0 seconds
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -792,7 +793,7 @@ class BettingCommands(app_commands.Group):
             try:
                 live_stats_data = await asyncio.wait_for(
                     mlb_fetcher.get_live_stats_with_fallback(teams[0]),
-                    timeout=3.0  # Reduced from no timeout to 3 seconds
+                    timeout=2.0  # Reduced from 3.0 to 2.0 seconds
                 )
             except asyncio.TimeoutError:
                 logger.warning("Live stats fetch timed out, using empty data")
@@ -809,7 +810,7 @@ class BettingCommands(app_commands.Group):
             try:
                 results = await asyncio.wait_for(
                     asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=6.0  # Reduced from 12.0 to 6.0 seconds
+                    timeout=3.0  # Reduced from 6.0 to 3.0 seconds
                 )
                 away_team_stats, home_team_stats, player_stats, game_info = results
                 if isinstance(away_team_stats, Exception):
