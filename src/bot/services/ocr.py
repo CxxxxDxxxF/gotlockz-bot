@@ -59,11 +59,12 @@ class OCRService:
             
             # Extract text
             text = await self._extract_text(processed_image)
+            logger.info(f"OCR raw text: {text}")  # Log the raw OCR output
             
             # Parse betting data
             bet_data = await self._parse_bet_data(text)
+            logger.info(f"Parsed bet data: {bet_data}")  # Log the parsed bet data
             
-            logger.info(f"Extracted bet data: {bet_data}")
             return bet_data
             
         except Exception as e:
@@ -151,7 +152,8 @@ class OCRService:
                 bet_data['description'] = description
             
             # Check if parlay
-            if 'parlay' in text.lower() or 'parlay' in description.lower():
+            desc = bet_data['description']
+            if (isinstance(text, str) and 'parlay' in text.lower()) or (isinstance(desc, str) and 'parlay' in desc.lower()):
                 bet_data['is_parlay'] = True
             
             return bet_data
@@ -165,18 +167,21 @@ class OCRService:
         try:
             # Look for team patterns
             team_patterns = [
-                r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+@\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
-                r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+vs\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
-                r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+at\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'
+                r'([A-Za-z ]+) at ([A-Za-z ]+)',  # e.g., Arizona Diamondbacks at Colorado Rockies
+                r'([A-Za-z ]+) vs ([A-Za-z ]+)',
+                r'([A-Za-z ]+) @ ([A-Za-z ]+)',
             ]
             
             for pattern in team_patterns:
                 match = re.search(pattern, text)
                 if match:
-                    team1 = self._resolve_team_name(match.group(1))
-                    team2 = self._resolve_team_name(match.group(2))
+                    team1_raw = match.group(1)
+                    team2_raw = match.group(2)
+                    team1 = self._resolve_team_name(team1_raw.strip() if isinstance(team1_raw, str) else "TBD")
+                    team2 = self._resolve_team_name(team2_raw.strip() if isinstance(team2_raw, str) else "TBD")
+                    logger.info(f"Extracted teams: {team1}, {team2}")
                     return [team1, team2]
-            
+            logger.warning("No teams matched in OCR text.")
             return None
             
         except Exception as e:
@@ -196,8 +201,9 @@ class OCRService:
             for pattern in odds_patterns:
                 match = re.search(pattern, text)
                 if match:
-                    return match.group(1)
-            
+                    odds_val = match.group(1)
+                    if isinstance(odds_val, str):
+                        return odds_val
             return None
             
         except Exception as e:
@@ -207,38 +213,37 @@ class OCRService:
     def _extract_description(self, text: str) -> Optional[str]:
         """Extract bet description from text."""
         try:
-            # Look for common bet types
-            bet_patterns = [
-                r'(Over\s+\d+\.?\d*)',
-                r'(Under\s+\d+\.?\d*)',
-                r'([A-Z][a-z]+\s+[A-Z][a-z]+\s+Over\s+\d+\.?\d*)',
-                r'([A-Z][a-z]+\s+[A-Z][a-z]+\s+Under\s+\d+\.?\d*)',
-                r'([A-Z][a-z]+\s+[A-Z][a-z]+\s+[+-]\d+\.?\d*)'
-            ]
-            
-            for pattern in bet_patterns:
-                match = re.search(pattern, text)
-                if match:
-                    return match.group(1)
-            
+            # Try to find a line with 'Over' or 'Under' or similar
+            for line in text.splitlines():
+                if not isinstance(line, str) or not line:
+                    logger.debug(f"Skipping line in description extraction (not a string or empty): {repr(line)} type={type(line)}")
+                    continue
+                try:
+                    line_lower = line.lower()
+                except Exception as e:
+                    logger.error(f"Error calling lower() on line: {repr(line)} type={type(line)}: {e}")
+                    continue
+                if "over" in line_lower or "under" in line_lower:
+                    return line.strip()
+            # Fallback: return first non-empty line
+            lines = [l for l in text.splitlines() if isinstance(l, str) and l.strip()]
+            if lines:
+                return lines[0].strip()
             return None
-            
         except Exception as e:
             logger.error(f"Error extracting description: {e}")
             return None
     
     def _resolve_team_name(self, name: str) -> str:
-        """Resolve team abbreviations to full names."""
-        name_upper = name.upper()
-        if name_upper in self.team_abbreviations:
-            return self.team_abbreviations[name_upper]
-        
-        # Check if name contains team name
-        for abbr, full_name in self.team_abbreviations.items():
-            if name_upper in full_name.upper():
-                return full_name
-        
-        return name
+        """Resolve team name from abbreviation or full name."""
+        try:
+            if not name or not isinstance(name, str):
+                return "TBD"
+            name_upper = name.upper().strip()
+            return self.team_abbreviations.get(name_upper, name.title().strip())
+        except Exception as e:
+            logger.error(f"Error resolving team name: {e}")
+            return "TBD"
     
     def _get_default_bet_data(self) -> Dict[str, Any]:
         """Get default bet data when parsing fails."""
