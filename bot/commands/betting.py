@@ -711,6 +711,83 @@ class BettingCommands(app_commands.Group):
             player = bet_data.get('player', 'TBD')
             game_date = bet_data.get('game_date')  # Get date from parsed bet data
 
+            # Check if this is a historical game (past date)
+            is_historical = False
+            if game_date:
+                try:
+                    is_historical = await mlb_fetcher.is_historical_game(teams[0], teams[1], game_date)
+                except Exception as e:
+                    logger.warning(f"Error checking if game is historical: {e}")
+                    is_historical = False
+
+            if is_historical:
+                logger.info(f"Processing historical game from {game_date}")
+                if game_date:
+                    return await self._fetch_historical_mlb_data(bet_data, str(game_date))
+                else:
+                    logger.warning("Historical game detected but no date provided")
+                    return await self._fetch_live_mlb_data(bet_data)
+            else:
+                logger.info("Processing current/live game")
+                return await self._fetch_live_mlb_data(bet_data)
+
+        except Exception as e:
+            logger.error(f"Error fetching MLB data: {e}")
+            return {
+                'away_team_stats': {},
+                'home_team_stats': {},
+                'player_stats': {},
+                'game_info': {},
+                'live_data': None,
+                'is_historical': False
+            }
+
+    async def _fetch_historical_mlb_data(self, bet_data: dict, game_date: str) -> dict:
+        """Fetch historical MLB data for past games."""
+        try:
+            teams = bet_data.get('teams', ['TBD', 'TBD'])
+            player = bet_data.get('player', 'TBD')
+
+            # Get historical game data
+            historical_game = await mlb_fetcher.get_historical_game_data(teams[0], teams[1], game_date)
+            
+            # Get historical team stats
+            away_team_stats = await mlb_fetcher.get_historical_team_stats(teams[0], game_date)
+            home_team_stats = await mlb_fetcher.get_historical_team_stats(teams[1], game_date)
+            
+            # Get player stats (current as fallback)
+            player_stats = await mlb_fetcher.get_player_stats(player)
+
+            return {
+                'away_team_stats': away_team_stats,
+                'home_team_stats': home_team_stats,
+                'player_stats': player_stats,
+                'game_info': historical_game,
+                'live_data': None,
+                'is_historical': True,
+                'historical_game': historical_game,
+                'game_date': game_date
+            }
+
+        except Exception as e:
+            logger.error(f"Error fetching historical MLB data: {e}")
+            return {
+                'away_team_stats': {},
+                'home_team_stats': {},
+                'player_stats': {},
+                'game_info': {},
+                'live_data': None,
+                'is_historical': True,
+                'game_date': game_date
+            }
+
+    async def _fetch_live_mlb_data(self, bet_data: dict) -> dict:
+        """Fetch live MLB data for current/future games."""
+        try:
+            teams = bet_data.get('teams', ['TBD', 'TBD'])
+            player = bet_data.get('player', 'TBD')
+            game_date = bet_data.get('game_date')
+
             # Use new fallback method for live stats (includes scraping) - REDUCED TIMEOUT
             try:
                 live_stats_data = await asyncio.wait_for(
@@ -760,16 +837,18 @@ class BettingCommands(app_commands.Group):
                 'home_team_stats': home_team_stats,
                 'player_stats': player_stats,
                 'game_info': game_info,
-                'live_data': live_stats_data
+                'live_data': live_stats_data,
+                'is_historical': False
             }
         except Exception as e:
-            logger.error(f"Error fetching MLB data: {e}")
+            logger.error(f"Error fetching live MLB data: {e}")
             return {
                 'away_team_stats': {},
                 'home_team_stats': {},
                 'player_stats': {},
                 'game_info': {},
-                'live_data': None
+                'live_data': None,
+                'is_historical': False
             }
 
     async def _generate_analysis(
@@ -789,12 +868,35 @@ class BettingCommands(app_commands.Group):
             description = bet_data.get('description', 'TBD') or 'TBD'
             live_scores = mlb_data.get('live_scores', []) or []
             teams = bet_data.get('teams', ['TBD', 'TBD'])
+            
+            # Check if this is a historical game
+            is_historical = mlb_data.get('is_historical', False)
+            historical_game = mlb_data.get('historical_game', {})
+            game_date = mlb_data.get('game_date', '')
 
             # Build comprehensive analysis
             analysis_parts = []
 
-            # Live Game Status
-            if live_scores:
+            # Historical Game Context
+            if is_historical and historical_game:
+                result = historical_game.get('result', 'Unknown')
+                away_score = historical_game.get('away_score', 0)
+                home_score = historical_game.get('home_score', 0)
+                venue = historical_game.get('venue', '')
+                
+                analysis_parts.append(f"📅 HISTORICAL GAME ({game_date}): {result}")
+                if venue:
+                    analysis_parts.append(f"🏟️ Played at {venue}")
+                
+                # Add historical context
+                if away_score > 0 or home_score > 0:
+                    analysis_parts.append(f"📊 Final Score: {away_score}-{home_score}")
+                
+                # Add historical analysis note
+                analysis_parts.append("💡 This analysis is based on historical game data and current team/player statistics.")
+
+            # Live Game Status (only for current games)
+            elif not is_historical and live_scores:
                 for game in live_scores:
                     away_match = away_team.lower() in game.get('away_team', '').lower()
                     home_match = home_team.lower() in game.get('home_team', '').lower()
@@ -879,12 +981,12 @@ class BettingCommands(app_commands.Group):
             elif away_team != 'TBD' and home_team != 'TBD':
                 analysis_parts.append(f"🏟️ {away_team} @ {home_team}")
 
-            # Recent Team Trends
-            if trends and trends != 'Data unavailable':
+            # Recent Team Trends (only for current games)
+            if not is_historical and trends and trends != 'Data unavailable':
                 analysis_parts.append(f"📊 {trends}")
 
-            # Weather Impact Analysis
-            if weather and weather != 'TBD':
+            # Weather Impact Analysis (only for current games)
+            if not is_historical and weather and weather != 'TBD':
                 weather_lower = weather.lower()
                 if 'clear' in weather_lower or 'sunny' in weather_lower:
                     analysis_parts.append("☀️ Clear weather conditions are favorable for hitting.")
@@ -898,56 +1000,36 @@ class BettingCommands(app_commands.Group):
 
             # Bet Type Specific Analysis
             if 'over' in description.lower():
-                analysis_parts.append("📈 OVER PLAY: Both teams showing strong offensive potential.")
-            elif 'under' in description.lower():
-                analysis_parts.append("📉 UNDER PLAY: Pitching matchup favors lower scoring.")
-            elif 'moneyline' in description.lower() or 'ml' in description.lower():
-                analysis_parts.append("💰 MONEYLINE: Team has strong matchup advantages.")
-            elif 'parlay' in description.lower():
-                analysis_parts.append("🎯 PARLAY: Multiple legs provide value and higher payout potential.")
-
-            # Context Integration
-            if context and context.strip():
-                analysis_parts.append(f"💭 {context}")
-
-            # Final Analysis Summary
-            if not analysis_parts:
-                # Provide basic analysis based on available data
-                if away_team != 'TBD' and home_team != 'TBD':
-                    analysis_parts.append(f"📊 Analysis for {away_team} @ {home_team} based on current form and matchup data.")
+                if is_historical:
+                    analysis_parts.append("📈 OVER PLAY: Historical game showed offensive potential.")
                 else:
-                    analysis_parts.append("📊 Analysis based on current form and matchup data.")
+                    analysis_parts.append("📈 OVER PLAY: Both teams showing strong offensive potential.")
+            elif 'under' in description.lower():
+                if is_historical:
+                    analysis_parts.append("📉 UNDER PLAY: Historical game favored lower scoring.")
+                else:
+                    analysis_parts.append("📉 UNDER PLAY: Pitching matchup favors lower scoring.")
+            elif 'moneyline' in description.lower() or 'ml' in description.lower():
+                if is_historical:
+                    analysis_parts.append("💰 MONEYLINE: Historical matchup showed team advantages.")
+                else:
+                    analysis_parts.append("💰 MONEYLINE: Team has strong matchup advantages.")
+            elif 'parlay' in description.lower():
+                analysis_parts.append("🎯 PARLAY: Multiple picks combined for higher payout potential.")
 
-            # Add confidence indicator based on data availability
-            data_sources = 0
-            if player_stats:
-                data_sources += 1
-            if team_stats:
-                data_sources += 1
-            if live_scores:
-                data_sources += 1
-            if weather != 'TBD':
-                data_sources += 1
+            # Historical Game Summary
+            if is_historical and not analysis_parts:
+                analysis_parts.append(f"📅 Historical game from {game_date} - analysis based on current team and player statistics.")
 
-            if data_sources >= 3:
-                confidence = "🔒 HIGH CONFIDENCE"
-            elif data_sources >= 2:
-                confidence = "📊 MODERATE CONFIDENCE"
+            # Join all analysis parts
+            if analysis_parts:
+                return " | ".join(analysis_parts)
             else:
-                confidence = "⚠️ LOW CONFIDENCE"
-
-            analysis_parts.append(f"\n{confidence} - Strong value at current odds.")
-
-            return '\n\n'.join(analysis_parts)
+                return "📊 Analysis: Game data and statistics available for comprehensive analysis."
 
         except Exception as e:
             logger.error(f"Error generating analysis: {e}")
-            # Provide fallback analysis
-            teams = bet_data.get('teams', ['TBD', 'TBD'])
-            if teams[0] != 'TBD' and teams[1] != 'TBD':
-                return f"📊 Analysis for {teams[0]} @ {teams[1]} based on current form and matchup data.\n\n📊 MODERATE CONFIDENCE - Strong value at current odds."
-            else:
-                return f"{context or 'Analysis based on current form and matchup data.'}\n\n📊 MODERATE CONFIDENCE - Strong value at current odds."
+            return "📊 Analysis: Comprehensive game analysis and statistics."
 
     async def _generate_lotto_picks(
             self,

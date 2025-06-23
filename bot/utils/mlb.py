@@ -1225,6 +1225,333 @@ class MLBDataFetcher:
             logger.error(f"Error getting live stats with fallback: {e}")
             return {'live_games': [], 'source': 'error'}
 
+    async def get_historical_game_data(
+        self, 
+        away_team: str, 
+        home_team: str, 
+        game_date: str
+    ) -> Dict[str, Any]:
+        """
+        Get historical game data for past games.
+        
+        Args:
+            away_team: Away team name
+            home_team: Home team name  
+            game_date: Date in YYYY-MM-DD format
+            
+        Returns:
+            Dict containing historical game data
+        """
+        try:
+            resolved_away = self._resolve_team_name(away_team)
+            resolved_home = self._resolve_team_name(home_team)
+            
+            logger.info(f"Looking up historical game: {resolved_away} @ {resolved_home} on {game_date}")
+            
+            # Try MLB Stats API first
+            historical_data = await self._get_historical_game_mlb(
+                resolved_away, resolved_home, game_date
+            )
+            
+            # Fallback to ESPN API
+            if not historical_data:
+                historical_data = await self._get_historical_game_espn(
+                    resolved_away, resolved_home, game_date
+                )
+            
+            # Add context about the historical nature
+            if historical_data:
+                historical_data['is_historical'] = True
+                historical_data['game_date'] = game_date
+                historical_data['context'] = f"Historical game from {game_date}"
+            
+            return historical_data or {
+                'is_historical': True,
+                'game_date': game_date,
+                'away_team': resolved_away,
+                'home_team': resolved_home,
+                'status': 'Completed',
+                'context': f"Historical game from {game_date} - data not available"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching historical game data: {e}")
+            return {
+                'is_historical': True,
+                'game_date': game_date,
+                'away_team': away_team,
+                'home_team': home_team,
+                'status': 'Unknown',
+                'context': f"Historical game from {game_date} - error retrieving data"
+            }
+
+    async def _get_historical_game_mlb(
+        self, 
+        away_team: str, 
+        home_team: str, 
+        game_date: str
+    ) -> Dict[str, Any]:
+        """Get historical game data from MLB Stats API."""
+        try:
+            # Get schedule for the specific date
+            schedule = self.statsapi.schedule(date=game_date, sportId=1)
+            
+            if not schedule:
+                return {}
+            
+            # Find the specific game
+            target_game = None
+            for game in schedule:
+                if isinstance(game, dict):
+                    game_away = game.get('away_name', '')
+                    game_home = game.get('home_name', '')
+                    
+                    # Check if this is our target game
+                    if (game_away == away_team and game_home == home_team) or \
+                       (game_away == home_team and game_home == away_team):
+                        target_game = game
+                        break
+            
+            if not target_game:
+                return {}
+            
+            # Get detailed game data
+            game_id = target_game.get('game_id')
+            if game_id:
+                try:
+                    # Use the correct statsapi method for game data
+                    game_data = self.statsapi.lookup_game(game_id)
+                    if game_data:
+                        return {
+                            'away_team': target_game.get('away_name', away_team),
+                            'home_team': target_game.get('home_name', home_team),
+                            'away_score': target_game.get('away_score', 0),
+                            'home_score': target_game.get('home_score', 0),
+                            'status': target_game.get('status', 'Completed'),
+                            'venue': target_game.get('venue_name', ''),
+                            'game_id': game_id,
+                            'game_data': game_data,
+                            'result': self._determine_game_result(
+                                target_game.get('away_score', 0),
+                                target_game.get('home_score', 0),
+                                away_team,
+                                home_team
+                            )
+                        }
+                except Exception as e:
+                    logger.warning(f"Could not get detailed game data for {game_id}: {e}")
+            
+            # Return basic game info if detailed data failed
+            return {
+                'away_team': target_game.get('away_name', away_team),
+                'home_team': target_game.get('home_name', home_team),
+                'away_score': target_game.get('away_score', 0),
+                'home_score': target_game.get('home_score', 0),
+                'status': target_game.get('status', 'Completed'),
+                'venue': target_game.get('venue_name', ''),
+                'result': self._determine_game_result(
+                    target_game.get('away_score', 0),
+                    target_game.get('home_score', 0),
+                    away_team,
+                    home_team
+                )
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in _get_historical_game_mlb: {e}")
+            return {}
+
+    async def _get_historical_game_espn(
+        self, 
+        away_team: str, 
+        home_team: str, 
+        game_date: str
+    ) -> Dict[str, Any]:
+        """Get historical game data from ESPN API."""
+        try:
+            # ESPN API for historical games
+            url = f"{self.espn_base_url}/scoreboard"
+            params = {
+                'dates': game_date,
+                'limit': 100
+            }
+            
+            # Use asyncio.wait_for instead of asyncio.timeout
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self.session.get(url, params=params)
+                ),
+                timeout=3.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'events' not in data:
+                return {}
+            
+            # Find the specific game
+            target_game = None
+            for event in data['events']:
+                if 'competitions' in event and event['competitions']:
+                    competition = event['competitions'][0]
+                    if 'competitors' in competition and len(competition['competitors']) >= 2:
+                        comp1 = competition['competitors'][0]
+                        comp2 = competition['competitors'][1]
+                        
+                        comp1_name = comp1.get('team', {}).get('name', '')
+                        comp2_name = comp2.get('team', {}).get('name', '')
+                        
+                        # Check if this is our target game
+                        if (comp1_name == away_team and comp2_name == home_team) or \
+                           (comp1_name == home_team and comp2_name == away_team):
+                            target_game = event
+                            break
+            
+            if not target_game:
+                return {}
+            
+            # Parse ESPN game data
+            return self._parse_espn_historical_game(target_game, away_team, home_team)
+            
+        except Exception as e:
+            logger.error(f"Error in _get_historical_game_espn: {e}")
+            return {}
+
+    def _parse_espn_historical_game(
+        self, 
+        game_data: Dict[str, Any], 
+        away_team: str, 
+        home_team: str
+    ) -> Dict[str, Any]:
+        """Parse historical game data from ESPN API response."""
+        try:
+            if 'competitions' not in game_data or not game_data['competitions']:
+                return {}
+            
+            competition = game_data['competitions'][0]
+            if 'competitors' not in competition or len(competition['competitors']) < 2:
+                return {}
+            
+            comp1 = competition['competitors'][0]
+            comp2 = competition['competitors'][1]
+            
+            # Determine which is home/away
+            away_score = 0
+            home_score = 0
+            away_name = away_team
+            home_name = home_team
+            
+            if comp1.get('homeAway') == 'away':
+                away_score = int(comp1.get('score', 0))
+                home_score = int(comp2.get('score', 0))
+                away_name = comp1.get('team', {}).get('name', away_team)
+                home_name = comp2.get('team', {}).get('name', home_team)
+            else:
+                away_score = int(comp2.get('score', 0))
+                home_score = int(comp1.get('score', 0))
+                away_name = comp2.get('team', {}).get('name', away_team)
+                home_name = comp1.get('team', {}).get('name', home_team)
+            
+            return {
+                'away_team': away_name,
+                'home_team': home_name,
+                'away_score': away_score,
+                'home_score': home_score,
+                'status': game_data.get('status', {}).get('type', {}).get('name', 'Completed'),
+                'venue': competition.get('venue', {}).get('fullName', ''),
+                'result': self._determine_game_result(away_score, home_score, away_name, home_name)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing ESPN historical game: {e}")
+            return {}
+
+    def _determine_game_result(
+        self, 
+        away_score: int, 
+        home_score: int, 
+        away_team: str, 
+        home_team: str
+    ) -> str:
+        """Determine the result of a game."""
+        if away_score > home_score:
+            return f"{away_team} won {away_score}-{home_score}"
+        elif home_score > away_score:
+            return f"{home_team} won {home_score}-{away_score}"
+        else:
+            return f"Tied {away_score}-{home_score}"
+
+    async def get_historical_team_stats(
+        self, 
+        team_name: str, 
+        game_date: str
+    ) -> Dict[str, Any]:
+        """
+        Get team stats as they were on a specific date.
+        
+        Args:
+            team_name: Team name
+            game_date: Date in YYYY-MM-DD format
+            
+        Returns:
+            Dict containing historical team stats
+        """
+        try:
+            resolved_name = self._resolve_team_name(team_name)
+            
+            # For historical stats, we'll use current stats as approximation
+            # since historical stats APIs are limited
+            current_stats = await self.get_team_stats(resolved_name)
+            
+            if current_stats:
+                current_stats['is_historical'] = True
+                current_stats['as_of_date'] = game_date
+                current_stats['note'] = f"Current stats shown (historical data from {game_date} not available)"
+            
+            return current_stats or {
+                'is_historical': True,
+                'as_of_date': game_date,
+                'note': f"Historical team stats from {game_date} not available"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching historical team stats: {e}")
+            return {
+                'is_historical': True,
+                'as_of_date': game_date,
+                'note': f"Error retrieving historical team stats from {game_date}"
+            }
+
+    async def is_historical_game(
+        self, 
+        away_team: str, 
+        home_team: str, 
+        game_date: Optional[str] = None
+    ) -> bool:
+        """
+        Check if a game is historical (past date).
+        
+        Args:
+            away_team: Away team name
+            home_team: Home team name
+            game_date: Optional game date, defaults to today
+            
+        Returns:
+            True if the game is historical, False if current/future
+        """
+        try:
+            if not game_date:
+                game_date = datetime.now().strftime("%Y-%m-%d")
+            
+            game_date_obj = datetime.strptime(game_date, "%Y-%m-%d")
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            return game_date_obj < today
+            
+        except Exception as e:
+            logger.error(f"Error checking if game is historical: {e}")
+            return False
+
 
 # Global instance
 mlb_fetcher = MLBDataFetcher()

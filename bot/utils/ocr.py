@@ -12,6 +12,7 @@ from PIL import Image
 import pytesseract
 import shutil
 import re
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,7 @@ class OCRParser:
                 'odds': 'TBD',
                 'units': '1',
                 'game_time': 'TBD',
+                'game_date': None,  # Add game date
                 'sport': 'MLB'
             }
 
@@ -212,36 +214,35 @@ class OCRParser:
             teams = self._extract_teams_improved(text, lines)
             if teams:
                 bet_data['teams'] = teams
-                logger.info(f"Extracted teams: {teams}")
-
-            # Extract bet type and description
+            
+            # Extract game date
+            game_date = self._extract_game_date(text, lines)
+            if game_date:
+                bet_data['game_date'] = game_date
+            
+            # Extract bet information
             bet_info = self._extract_bet_info_improved(text, lines)
             if bet_info:
-                bet_data['description'] = bet_info.get('description', 'TBD')
-                bet_data['player'] = bet_info.get('player', 'TBD')
-                logger.info(f"Extracted bet info: {bet_info}")
-
+                bet_data.update(bet_info)
+            
             # Extract odds
             odds = self._extract_odds_improved(text, lines)
             if odds:
                 bet_data['odds'] = odds
-                logger.info(f"Extracted odds: {odds}")
-
+            
             # Extract units
             units = self._extract_units_improved(text, lines)
             if units:
                 bet_data['units'] = units
-                logger.info(f"Extracted units: {units}")
-
+            
             # Extract game time
             game_time = self._extract_game_time_improved(text, lines)
             if game_time:
                 bet_data['game_time'] = game_time
-                logger.info(f"Extracted game time: {game_time}")
-
-            logger.info(f"Final parsed bet data: {bet_data}")
+            
+            logger.info(f"Parsed bet data: {bet_data}")
             return bet_data
-
+            
         except Exception as e:
             logger.error(f"Error parsing betting details: {e}")
             return {
@@ -251,6 +252,7 @@ class OCRParser:
                 'odds': 'TBD',
                 'units': '1',
                 'game_time': 'TBD',
+                'game_date': None,
                 'sport': 'MLB'
             }
 
@@ -395,6 +397,62 @@ class OCRParser:
                     return match.group(1)
         
         return None
+
+    def _extract_game_date(self, text: str, lines: list) -> Optional[str]:
+        """Extract game date from OCR text."""
+        try:
+            # Look for date patterns
+            date_patterns = [
+                r'(\d{1,2})/(\d{1,2})/(\d{2,4})',  # MM/DD/YY or MM/DD/YYYY
+                r'(\d{1,2})-(\d{1,2})-(\d{2,4})',  # MM-DD-YY or MM-DD-YYYY
+                r'(\d{4})-(\d{1,2})-(\d{1,2})',    # YYYY-MM-DD
+                r'(\w{3})\s+(\d{1,2}),?\s+(\d{4})', # Jan 15, 2024
+                r'(\d{1,2})\s+(\w{3})\s+(\d{4})',   # 15 Jan 2024
+            ]
+            
+            for pattern in date_patterns:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                if matches:
+                    match = matches[0]
+                    if len(match) == 3:
+                        # Handle different date formats
+                        if len(match[0]) == 4:  # YYYY-MM-DD
+                            year, month, day = match
+                        elif len(match[2]) == 4:  # MM/DD/YYYY or MM-DD-YYYY
+                            month, day, year = match
+                        else:  # MM/DD/YY
+                            month, day, year = match
+                            year = '20' + year if len(year) == 2 else year
+                        
+                        # Validate and format
+                        try:
+                            month = int(month)
+                            day = int(day)
+                            year = int(year)
+                            
+                            if 1 <= month <= 12 and 1 <= day <= 31 and 2020 <= year <= 2030:
+                                return f"{year:04d}-{month:02d}-{day:02d}"
+                        except ValueError:
+                            continue
+            
+            # Look for relative dates
+            text_lower = text.lower()
+            today = datetime.now()
+            
+            if 'yesterday' in text_lower:
+                yesterday = today - timedelta(days=1)
+                return yesterday.strftime("%Y-%m-%d")
+            elif 'today' in text_lower:
+                return today.strftime("%Y-%m-%d")
+            elif 'tomorrow' in text_lower:
+                tomorrow = today + timedelta(days=1)
+                return tomorrow.strftime("%Y-%m-%d")
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extracting game date: {e}")
+            return None
 
     def _clean_team_name(self, team_name: str) -> str:
         """Clean and normalize team names."""
