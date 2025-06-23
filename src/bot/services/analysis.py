@@ -81,31 +81,30 @@ class AnalysisService:
             return "Error building analysis context"
     
     async def _generate_ai_analysis(self, context: str) -> str:
-        """Generate AI analysis using OpenAI with a conversational, energetic, emoji-rich style."""
+        """Generate AI analysis using OpenAI with a confident, conversational, sharp sports-bettor voice and minimal emojis."""
         try:
             prompt = f"""
-You are a bold, energetic, and slightly irreverent MLB betting analyst. Write in a conversational, hype, and emoji-rich style. Use colorful language, mix stats with attitude, and make the analysis fun and engaging. Use relevant emojis throughout (e.g., 😂👊, 🏃‍♂️🤙, 🔒🔥). End with a strong call to action like 'LOCK IT IN 🔒🔥'.
+Write as if you're a real, sharp MLB sports bettor talking to your Discord community. Use a confident, conversational tone with a little humor and attitude. Use stats and context to make your case, but keep it natural and avoid sounding like a robot or a hype machine. Use emojis only for punchlines or emphasis, not every sentence. End with a strong, clear call to action like 'Lock it in' or 'Let's cash.'
 
-Here is the context for the bet:
-
+Here's the context for the bet:
 {context}
 
 Format:
-- Start with a quick, punchy summary of the pitching matchup and why it's a great spot (use stats, but keep it fun)
+- Start with a quick, punchy summary of the matchup and why it's a great spot (use stats, but keep it fun)
 - Explain the park/weather factors if relevant
 - Mention what the books/odds are telling us
-- End with a hype call to action: 'LOCK IT IN 🔒🔥' or similar
+- End with a strong, clear call to action: 'Lock it in' or 'Let's cash.'
 - Use line breaks for readability
 - Keep it under 200 words
 """
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a bold, energetic, and slightly irreverent MLB betting analyst. Write in a conversational, hype, and emoji-rich style. Use colorful language, mix stats with attitude, and make the analysis fun and engaging. Use relevant emojis throughout (e.g., 😂👊, 🏃‍♂️🤙, 🔒🔥). End with a strong call to action like 'LOCK IT IN 🔒🔥'."},
+                    {"role": "system", "content": "You are a sharp, confident MLB sports bettor. Write in a conversational, human style with stats, humor, and attitude. Use emojis only for punchlines or emphasis, not every sentence. Avoid sounding like a hype machine or a robot. End with a strong, clear call to action like 'Lock it in' or 'Let's cash.'"},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=350,
-                temperature=0.85
+                temperature=0.8
             )
             if response and response.choices and len(response.choices) > 0:
                 message_content = response.choices[0].message.content
