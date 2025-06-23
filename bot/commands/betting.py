@@ -6,18 +6,27 @@ Production-ready Discord bot commands for posting betting picks
 with OCR integration, MLB data analysis, and intelligent formatting.
 """
 
+import asyncio
+import json
 import logging
-import discord
-from discord import app_commands
-from typing import Optional
-from datetime import datetime
 import os
 import re
-import asyncio
+from datetime import datetime
+from typing import Optional
 
-# Import utilities
-from utils.ocr import ocr_parser
-from utils.mlb import mlb_fetcher
+import discord
+from discord import app_commands
+
+# Import utilities for cloud deployment
+try:
+    from utils.ocr import ocr_parser
+    from utils.mlb import mlb_fetcher
+    from utils.gpt_analysis import generate_analysis
+except ImportError:
+    # Fallback for cloud deployment
+    from bot.utils.ocr import ocr_parser
+    from bot.utils.mlb import mlb_fetcher
+    from bot.utils.gpt_analysis import generate_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +42,6 @@ class BettingCommands(app_commands.Group):
     def _load_counters(self):
         """Load pick counters from file."""
         try:
-            import json
             counter_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pick_counters.json')
             if os.path.exists(counter_file):
                 with open(counter_file, 'r') as f:
@@ -45,7 +53,6 @@ class BettingCommands(app_commands.Group):
     def _save_counters(self):
         """Save pick counters to file."""
         try:
-            import json
             counter_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pick_counters.json')
             os.makedirs(os.path.dirname(counter_file), exist_ok=True)
             with open(counter_file, 'w') as f:
