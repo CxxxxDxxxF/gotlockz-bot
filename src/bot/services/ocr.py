@@ -93,6 +93,23 @@ class OCRService:
         if not text or len(text.strip()) < 10:
             return True
         
+        # Check for common OCR artifacts that indicate garbled text
+        garbled_indicators = [
+            'Sed Fanatics',  # Should be "Fanatics"
+            'Sportsoook',    # Should be "Sportsbook"
+            'Ketel Martet',  # Should be "Ketel Marte"
+            'AQT Hits',      # Should be "ALT Hits"
+            'Ruws Rls',      # Should be "Runs + RBIs"
+            'Atzona Diemoncbachks',  # Should be "Arizona Diamondbacks"
+            'Catesacls Reckias',     # Should be "Colorado Rockies"
+            'GAMELING FROELEME CAML' # Should be "GAMBLING PROBLEM CALL"
+        ]
+        
+        # If any of these garbled patterns are found, consider it garbled
+        for indicator in garbled_indicators:
+            if indicator.lower() in text.lower():
+                return True
+        
         # Count non-alphanumeric characters
         non_alpha_count = sum(1 for c in text if not c.isalnum() and not c.isspace())
         total_chars = len(text.replace(' ', ''))
@@ -100,9 +117,9 @@ class OCRService:
         if total_chars == 0:
             return True
         
-        # If more than 30% are non-alphanumeric, likely garbled
+        # If more than 25% are non-alphanumeric, likely garbled
         garbled_ratio = non_alpha_count / total_chars
-        return garbled_ratio > 0.3
+        return garbled_ratio > 0.25
     
     async def _extract_text_ocr_space(self, image_bytes: bytes) -> str:
         """Extract text using OCR.space API."""
@@ -158,13 +175,13 @@ class OCRService:
             return ""
     
     async def _extract_text_local(self, image_bytes: bytes) -> str:
-        """Extract text using local Tesseract OCR."""
+        """Extract text using local Tesseract OCR with timeout."""
         try:
             # Preprocess image
             processed_image = await self._preprocess_image(image_bytes)
             
-            # Extract text using the enhanced local OCR
-            return await self._extract_text(processed_image)
+            # Extract text using the enhanced local OCR with timeout
+            return await self._extract_text_with_timeout(processed_image)
             
         except Exception as e:
             logger.error(f"Error in local OCR: {e}")
@@ -205,8 +222,8 @@ class OCRService:
             logger.error(f"Error preprocessing image: {e}")
             raise
     
-    async def _extract_text(self, image_array: np.ndarray) -> str:
-        """Extract text from image array using OCR with enhanced preprocessing."""
+    async def _extract_text_with_timeout(self, image_array: np.ndarray) -> str:
+        """Extract text with timeout to prevent Discord heartbeat issues."""
         try:
             # Convert to grayscale if needed
             if len(image_array.shape) == 3:
@@ -251,36 +268,31 @@ class OCRService:
             _, gauss_thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             processed_images.append(gauss_thresh)
             
-            # Try OCR with different configurations
+            # Try OCR with different configurations (limited attempts to prevent timeouts)
             best_text = ""
             best_confidence = 0
             
-            for i, img in enumerate(processed_images):
+            # Only try first 3 configurations to prevent timeouts
+            for i, img in enumerate(processed_images[:3]):
                 try:
-                    # OCR Configuration 1: Default
-                    text1 = pytesseract.image_to_string(img, config='--psm 6')
+                    # OCR Configuration 1: Default with timeout
+                    text1 = pytesseract.image_to_string(img, config='--psm 6', timeout=5)
                     
                     # OCR Configuration 2: Sparse text with whitelist
-                    text2 = pytesseract.image_to_string(img, config='--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-.@ ')
+                    text2 = pytesseract.image_to_string(img, config='--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-.@ ', timeout=5)
                     
                     # OCR Configuration 3: Single block
-                    text3 = pytesseract.image_to_string(img, config='--psm 8')
+                    text3 = pytesseract.image_to_string(img, config='--psm 8', timeout=5)
                     
-                    # OCR Configuration 4: Single line
-                    text4 = pytesseract.image_to_string(img, config='--psm 7')
-                    
-                    # OCR Configuration 5: Multiple lines
-                    text5 = pytesseract.image_to_string(img, config='--psm 3')
-                    
-                    # Get data with confidence scores
-                    data = pytesseract.image_to_data(img, config='--psm 6', output_type=pytesseract.Output.DICT)
+                    # Get data with confidence scores (with timeout)
+                    data = pytesseract.image_to_data(img, config='--psm 6', output_type=pytesseract.Output.DICT, timeout=5)
                     
                     # Calculate average confidence
                     confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
                     avg_confidence = sum(confidences) / len(confidences) if confidences else 0
                     
                     # Choose best result based on confidence and text quality
-                    texts = [text1, text2, text3, text4, text5]
+                    texts = [text1, text2, text3]
                     for text in texts:
                         if text.strip():
                             # Simple quality check: more alphanumeric characters = better
@@ -310,7 +322,15 @@ class OCRService:
                     'ColoracloReckias': 'Colorado Rockies',
                     'MUSTEE21': 'MUST WIN',
                     'CAMELINGPROELEMPCALL': 'GAMBLING PROBLEM CALL',
-                    'BettlD': 'Bet ID'
+                    'BettlD': 'Bet ID',
+                    'Sed Fanatics': 'Fanatics',
+                    'Sportsoook': 'Sportsbook',
+                    'Ketel Martet': 'Ketel Marte',
+                    'AQT Hits': 'ALT Hits',
+                    'Ruws Rls': 'Runs + RBIs',
+                    'Atzona Diemoncbachks': 'Arizona Diamondbacks',
+                    'Catesacls Reckias': 'Colorado Rockies',
+                    'GAMELING FROELEME CAML': 'GAMBLING PROBLEM CALL'
                 }
                 
                 for wrong, correct in ocr_fixes.items():
