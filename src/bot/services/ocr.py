@@ -10,6 +10,9 @@ import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
 import pytesseract
+import aiohttp
+import os
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,7 @@ class OCRService:
     """Service for OCR processing of betting slip images."""
     
     def __init__(self):
+        """Initialize OCR service."""
         self.team_abbreviations = {
             "NYY": "New York Yankees", "YANKEES": "New York Yankees",
             "BOS": "Boston Red Sox", "RED SOX": "Boston Red Sox",
@@ -50,26 +54,121 @@ class OCRService:
             "PHI": "Philadelphia Phillies", "PHILLIES": "Philadelphia Phillies",
             "WSH": "Washington Nationals", "NATIONALS": "Washington Nationals",
         }
+        self.ocr_space_api_key = os.getenv('OCR_SPACE_API_KEY', 'K87115193688957')
+        self.ocr_space_url = 'https://api.ocr.space/parse/image'
     
     async def extract_bet_data(self, image_bytes: bytes) -> Dict[str, Any]:
         """Extract betting data from image bytes."""
         try:
-            # Preprocess image
-            processed_image = await self._preprocess_image(image_bytes)
+            # Try local OCR first
+            local_text = await self._extract_text_local(image_bytes)
+            logger.info(f"Local OCR result: {local_text}")
             
-            # Extract text
-            text = await self._extract_text(processed_image)
-            logger.info(f"OCR raw text: {text}")  # Log the raw OCR output
+            # If local OCR produces poor results (too many garbled characters), try OCR.space
+            if self._is_text_garbled(local_text):
+                logger.info("Local OCR produced garbled text, trying OCR.space...")
+                ocr_space_text = await self._extract_text_ocr_space(image_bytes)
+                if ocr_space_text and len(ocr_space_text.strip()) > 10:
+                    logger.info(f"OCR.space result: {ocr_space_text}")
+                    text = ocr_space_text
+                else:
+                    text = local_text
+            else:
+                text = local_text
+            
+            logger.info(f"Final OCR text: {text}")
             
             # Parse betting data
             bet_data = await self._parse_bet_data(text)
-            logger.info(f"Parsed bet data: {bet_data}")  # Log the parsed bet data
+            logger.info(f"Parsed bet data: {bet_data}")
             
             return bet_data
             
         except Exception as e:
             logger.error(f"Error extracting bet data: {e}")
             return self._get_default_bet_data()
+    
+    def _is_text_garbled(self, text: str) -> bool:
+        """Check if text appears to be garbled OCR output."""
+        if not text or len(text.strip()) < 10:
+            return True
+        
+        # Count non-alphanumeric characters
+        non_alpha_count = sum(1 for c in text if not c.isalnum() and not c.isspace())
+        total_chars = len(text.replace(' ', ''))
+        
+        if total_chars == 0:
+            return True
+        
+        # If more than 30% are non-alphanumeric, likely garbled
+        garbled_ratio = non_alpha_count / total_chars
+        return garbled_ratio > 0.3
+    
+    async def _extract_text_ocr_space(self, image_bytes: bytes) -> str:
+        """Extract text using OCR.space API."""
+        try:
+            # Prepare the image for OCR.space
+            image = Image.open(io.BytesIO(image_bytes))
+            
+            # Convert to RGB if needed
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Save to bytes
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='PNG')
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            # Prepare request data
+            data = {
+                'apikey': self.ocr_space_api_key,
+                'language': 'eng',
+                'isOverlayRequired': False,
+                'filetype': 'png',
+                'detectOrientation': True,
+                'scale': True,
+                'OCREngine': 2  # Use the most accurate engine
+            }
+            
+            files = {'image': ('bet_slip.png', img_byte_arr, 'image/png')}
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.ocr_space_url, data=data, files=files) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        
+                        if result.get('IsErroredOnProcessing'):
+                            logger.error(f"OCR.space error: {result.get('ErrorMessage')}")
+                            return ""
+                        
+                        parsed_results = result.get('ParsedResults', [])
+                        if parsed_results:
+                            extracted_text = parsed_results[0].get('ParsedText', '')
+                            logger.info(f"OCR.space extracted text: {extracted_text}")
+                            return extracted_text
+                        else:
+                            logger.warning("OCR.space returned no parsed results")
+                            return ""
+                    else:
+                        logger.error(f"OCR.space API error: {response.status}")
+                        return ""
+                        
+        except Exception as e:
+            logger.error(f"Error with OCR.space API: {e}")
+            return ""
+    
+    async def _extract_text_local(self, image_bytes: bytes) -> str:
+        """Extract text using local Tesseract OCR."""
+        try:
+            # Preprocess image
+            processed_image = await self._preprocess_image(image_bytes)
+            
+            # Extract text using the enhanced local OCR
+            return await self._extract_text(processed_image)
+            
+        except Exception as e:
+            logger.error(f"Error in local OCR: {e}")
+            return ""
     
     async def _preprocess_image(self, image_bytes: bytes) -> np.ndarray:
         """Preprocess image for better OCR results."""
