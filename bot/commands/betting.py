@@ -72,16 +72,16 @@ class BettingCommands(app_commands.Group):
         await interaction.response.defer(thinking=True)
         
         try:
-            # Set a timeout for the entire processing
+            # Set a very short timeout for the entire processing
             try:
-                # Use asyncio.wait_for for timeout (compatible with older Python versions)
+                # Use a shorter timeout - 8 seconds total
                 await asyncio.wait_for(self._process_command_async(
                     interaction, channel, image, unitsize
-                ), timeout=10.0)
+                ), timeout=8.0)
             except asyncio.TimeoutError:
-                logger.error("Command processing timed out")
+                logger.error("Command processing timed out after 8 seconds")
                 await interaction.followup.send(
-                    "❌ The command took too long to process. Please try again with a clearer image.",
+                    "❌ Processing took too long. Please try again with a clearer image or check if the game is available.",
                     ephemeral=True
                 )
                 
@@ -109,8 +109,8 @@ class BettingCommands(app_commands.Group):
         image: discord.Attachment, 
         unitsize: int
     ):
-        """Process the command asynchronously with timeout protection."""
-        # Validate inputs
+        """Process the command asynchronously with aggressive timeout protection."""
+        # Validate inputs with timeout
         if not image.content_type or not image.content_type.startswith('image/'):
             await interaction.followup.send(
                 "❌ Please provide a valid image file.",
@@ -118,14 +118,44 @@ class BettingCommands(app_commands.Group):
             )
             return
 
-        # Download image
-        image_bytes = await image.read()
+        # Download image with timeout
+        try:
+            image_bytes = await asyncio.wait_for(image.read(), timeout=3.0)
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "❌ Image download timed out. Please try again.",
+                ephemeral=True
+            )
+            return
         
-        # Process the bet slip
-        bet_data = await self._analyze_betting_slip(image)
+        # Process the bet slip with timeout
+        try:
+            bet_data = await asyncio.wait_for(
+                self._analyze_betting_slip(image), 
+                timeout=4.0
+            )
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "❌ Image processing timed out. Please try with a clearer image.",
+                ephemeral=True
+            )
+            return
         
-        # Fetch live data
-        mlb_data = await self._fetch_mlb_data(bet_data)
+        # Fetch live data with timeout
+        try:
+            mlb_data = await asyncio.wait_for(
+                self._fetch_mlb_data(bet_data), 
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            logger.warning("MLB data fetch timed out, continuing with basic data")
+            mlb_data = {
+                'away_team_stats': {},
+                'home_team_stats': {},
+                'player_stats': {},
+                'game_info': {},
+                'live_data': None
+            }
         
         # Get current date and time
         current_date = datetime.now().strftime("%m/%d/%y")
@@ -138,12 +168,32 @@ class BettingCommands(app_commands.Group):
             self._save_counters()
 
         # Generate the pick content with channel-specific template
-        message_content = await self._generate_channel_specific_content(
-            bet_data, mlb_data, current_date, current_time, unitsize, channel_type
-        )
+        try:
+            message_content = await asyncio.wait_for(
+                self._generate_channel_specific_content(
+                    bet_data, mlb_data, current_date, current_time, unitsize, channel_type
+                ),
+                timeout=3.0
+            )
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "❌ Message generation timed out. Please try again.",
+                ephemeral=True
+            )
+            return
 
         # Post to the specified channel
-        await channel.send(content=message_content)
+        try:
+            await asyncio.wait_for(
+                channel.send(content=message_content),
+                timeout=3.0
+            )
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "❌ Failed to post message. Please check channel permissions.",
+                ephemeral=True
+            )
+            return
 
         # Confirm to the user
         await interaction.followup.send(

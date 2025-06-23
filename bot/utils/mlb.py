@@ -11,6 +11,7 @@ import statsapi
 import requests
 import json
 import re
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -428,7 +429,7 @@ class MLBDataFetcher:
     async def get_live_game_data(self, away_team: str, home_team: str) -> Dict[str, Any]:
         """Get live game data from ESPN API."""
         try:
-            # First, get today's games from ESPN
+            # First, get today's games from ESPN with timeout
             today = datetime.now().strftime("%Y%m%d")
             url = f"{self.espn_base_url}/scoreboard"
             params = {
@@ -436,7 +437,15 @@ class MLBDataFetcher:
                 'limit': 50
             }
             
-            response = self.session.get(url, params=params, timeout=10)
+            # Add timeout to the request
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: self.session.get(url, params=params, timeout=5)
+                ),
+                timeout=6.0
+            )
+            
             if response.status_code != 200:
                 logger.error(f"ESPN API error: {response.status_code}")
                 return {}
@@ -477,6 +486,9 @@ class MLBDataFetcher:
             # Extract live data
             return self._parse_espn_game_data(target_game)
             
+        except asyncio.TimeoutError:
+            logger.error("ESPN API request timed out")
+            return {}
         except Exception as e:
             logger.error(f"Error fetching ESPN live data: {e}")
             return {}
@@ -559,7 +571,15 @@ class MLBDataFetcher:
             # from the standings endpoint
             url = f"{self.espn_base_url}/standings"
             
-            response = self.session.get(url, timeout=10)
+            # Add timeout to the request
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: self.session.get(url, timeout=5)
+                ),
+                timeout=6.0
+            )
+            
             if response.status_code != 200:
                 return {}
             
@@ -596,6 +616,9 @@ class MLBDataFetcher:
             
             return {}
             
+        except asyncio.TimeoutError:
+            logger.error("ESPN team stats request timed out")
+            return {}
         except Exception as e:
             logger.error(f"Error fetching ESPN team stats: {e}")
             return {}
