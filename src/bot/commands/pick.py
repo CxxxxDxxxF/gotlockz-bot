@@ -45,9 +45,13 @@ class PickCommands(app_commands.Group):
         image: discord.Attachment,
         description: Optional[str] = None
     ):
-        """Post a betting pick with OCR, MLB stats, and AI analysis."""
-        await interaction.response.defer(thinking=True)
-        
+        logger.info("Received /pick post command, deferring response immediately.")
+        try:
+            await interaction.response.defer(thinking=True)
+            logger.info("Deferred interaction response.")
+        except Exception as e:
+            logger.error(f"Failed to defer interaction: {e}")
+            return
         try:
             # Validate image
             if not image.content_type or not image.content_type.startswith('image/'):
@@ -70,10 +74,22 @@ class PickCommands(app_commands.Group):
             except asyncio.TimeoutError:
                 await interaction.followup.send("❌ Image processing timed out. Please try with a clearer image.", ephemeral=True)
                 return
+            except Exception as e:
+                logger.error(f"OCR extraction failed: {e}")
+                await interaction.followup.send("❌ Failed to extract data from the image. Please try a different slip or clearer photo.", ephemeral=True)
+                return
 
             # Add optional description if provided
             if description:
                 bet_data['description'] = f"{bet_data.get('description', 'TBD')} - {description}"
+
+            # If OCR failed to extract teams or bet, notify user
+            if bet_data.get('teams', ['TBD', 'TBD'])[0] == 'TBD' or bet_data.get('teams', ['TBD', 'TBD'])[1] == 'TBD':
+                await interaction.followup.send("❌ Could not extract teams from the bet slip. Please ensure the image is clear and the team names are visible.", ephemeral=True)
+                return
+            if bet_data.get('description', 'TBD') == 'TBD':
+                await interaction.followup.send("❌ Could not extract bet description from the slip. Please ensure the bet type (e.g., Over/Under) is visible.", ephemeral=True)
+                return
 
             # Fetch live MLB stats
             stats_data = await self.stats_service.get_live_stats(bet_data)
@@ -96,7 +112,6 @@ class PickCommands(app_commands.Group):
             if not interaction.guild:
                 await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
                 return
-                
             target_channel = await self._get_target_channel(channel_type, interaction.guild)
             if not target_channel:
                 await interaction.followup.send("❌ Target channel not found. Please check bot configuration.", ephemeral=True)
@@ -110,7 +125,7 @@ class PickCommands(app_commands.Group):
 
         except Exception as e:
             logger.error(f"Error in post_pick: {e}")
-            await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
+            await interaction.followup.send("❌ An error occurred. Please try again or contact support.", ephemeral=True)
 
     async def _get_target_channel(self, channel_type: str, guild: discord.Guild) -> Optional[discord.TextChannel]:
         """Get the target channel based on channel type."""
