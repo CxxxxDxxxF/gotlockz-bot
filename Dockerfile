@@ -43,12 +43,5 @@ USER bot
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5)" || exit 1
-
-# Expose port for health checks (optional)
-EXPOSE 8080
-
 # Run the bot
 CMD ["python", "bot/main.py"]
