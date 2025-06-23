@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import statsapi
 import requests
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -265,22 +266,33 @@ class MLBDataFetcher:
             today = datetime.now().strftime("%Y-%m-%d")
             schedule = self.statsapi.schedule(date=today, sportId=1)
             
-            if schedule:  # schedule is a list
+            if schedule:
                 for game in schedule:
-                    if isinstance(game, dict):
-                        game_away = game.get('away_name', '')
-                        game_home = game.get('home_name', '')
-                        
-                        if (away_team.lower() in game_away.lower() and 
-                            home_team.lower() in game_home.lower()):
-                            return {
-                                'game_time': game.get('game_datetime', ''),
-                                'venue': game.get('venue_name', ''),
-                                'weather': 'Clear, 72°F',  # Default
-                                'away_pitcher': game.get('away_probable_pitcher', 'TBD'),
-                                'home_pitcher': game.get('home_probable_pitcher', 'TBD')
-                            }
+                    if not isinstance(game, dict):
+                        continue
+
+                    game_away = game.get('away_name', '').lower()
+                    game_home = game.get('home_name', '').lower()
+                    team1 = away_team.lower()
+                    team2 = home_team.lower()
+                    
+                    # More robust matching
+                    if (team1 in game_away and team2 in game_home) or \
+                       (team1 in game_home and team2 in game_away):
+                        logger.info(f"Found game match: {away_team} vs {home_team}")
+                        return {
+                            'game_time': game.get('game_datetime', ''),
+                            'venue': game.get('venue_name', ''),
+                            'weather': 'Clear, 72°F',  # Default
+                            'away_pitcher': game.get('away_probable_pitcher', 'TBD'),
+                            'home_pitcher': game.get('home_probable_pitcher', 'TBD')
+                        }
             
+            # If no game was found, log the schedule for debugging
+            logger.error(
+                f"Could not find a live game match for {away_team} vs {home_team}. "
+                f"Full schedule received from API: {json.dumps(schedule, indent=2)}"
+            )
             return {}
 
         except Exception as e:
