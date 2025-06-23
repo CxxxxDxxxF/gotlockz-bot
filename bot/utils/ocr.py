@@ -80,6 +80,7 @@ class OCRParser:
                 'odds': 'TBD',
                 'units': '1',
                 'game_time': 'TBD',
+                'game_date': None,
                 'sport': 'MLB'
             }
 
@@ -109,6 +110,11 @@ class OCRParser:
             if game_time:
                 bet_data['game_time'] = game_time
 
+            # Extract game date
+            game_date = self._extract_date(text)
+            if game_date:
+                bet_data['game_date'] = game_date
+
             logger.info(f"Parsed bet data: {bet_data}")
             return bet_data
 
@@ -121,6 +127,7 @@ class OCRParser:
                 'odds': 'TBD',
                 'units': '1',
                 'game_time': 'TBD',
+                'game_date': None,
                 'sport': 'MLB'
             }
 
@@ -215,6 +222,20 @@ class OCRParser:
             if match:
                 return match.group(1)
 
+        return None
+
+    def _extract_date(self, text: str) -> Optional[str]:
+        """Extract game date from text and return in YYYY-MM-DD format."""
+        import re
+        # Look for MM/DD/YY or MM/DD/YYYY, common in bet slips
+        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{2,4})', text)
+        if match:
+            month, day, year = match.groups()
+            if len(year) == 2:
+                year = f"20{year}"  # Assume 21st century for 2-digit years
+            
+            # Format to YYYY-MM-DD for the stats API
+            return f"{year}-{int(month):02d}-{int(day):02d}"
         return None
 
 

@@ -111,14 +111,18 @@ class MLBDataFetcher:
             logger.error(f"Error fetching player stats: {e}")
             return {}
 
-    async def get_game_info(self, away_team: str, home_team: str) -> Dict[str, Any]:
+    async def get_game_info(
+        self, away_team: str, home_team: str, game_date: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Get game information including weather, venue, etc."""
         try:
             resolved_away = self._resolve_team_name(away_team)
             resolved_home = self._resolve_team_name(home_team)
 
             # Primary: MLB Stats API
-            game_info = await self._get_game_info_mlb(resolved_away, resolved_home)
+            game_info = await self._get_game_info_mlb(
+                resolved_away, resolved_home, game_date=game_date
+            )
             
             # Enhance with additional data
             if game_info:
@@ -260,11 +264,15 @@ class MLBDataFetcher:
             logger.error(f"Error fetching MLB player stats: {e}")
             return {}
 
-    async def _get_game_info_mlb(self, away_team: str, home_team: str) -> Dict[str, Any]:
+    async def _get_game_info_mlb(
+        self, away_team: str, home_team: str, game_date: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Get game info from MLB Stats API."""
         try:
-            today = datetime.now().strftime("%Y-%m-%d")
-            schedule = self.statsapi.schedule(date=today, sportId=1)
+            # Use the provided date from OCR, otherwise default to the current day
+            search_date = game_date if game_date else datetime.now().strftime("%Y-%m-%d")
+            logger.info(f"Searching for MLB schedule on date: {search_date}")
+            schedule = self.statsapi.schedule(date=search_date, sportId=1)
             
             if schedule:
                 for game in schedule:

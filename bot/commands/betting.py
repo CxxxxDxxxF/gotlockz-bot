@@ -629,12 +629,16 @@ class BettingCommands(app_commands.Group):
         try:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             player = bet_data.get('player', 'TBD')
+            game_date = bet_data.get('game_date')  # Get date from parsed bet data
 
             # Fetch live data using the enhanced MLB utility
             away_team_stats = await mlb_fetcher.get_team_stats(teams[0])
             home_team_stats = await mlb_fetcher.get_team_stats(teams[1])
             player_stats = await mlb_fetcher.get_player_stats(player)
-            game_info = await mlb_fetcher.get_game_info(teams[0], teams[1])
+            # Pass the extracted date to the get_game_info function
+            game_info = await mlb_fetcher.get_game_info(
+                teams[0], teams[1], game_date=game_date
+            )
 
             # Get recent stats
             recent_player_stats = await mlb_fetcher.get_recent_player_stats(player)
