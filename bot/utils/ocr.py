@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-ocr_parser.py - Simplified OCR Image Processing
+OCR (Optical Character Recognition) utilities for parsing betting slips.
+Updated: 2025-06-23 - Force redeploy to ensure latest improvements are used
 
 Extract text from betting slip images using OCR with maximum reliability.
 """
@@ -10,14 +11,136 @@ from typing import Dict, Any, Optional
 from PIL import Image
 import pytesseract
 import shutil
+import re
 
 logger = logging.getLogger(__name__)
 
 
 class OCRParser:
-    """Parse betting slip images using OCR with simplified approach."""
+    """
+    OCR parser for extracting betting information from images.
+    Handles team names, odds, bet types, and other betting details.
+    """
 
     def __init__(self):
+        """Initialize the OCR parser."""
+        self.team_mapping = {
+            # AL East
+            'boston red sox': 'Boston Red Sox',
+            'red sox': 'Boston Red Sox',
+            'sox': 'Boston Red Sox',
+            'bos': 'Boston Red Sox',
+            'new york yankees': 'New York Yankees',
+            'yankees': 'New York Yankees',
+            'nyy': 'New York Yankees',
+            'tampa bay rays': 'Tampa Bay Rays',
+            'rays': 'Tampa Bay Rays',
+            'tb': 'Tampa Bay Rays',
+            'toronto blue jays': 'Toronto Blue Jays',
+            'blue jays': 'Toronto Blue Jays',
+            'tor': 'Toronto Blue Jays',
+            'baltimore orioles': 'Baltimore Orioles',
+            'orioles': 'Baltimore Orioles',
+            'bal': 'Baltimore Orioles',
+            
+            # AL Central
+            'chicago white sox': 'Chicago White Sox',
+            'white sox': 'Chicago White Sox',
+            'cws': 'Chicago White Sox',
+            'cleveland guardians': 'Cleveland Guardians',
+            'guardians': 'Cleveland Guardians',
+            'cle': 'Cleveland Guardians',
+            'detroit tigers': 'Detroit Tigers',
+            'tigers': 'Detroit Tigers',
+            'det': 'Detroit Tigers',
+            'kansas city royals': 'Kansas City Royals',
+            'royals': 'Kansas City Royals',
+            'kc': 'Kansas City Royals',
+            'minnesota twins': 'Minnesota Twins',
+            'twins': 'Minnesota Twins',
+            'min': 'Minnesota Twins',
+            
+            # AL West
+            'houston astros': 'Houston Astros',
+            'astros': 'Houston Astros',
+            'hou': 'Houston Astros',
+            'los angeles angels': 'Los Angeles Angels',
+            'angels': 'Los Angeles Angels',
+            'laa': 'Los Angeles Angels',
+            'oakland athletics': 'Oakland Athletics',
+            'athletics': 'Oakland Athletics',
+            'oak': 'Oakland Athletics',
+            'seattle mariners': 'Seattle Mariners',
+            'mariners': 'Seattle Mariners',
+            'sea': 'Seattle Mariners',
+            'texas rangers': 'Texas Rangers',
+            'rangers': 'Texas Rangers',
+            'tex': 'Texas Rangers',
+            
+            # NL East
+            'atlanta braves': 'Atlanta Braves',
+            'braves': 'Atlanta Braves',
+            'atl': 'Atlanta Braves',
+            'miami marlins': 'Miami Marlins',
+            'marlins': 'Miami Marlins',
+            'mia': 'Miami Marlins',
+            'new york mets': 'New York Mets',
+            'mets': 'New York Mets',
+            'nym': 'New York Mets',
+            'philadelphia phillies': 'Philadelphia Phillies',
+            'phillies': 'Philadelphia Phillies',
+            'phi': 'Philadelphia Phillies',
+            'washington nationals': 'Washington Nationals',
+            'nationals': 'Washington Nationals',
+            'was': 'Washington Nationals',
+            
+            # NL Central
+            'chicago cubs': 'Chicago Cubs',
+            'cubs': 'Chicago Cubs',
+            'chc': 'Chicago Cubs',
+            'cincinnati reds': 'Cincinnati Reds',
+            'reds': 'Cincinnati Reds',
+            'cin': 'Cincinnati Reds',
+            'milwaukee brewers': 'Milwaukee Brewers',
+            'brewers': 'Milwaukee Brewers',
+            'mil': 'Milwaukee Brewers',
+            'pittsburgh pirates': 'Pittsburgh Pirates',
+            'pirates': 'Pittsburgh Pirates',
+            'pit': 'Pittsburgh Pirates',
+            'st. louis cardinals': 'St. Louis Cardinals',
+            'cardinals': 'St. Louis Cardinals',
+            'stl': 'St. Louis Cardinals',
+            
+            # NL West
+            'arizona diamondbacks': 'Arizona Diamondbacks',
+            'diamondbacks': 'Arizona Diamondbacks',
+            'ari': 'Arizona Diamondbacks',
+            'colorado rockies': 'Colorado Rockies',
+            'rockies': 'Colorado Rockies',
+            'col': 'Colorado Rockies',
+            'los angeles dodgers': 'Los Angeles Dodgers',
+            'dodgers': 'Los Angeles Dodgers',
+            'lad': 'Los Angeles Dodgers',
+            'san diego padres': 'San Diego Padres',
+            'padres': 'San Diego Padres',
+            'sd': 'San Diego Padres',
+            'san francisco giants': 'San Francisco Giants',
+            'giants': 'San Francisco Giants',
+            'sf': 'San Francisco Giants',
+            'san fra': 'San Francisco Giants',
+            'san fran': 'San Francisco Giants',
+        }
+        
+        self.bet_types = [
+            'money line', 'moneyline', 'ml',
+            'run line', 'runline', 'rl',
+            'total', 'over', 'under', 'o/u',
+            'player props', 'player prop',
+            'team total', 'team totals',
+            'first inning', 'first 5 innings',
+            'game total', 'game totals'
+        ]
+
         # Check if Tesseract is available
         if not shutil.which('tesseract'):
             logger.warning("Tesseract OCR engine is not installed. OCR will not work.")
@@ -133,8 +256,6 @@ class OCRParser:
 
     def _extract_teams_improved(self, text: str, lines: list) -> Optional[list]:
         """Extract team names with improved logic."""
-        import re
-        
         # Look for "at" pattern first (most common in betting slips)
         at_pattern = r'(\w+(?:\s+\w+)*)\s+at\s+(\w+(?:\s+\w+)*)'
         match = re.search(at_pattern, text, re.IGNORECASE)
@@ -178,21 +299,13 @@ class OCRParser:
 
     def _extract_bet_info_improved(self, text: str, lines: list) -> Optional[Dict[str, str]]:
         """Extract bet type and description with improved logic."""
-        import re
-        
         # Look for common bet types
-        bet_types = ['money line', 'moneyline', 'ml', 'over', 'under', 'total', 'spread']
-        
-        for line in lines:
-            line_lower = line.lower()
-            
-            # Check if this line contains a bet type
-            for bet_type in bet_types:
-                if bet_type in line_lower:
-                    return {
-                        'description': line.strip(),
-                        'player': 'TBD'  # No player for team bets
-                    }
+        for bet_type in self.bet_types:
+            if bet_type in text.lower():
+                return {
+                    'description': text.strip(),
+                    'player': 'TBD'  # No player for team bets
+                }
         
         # Look for player props
         for line in lines:
@@ -216,8 +329,6 @@ class OCRParser:
 
     def _extract_odds_improved(self, text: str, lines: list) -> Optional[str]:
         """Extract odds with improved logic."""
-        import re
-        
         # Look for odds patterns
         odds_patterns = [
             r'([+-]\d+)',  # +150, -110
@@ -241,8 +352,6 @@ class OCRParser:
 
     def _extract_units_improved(self, text: str, lines: list) -> Optional[str]:
         """Extract unit size with improved logic."""
-        import re
-        
         # Look for unit patterns
         unit_patterns = [
             r'(\d+(?:\.\d+)?)\s*units?',
@@ -266,8 +375,6 @@ class OCRParser:
 
     def _extract_game_time_improved(self, text: str, lines: list) -> Optional[str]:
         """Extract game time with improved logic."""
-        import re
-        
         # Look for time patterns
         time_patterns = [
             r'(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))',
@@ -295,75 +402,8 @@ class OCRParser:
         team_name = team_name.strip()
         
         # Map common abbreviations to full names
-        team_mapping = {
-            'sox': 'Boston Red Sox',
-            'red sox': 'Boston Red Sox',
-            'bos': 'Boston Red Sox',
-            'giants': 'San Francisco Giants',
-            'sf': 'San Francisco Giants',
-            'san fra': 'San Francisco Giants',
-            'san fran': 'San Francisco Giants',
-            'yankees': 'New York Yankees',
-            'nyy': 'New York Yankees',
-            'dodgers': 'Los Angeles Dodgers',
-            'lad': 'Los Angeles Dodgers',
-            'astros': 'Houston Astros',
-            'hou': 'Houston Astros',
-            'braves': 'Atlanta Braves',
-            'atl': 'Atlanta Braves',
-            'cubs': 'Chicago Cubs',
-            'chc': 'Chicago Cubs',
-            'white sox': 'Chicago White Sox',
-            'chw': 'Chicago White Sox',
-            'mets': 'New York Mets',
-            'nym': 'New York Mets',
-            'cardinals': 'St. Louis Cardinals',
-            'stl': 'St. Louis Cardinals',
-            'brewers': 'Milwaukee Brewers',
-            'mil': 'Milwaukee Brewers',
-            'twins': 'Minnesota Twins',
-            'min': 'Minnesota Twins',
-            'rays': 'Tampa Bay Rays',
-            'tb': 'Tampa Bay Rays',
-            'athletics': 'Oakland Athletics',
-            'oak': 'Oakland Athletics',
-            'rangers': 'Texas Rangers',
-            'tex': 'Texas Rangers',
-            'guardians': 'Cleveland Guardians',
-            'cle': 'Cleveland Guardians',
-            'reds': 'Cincinnati Reds',
-            'cin': 'Cincinnati Reds',
-            'royals': 'Kansas City Royals',
-            'kc': 'Kansas City Royals',
-            'rockies': 'Colorado Rockies',
-            'col': 'Colorado Rockies',
-            'diamondbacks': 'Arizona Diamondbacks',
-            'ari': 'Arizona Diamondbacks',
-            'mariners': 'Seattle Mariners',
-            'sea': 'Seattle Mariners',
-            'tigers': 'Detroit Tigers',
-            'det': 'Detroit Tigers',
-            'phillies': 'Philadelphia Phillies',
-            'phi': 'Philadelphia Phillies',
-            'pirates': 'Pittsburgh Pirates',
-            'pit': 'Pittsburgh Pirates',
-            'padres': 'San Diego Padres',
-            'sd': 'San Diego Padres',
-            'orioles': 'Baltimore Orioles',
-            'bal': 'Baltimore Orioles',
-            'blue jays': 'Toronto Blue Jays',
-            'tor': 'Toronto Blue Jays',
-            'nationals': 'Washington Nationals',
-            'was': 'Washington Nationals',
-            'angels': 'Los Angeles Angels',
-            'laa': 'Los Angeles Angels',
-            'marlins': 'Miami Marlins',
-            'mia': 'Miami Marlins'
-        }
-        
-        # Check if the team name matches any mapping
         team_lower = team_name.lower()
-        for abbrev, full_name in team_mapping.items():
+        for abbrev, full_name in self.team_mapping.items():
             if team_lower == abbrev or team_lower in abbrev or abbrev in team_lower:
                 return full_name
         
