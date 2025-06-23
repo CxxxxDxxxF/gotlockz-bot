@@ -133,8 +133,8 @@ class OCRService:
             }
             logger.info(f"Parsing OCR text: {text}")
 
-            # 1. Extract odds (e.g., -170, +347, -165)
-            odds_match = re.search(r'([+-]\d{3,})', text)
+            # 1. Extract odds (e.g., -170, +347, -165, -80, +150)
+            odds_match = re.search(r'([+-]\d{2,4})', text)
             if odds_match:
                 bet_data['odds'] = odds_match.group(1)
                 logger.info(f"Extracted odds: {bet_data['odds']}")
@@ -157,13 +157,19 @@ class OCRService:
             player_prop_pattern = r'([A-Z][a-z]+(?: [A-Z][a-z]+)* \d+\+)'  # e.g., Ketel Marte 3+
             player_props = re.findall(player_prop_pattern, text)
             if player_props:
-                bet_data['player'] = player_props[0]
-                bet_data['description'] = player_props[0]
+                # Remove duplicates while preserving order
+                unique_player_props = []
+                for prop in player_props:
+                    if prop not in unique_player_props:
+                        unique_player_props.append(prop)
+                
+                bet_data['player'] = unique_player_props[0]
+                bet_data['description'] = unique_player_props[0]
                 logger.info(f"Extracted player prop: {bet_data['player']}")
-                # For SGPs, collect all player props
-                if len(player_props) > 1:
+                # For SGPs, collect all unique player props
+                if len(unique_player_props) > 1:
                     bet_data['is_parlay'] = True
-                    for p in player_props:
+                    for p in unique_player_props:
                         bet_data['legs'].append({'player': p})
 
             # 4. Extract bet types (e.g., Money Line, ALT Hits + Runs + RBIs, Over 1.5)
