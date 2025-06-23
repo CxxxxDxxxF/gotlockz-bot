@@ -662,60 +662,59 @@ class BettingCommands(app_commands.Group):
             player = bet_data.get('player', 'TBD')
             game_date = bet_data.get('game_date')  # Get date from parsed bet data
 
-            # Fetch live data using the enhanced MLB utility
-            away_team_stats = await mlb_fetcher.get_team_stats(teams[0])
-            home_team_stats = await mlb_fetcher.get_team_stats(teams[1])
-            player_stats = await mlb_fetcher.get_player_stats(player)
-            # Pass the extracted date to the get_game_info function
-            game_info = await mlb_fetcher.get_game_info(
-                teams[0], teams[1], game_date=game_date
-            )
+            # Fetch live data using ESPN API for real-time information
+            live_game_data = await mlb_fetcher.get_live_game_data(teams[0], teams[1])
+            
+            # Fallback to MLB Stats API if ESPN doesn't have the game
+            if not live_game_data:
+                logger.info("ESPN live data not available, falling back to MLB Stats API")
+                away_team_stats = await mlb_fetcher.get_team_stats(teams[0])
+                home_team_stats = await mlb_fetcher.get_team_stats(teams[1])
+                player_stats = await mlb_fetcher.get_player_stats(player)
+                game_info = await mlb_fetcher.get_game_info(
+                    teams[0], teams[1], game_date=game_date
+                )
+                
+                return {
+                    'away_team_stats': away_team_stats,
+                    'home_team_stats': home_team_stats,
+                    'player_stats': player_stats,
+                    'game_info': game_info,
+                    'live_data': None
+                }
+            else:
+                # Use ESPN live data
+                logger.info(f"Found live game data: {live_game_data.get('away_team')} vs {live_game_data.get('home_team')}")
+                
+                # Get team stats from ESPN
+                away_team_stats = await mlb_fetcher.get_espn_team_stats(teams[0])
+                home_team_stats = await mlb_fetcher.get_espn_team_stats(teams[1])
+                
+                # Get player stats from MLB Stats API (fallback)
+                player_stats = await mlb_fetcher.get_player_stats(player)
+                
+                return {
+                    'away_team_stats': away_team_stats,
+                    'home_team_stats': home_team_stats,
+                    'player_stats': player_stats,
+                    'live_data': live_game_data,
+                    'game_info': {
+                        'game_time': live_game_data.get('game_status', 'TBD'),
+                        'venue': live_game_data.get('venue', 'TBD'),
+                        'weather': live_game_data.get('weather', 'Clear, 72°F'),
+                        'away_pitcher': live_game_data.get('away_pitcher', 'TBD'),
+                        'home_pitcher': live_game_data.get('home_pitcher', 'TBD')
+                    }
+                }
 
-            # Get recent stats
-            recent_player_stats = await mlb_fetcher.get_recent_player_stats(player)
-            recent_away_stats = await mlb_fetcher.get_recent_team_stats(teams[0])
-
-            # Get live scores
-            live_scores = await mlb_fetcher.get_live_scores()
-
-            # Combine player stats
-            combined_player_stats = {**player_stats}
-            if recent_player_stats:
-                combined_player_stats.update(recent_player_stats)
-
-            # Combine team stats
-            combined_team_stats = {
-                'away_record': f"{away_team_stats.get('wins', 0)}-{away_team_stats.get('losses', 0)}",
-                'home_record': f"{home_team_stats.get('wins', 0)}-{home_team_stats.get('losses', 0)}",
-                'away_pitcher': game_info.get('away_pitcher', 'TBD'),
-                'home_pitcher': game_info.get('home_pitcher', 'TBD'),
-                'recent_wins': recent_away_stats.get('recent_wins', 0),
-                'recent_losses': recent_away_stats.get('recent_losses', 0),
-                'recent_runs_per_game': recent_away_stats.get('recent_runs_per_game', 0)
-            }
-
-            return {
-                'away_team': teams[0],
-                'home_team': teams[1],
-                'player_stats': combined_player_stats,
-                'team_stats': combined_team_stats,
-                'current_trends': f"{teams[0]} is {away_team_stats.get('win_pct', 0):.3f} this season",
-                'weather': game_info.get('weather', 'Clear, 72°F'),
-                'venue': game_info.get('venue', 'TBD Stadium'),
-                'game_time': game_info.get('game_time', 'TBD'),
-                'live_scores': live_scores.get('live_games', [])
-            }
         except Exception as e:
             logger.error(f"Error fetching MLB data: {e}")
             return {
-                'away_team': bet_data.get('teams', ['TBD', 'TBD'])[0],
-                'home_team': bet_data.get('teams', ['TBD', 'TBD'])[1],
+                'away_team_stats': {},
+                'home_team_stats': {},
                 'player_stats': {},
-                'team_stats': {},
-                'current_trends': 'Data unavailable',
-                'weather': 'TBD',
-                'venue': 'TBD',
-                'live_scores': []
+                'game_info': {},
+                'live_data': None
             }
 
     async def _generate_analysis(
@@ -900,34 +899,43 @@ class BettingCommands(app_commands.Group):
             return "🏆 | Pick 1: TBD – TBD (TBD)\n🏆 | Pick 2: TBD – TBD (TBD)\n🏆 | Pick 3: TBD – TBD (TBD)\n🏆 | Pick 4: TBD – TBD (TBD)"
 
     async def _generate_live_stats_section(self, bet_data: dict, mlb_data: dict) -> str:
-        """Generate live stats section for the pick."""
-        if not mlb_data or not mlb_data.get('player_stats'):
-            return "Live stats unavailable"
-
-        stats_lines = []
-        player_stats = mlb_data.get('player_stats', {})
-
-        # Handle the case where player_stats is a dict with player name as key
-        if isinstance(player_stats, dict) and player_stats:
-            # Get the player name from bet_data
-            player_name = bet_data.get('player', 'Player')
-
-            stats_lines.append(f"**{player_name}:**")
-            if player_stats.get('batting_avg'):
-                stats_lines.append(f"• AVG: {player_stats['batting_avg']}")
-            if player_stats.get('hr'):
-                stats_lines.append(f"• HR: {player_stats['hr']}")
-            if player_stats.get('rbi'):
-                stats_lines.append(f"• RBI: {player_stats['rbi']}")
-            if player_stats.get('obp'):
-                stats_lines.append(f"• OBP: {player_stats['obp']}")
-            if player_stats.get('ops'):
-                stats_lines.append(f"• OPS: {player_stats['ops']}")
-            if player_stats.get('slg'):
-                stats_lines.append(f"• SLG: {player_stats['slg']}")
-            stats_lines.append("")
-
-        return "\n".join(stats_lines) if stats_lines else "Live stats unavailable"
+        """Generate live stats section using ESPN data."""
+        try:
+            live_data = mlb_data.get('live_data')
+            if not live_data:
+                return "📊 Live stats unavailable"
+            
+            # Check if game is live
+            is_live = live_data.get('is_live', False)
+            if not is_live:
+                return "📊 Game not yet started"
+            
+            # Build live stats
+            away_team = live_data.get('away_team', 'Unknown')
+            home_team = live_data.get('home_team', 'Unknown')
+            away_score = live_data.get('away_score', '0')
+            home_score = live_data.get('home_score', '0')
+            game_status = live_data.get('game_status', 'Unknown')
+            inning = live_data.get('inning', 0)
+            venue = live_data.get('venue', 'Unknown')
+            weather = live_data.get('weather', 'Clear, 72°F')
+            last_updated = live_data.get('last_updated', 'Unknown')
+            
+            # Format the live stats
+            stats_lines = [
+                f"🏟️ **{away_team} {away_score} - {home_score} {home_team}**",
+                f"📡 **Status**: {game_status}",
+                f"⚾ **Inning**: {inning}" if inning > 0 else "⚾ **Inning**: Pre-game",
+                f"🏟️ **Venue**: {venue}",
+                f"🌤️ **Weather**: {weather}",
+                f"🕐 **Updated**: {last_updated}"
+            ]
+            
+            return "\n".join(stats_lines)
+            
+        except Exception as e:
+            logger.error(f"Error generating live stats section: {e}")
+            return "📊 Live stats unavailable"
 
     def _format_date_no_zeros(self, date_str: str) -> str:
         """Format date without leading zeros (e.g., '06/22/25' -> '6/22/25')."""

@@ -10,6 +10,7 @@ from datetime import datetime
 import statsapi
 import requests
 import json
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,10 @@ class MLBDataFetcher:
         self.session.headers.update({
             'User-Agent': 'GotLockz Bot/1.0'
         })
+        
+        # ESPN API endpoints
+        self.espn_base_url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
+        
         self.team_abbreviations = {
             "ARI": "Arizona Diamondbacks", "AZ": "Arizona Diamondbacks",
             "ATL": "Atlanta Braves",
@@ -418,6 +423,181 @@ class MLBDataFetcher:
 
         except Exception as e:
             logger.error(f"Error fetching recent team stats: {e}")
+            return {}
+
+    async def get_live_game_data(self, away_team: str, home_team: str) -> Dict[str, Any]:
+        """Get live game data from ESPN API."""
+        try:
+            # First, get today's games from ESPN
+            today = datetime.now().strftime("%Y%m%d")
+            url = f"{self.espn_base_url}/scoreboard"
+            params = {
+                'dates': today,
+                'limit': 50
+            }
+            
+            response = self.session.get(url, params=params, timeout=10)
+            if response.status_code != 200:
+                logger.error(f"ESPN API error: {response.status_code}")
+                return {}
+            
+            data = response.json()
+            events = data.get('events', [])
+            
+            # Find the specific game
+            target_game = None
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                    
+                competitions = event.get('competitions', [])
+                if not competitions:
+                    continue
+                    
+                competition = competitions[0]
+                competitors = competition.get('competitors', [])
+                
+                if len(competitors) >= 2:
+                    team1_name = competitors[0].get('team', {}).get('name', '').lower()
+                    team2_name = competitors[1].get('team', {}).get('name', '').lower()
+                    
+                    away_lower = away_team.lower()
+                    home_lower = home_team.lower()
+                    
+                    # Check if this is our game
+                    if ((away_lower in team1_name and home_lower in team2_name) or 
+                        (away_lower in team2_name and home_lower in team1_name)):
+                        target_game = event
+                        break
+            
+            if not target_game:
+                logger.warning(f"No live game found for {away_team} vs {home_team}")
+                return {}
+            
+            # Extract live data
+            return self._parse_espn_game_data(target_game)
+            
+        except Exception as e:
+            logger.error(f"Error fetching ESPN live data: {e}")
+            return {}
+
+    def _parse_espn_game_data(self, game_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse ESPN game data into our format."""
+        try:
+            competitions = game_data.get('competitions', [])
+            if not competitions:
+                return {}
+            
+            competition = competitions[0]
+            competitors = competition.get('competitors', [])
+            
+            if len(competitors) < 2:
+                return {}
+            
+            # Get team data
+            away_team = competitors[0]
+            home_team = competitors[1]
+            
+            # Determine which is home/away
+            if away_team.get('homeAway') == 'home':
+                away_team, home_team = home_team, away_team
+            
+            # Get scores
+            away_score = away_team.get('score', '0')
+            home_score = home_team.get('score', '0')
+            
+            # Get game status
+            status = competition.get('status', {})
+            game_status = status.get('type', {}).get('description', 'Unknown')
+            period = status.get('period', 0)
+            
+            # Get venue
+            venue = competition.get('venue', {}).get('fullName', 'Unknown')
+            
+            # Get weather if available
+            weather = competition.get('weather', 'Clear, 72°F')
+            
+            # Get probable pitchers
+            away_pitcher = 'TBD'
+            home_pitcher = 'TBD'
+            
+            # Try to get pitchers from game notes
+            notes = competition.get('notes', [])
+            for note in notes:
+                if isinstance(note, dict) and 'headline' in note:
+                    headline = note['headline'].lower()
+                    if 'probable' in headline or 'starting' in headline:
+                        # Extract pitcher names from headline
+                        pitchers = re.findall(r'([A-Z][a-z]+ [A-Z][a-z]+)', note['headline'])
+                        if len(pitchers) >= 2:
+                            away_pitcher = pitchers[0]
+                            home_pitcher = pitchers[1]
+            
+            return {
+                'away_team': away_team.get('team', {}).get('name', 'Unknown'),
+                'home_team': home_team.get('team', {}).get('name', 'Unknown'),
+                'away_score': away_score,
+                'home_score': home_score,
+                'game_status': game_status,
+                'inning': period,
+                'venue': venue,
+                'weather': weather,
+                'away_pitcher': away_pitcher,
+                'home_pitcher': home_pitcher,
+                'is_live': 'live' in game_status.lower() or 'in progress' in game_status.lower(),
+                'last_updated': datetime.now().strftime("%I:%M %p")
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing ESPN game data: {e}")
+            return {}
+
+    async def get_espn_team_stats(self, team_name: str) -> Dict[str, Any]:
+        """Get team stats from ESPN API."""
+        try:
+            # ESPN doesn't have a direct team stats endpoint, but we can get some data
+            # from the standings endpoint
+            url = f"{self.espn_base_url}/standings"
+            
+            response = self.session.get(url, timeout=10)
+            if response.status_code != 200:
+                return {}
+            
+            data = response.json()
+            groups = data.get('groups', [])
+            
+            for group in groups:
+                teams = group.get('teams', [])
+                for team in teams:
+                    team_info = team.get('team', {})
+                    if team_name.lower() in team_info.get('name', '').lower():
+                        stats = team.get('stats', [])
+                        
+                        # Extract relevant stats
+                        wins = 0
+                        losses = 0
+                        win_pct = 0.0
+                        
+                        for stat in stats:
+                            stat_name = stat.get('name', '')
+                            if stat_name == 'wins':
+                                wins = stat.get('value', 0)
+                            elif stat_name == 'losses':
+                                losses = stat.get('value', 0)
+                            elif stat_name == 'winPercent':
+                                win_pct = stat.get('value', 0.0)
+                        
+                        return {
+                            'wins': wins,
+                            'losses': losses,
+                            'win_pct': win_pct,
+                            'team_name': team_info.get('name', team_name)
+                        }
+            
+            return {}
+            
+        except Exception as e:
+            logger.error(f"Error fetching ESPN team stats: {e}")
             return {}
 
 
