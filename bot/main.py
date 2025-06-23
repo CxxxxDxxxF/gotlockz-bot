@@ -19,6 +19,8 @@ import os
 from pathlib import Path
 from datetime import datetime
 import sys
+from flask import Flask, jsonify
+import threading
 
 # Add the bot directory to Python path
 bot_dir = Path(__file__).parent
@@ -37,6 +39,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Create Flask app for health checks
+app = Flask(__name__)
+
+# Global bot reference for health checks
+bot_instance = None
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Render deployment."""
+    global bot_instance
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'bot_ready': bot_instance.is_ready() if bot_instance else False,
+        'guild_count': len(bot_instance.guilds) if bot_instance else 0
+    })
+
+@app.route('/')
+def root():
+    """Root endpoint."""
+    return jsonify({
+        'message': 'GotLockz Bot is running',
+        'status': 'online',
+        'timestamp': datetime.now().isoformat()
+    })
+
+def run_flask():
+    """Run Flask app in a separate thread."""
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
 class GotLockzBot(commands.Bot):
     """Simplified Discord bot with betting commands."""
@@ -112,9 +143,17 @@ class GotLockzBot(commands.Bot):
 
 async def main():
     """Main entry point."""
+    global bot_instance
+    
     try:
         # Create bot instance
         bot = GotLockzBot()
+        bot_instance = bot  # Set global reference for health checks
+
+        # Start Flask health check server in separate thread
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        logger.info("Flask health check server started")
 
         # Get token from environment
         token = os.getenv('DISCORD_TOKEN')
