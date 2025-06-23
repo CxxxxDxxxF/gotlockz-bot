@@ -163,21 +163,18 @@ class OCRService:
             image.save(img_byte_arr, format='PNG')
             img_byte_arr = img_byte_arr.getvalue()
             
-            # Prepare request data
-            data = {
-                'apikey': self.ocr_space_api_key,
-                'language': 'eng',
-                'isOverlayRequired': False,
-                'filetype': 'png',
-                'detectOrientation': True,
-                'scale': True,
-                'OCREngine': 2  # Use the most accurate engine
-            }
-            
-            files = {'image': ('bet_slip.png', img_byte_arr, 'image/png')}
-            
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.ocr_space_url, data=data, files=files) as response:
+                form_data = aiohttp.FormData()
+                form_data.add_field('apikey', self.ocr_space_api_key)
+                form_data.add_field('language', 'eng')
+                form_data.add_field('isOverlayRequired', 'false')
+                form_data.add_field('filetype', 'png')
+                form_data.add_field('detectOrientation', 'true')
+                form_data.add_field('scale', 'true')
+                form_data.add_field('OCREngine', '2')
+                form_data.add_field('image', img_byte_arr, filename='bet_slip.png', content_type='image/png')
+                
+                async with session.post(self.ocr_space_url, data=form_data) as response:
                     if response.status == 200:
                         result = await response.json()
                         
