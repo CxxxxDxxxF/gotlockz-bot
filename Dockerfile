@@ -29,11 +29,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy bot source code
-COPY bot/ ./bot/
-COPY scripts/ ./scripts/
+COPY src/ ./src/
+COPY main.py .
 
 # Create data directory
-RUN mkdir -p bot/data
+RUN mkdir -p data
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash bot && \
@@ -44,4 +44,4 @@ USER bot
 ENV PYTHONPATH=/app
 
 # Run the bot
-CMD ["python", "bot/main.py"]
+CMD ["python", "main.py"]

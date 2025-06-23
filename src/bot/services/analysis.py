@@ -1,5 +1,5 @@
 """
-Analysis Service - AI-powered betting analysis
+Analysis Service - AI-powered MLB betting analysis
 """
 import logging
 from typing import Dict, Any, Optional
@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 class AnalysisService:
-    """Service for AI-powered betting analysis."""
+    """Service for AI-powered MLB betting analysis."""
     
     def __init__(self):
         self.client = openai.OpenAI(api_key=settings.api.openai_api_key)
         self.model = settings.api.openai_model
     
     async def generate_analysis(self, bet_data: Dict[str, Any], stats_data: Optional[Dict[str, Any]] = None) -> str:
-        """Generate AI analysis for betting data."""
+        """Generate AI analysis for MLB betting data."""
         try:
             # Build context
             context = self._build_context(bet_data, stats_data)
@@ -41,7 +41,7 @@ class AnalysisService:
             is_parlay = bet_data.get('is_parlay', False)
             
             context = f"""
-            Betting Analysis Context:
+            MLB Betting Analysis Context:
             
             Teams: {teams[0]} vs {teams[1]}
             Bet Type: {description}
@@ -63,6 +63,7 @@ class AnalysisService:
             - Runs Scored: {team1_stats.get('runs_scored', 0)}
             - Runs Allowed: {team1_stats.get('runs_allowed', 0)}
             - Run Differential: {team1_stats.get('run_diff', 0)}
+            - Games Played: {team1_stats.get('games_played', 0)}
             
             {teams[1]}:
             - Record: {team2_stats.get('wins', 0)}-{team2_stats.get('losses', 0)}
@@ -70,6 +71,7 @@ class AnalysisService:
             - Runs Scored: {team2_stats.get('runs_scored', 0)}
             - Runs Allowed: {team2_stats.get('runs_allowed', 0)}
             - Run Differential: {team2_stats.get('run_diff', 0)}
+            - Games Played: {team2_stats.get('games_played', 0)}
             """
             
             return context
@@ -82,31 +84,38 @@ class AnalysisService:
         """Generate AI analysis using OpenAI."""
         try:
             prompt = f"""
-            You are a professional sports betting analyst. Based on the following context, provide a concise but insightful analysis of this betting pick.
+            You are a professional MLB sports betting analyst. Based on the following context, provide a concise but insightful analysis of this betting pick.
             
             {context}
             
             Please provide:
-            1. A brief analysis of the matchup
-            2. Key factors supporting this bet
-            3. Any potential risks or concerns
+            1. A brief analysis of the matchup and key factors
+            2. Why this bet makes sense based on the statistics
+            3. Any potential risks or concerns to consider
             4. A confident but measured conclusion
             
-            Keep the analysis professional, factual, and under 200 words.
+            Keep the analysis professional, factual, and under 150 words. Focus on MLB-specific insights like pitching matchups, recent form, and statistical trends.
             """
             
-            response = await self.client.chat.completions.acreate(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional sports betting analyst with expertise in MLB. Provide clear, concise analysis based on statistics and trends."},
+                    {"role": "system", "content": "You are a professional MLB sports betting analyst with deep knowledge of baseball statistics, trends, and betting strategies. Provide clear, concise analysis that helps bettors make informed decisions."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=300,
+                max_tokens=250,
                 temperature=0.7
             )
             
-            analysis = response.choices[0].message.content.strip()
-            return analysis
+            if response and response.choices and len(response.choices) > 0:
+                message_content = response.choices[0].message.content
+                if message_content:
+                    analysis = message_content.strip()
+                    return analysis
+                else:
+                    return "AI analysis temporarily unavailable. Please check the betting data manually."
+            else:
+                return "AI analysis temporarily unavailable. Please check the betting data manually."
             
         except Exception as e:
             logger.error(f"Error generating AI analysis: {e}")
@@ -122,9 +131,9 @@ class AnalysisService:
                 return "Analysis: Unable to extract team information from the betting slip. Please verify the image quality and try again."
             
             if description == 'TBD':
-                return f"Analysis: Betting pick for {teams[0]} vs {teams[1]}. Please review the betting slip for specific bet details and odds."
+                return f"Analysis: MLB betting pick for {teams[0]} vs {teams[1]}. Please review the betting slip for specific bet details and odds."
             
-            return f"Analysis: {description} for {teams[0]} vs {teams[1]}. Review recent team performance and head-to-head matchups before placing this bet."
+            return f"Analysis: {description} for {teams[0]} vs {teams[1]}. Review recent team performance, pitching matchups, and head-to-head statistics before placing this bet."
             
         except Exception as e:
             logger.error(f"Error generating fallback analysis: {e}")

@@ -34,6 +34,18 @@ class ChannelConfig:
     lotto_channel_id: Optional[int] = None
 
 
+@dataclass
+class TemplateConfig:
+    """Template configuration for different pick types."""
+    free_play_header: str = "**FREE PLAY**"
+    vip_header: str = "**VIP PICK**"
+    lotto_header: str = "**LOTTO TICKET**"
+    
+    # Template placeholders
+    date_format: str = "%m/%d/%y"
+    time_format: str = "%I:%M %p EST"
+
+
 class Settings:
     """Main settings class."""
     
@@ -55,6 +67,8 @@ class Settings:
             free_channel_id=int(os.getenv("FREE_CHANNEL_ID", "0")) if os.getenv("FREE_CHANNEL_ID") else None,
             lotto_channel_id=int(os.getenv("LOTTO_CHANNEL_ID", "0")) if os.getenv("LOTTO_CHANNEL_ID") else None
         )
+        
+        self.templates = TemplateConfig()
     
     def validate(self) -> bool:
         """Validate required settings."""

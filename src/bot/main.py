@@ -14,7 +14,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from config.settings import settings
 from bot.commands.pick import PickCommands
-from bot.commands.stats import StatsCommands
 from bot.commands.admin import AdminCommands
 
 # Configure logging
@@ -44,6 +43,7 @@ class GotLockzBot(commands.Bot):
         )
         
         self.settings = settings
+        self.start_time = None
         logger.info("Bot initialized")
     
     async def setup_hook(self):
@@ -51,7 +51,6 @@ class GotLockzBot(commands.Bot):
         try:
             # Add command groups
             self.tree.add_command(PickCommands(self))
-            self.tree.add_command(StatsCommands(self))
             self.tree.add_command(AdminCommands(self))
             
             logger.info("Commands loaded successfully")
@@ -64,6 +63,9 @@ class GotLockzBot(commands.Bot):
         """Called when bot is ready."""
         logger.info(f"Bot is ready! Logged in as {self.user}")
         logger.info(f"Connected to {len(self.guilds)} guilds")
+        
+        # Set start time
+        self.start_time = asyncio.get_event_loop().time()
         
         # Sync commands
         try:

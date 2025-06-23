@@ -1,133 +1,82 @@
-# 🏆 GotLockz Bot V2
+# GotLockz Bot V2 - MLB Betting Bot
 
-**Modern Discord bot for betting pick management with OCR, live stats, and AI analysis.**
+A Discord bot designed to help your team post daily MLB betting picks with automated analysis and statistics.
 
-## 🚀 Features
+## Features
 
-### Core Functionality
-- **OCR Image Processing** - Extract betting data from slip images
-- **Live MLB Stats** - Real-time team and player statistics
-- **AI Analysis** - Contextual insights using OpenAI GPT-4
-- **Two-Phase Processing** - Immediate response + async enhancement
-- **Cloud Deployment** - Render-ready with health monitoring
+- **OCR Bet Slip Processing**: Automatically extracts betting data from uploaded images
+- **MLB Statistics**: Fetches live team statistics from MLB API
+- **AI Analysis**: Generates professional betting analysis using ChatGPT
+- **Multiple Channel Support**: Posts to different channels (Free Play, VIP, Lotto Tickets)
+- **Template System**: Consistent formatting for each pick type
 
-### Commands
-- `/pick` - Post a betting pick with image analysis
-- `/stats` - Get live team/player statistics
-- `/status` - Bot health and system status
-- `/help` - Command documentation
+## Commands
 
-## 🏗️ Architecture
+### `/pick post`
+Post a betting pick with image analysis and AI.
 
-```
-gotlockz-v2/
-├── src/
-│   ├── bot/
-│   │   ├── main.py          # Bot entry point
-│   │   ├── commands/        # Discord commands
-│   │   ├── services/        # External integrations
-│   │   └── utils/           # Utilities
-│   ├── api/                 # Health check endpoints
-│   └── config/              # Configuration
-├── tests/                   # Test suite
-├── docker/                  # Container files
-├── requirements.txt         # Dependencies
-└── README.md               # This file
-```
+**Parameters:**
+- `channel_type`: Type of pick (Free Play, VIP Pick, Lotto Ticket)
+- `image`: Betting slip image attachment
+- `description`: Additional notes (optional)
 
-## 🛠️ Tech Stack
+### `/admin ping`
+Test bot responsiveness.
 
-- **Language**: Python 3.11+
-- **Framework**: Discord.py 2.3+
-- **OCR**: Tesseract + OpenCV
-- **APIs**: ESPN, MLB Stats, OpenAI
-- **Deployment**: Render + Docker
-- **Monitoring**: Health checks + logging
+### `/admin status`
+Check bot status and system information.
 
-## 🚀 Quick Start
+### `/admin sync`
+Sync slash commands (admin only).
 
-### 1. Setup Environment
-```bash
-# Clone repository
-git clone <your-repo>
-cd gotlockz-v2
+### `/admin uptime`
+Get bot uptime.
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+## Setup
 
-# Install dependencies
-pip install -r requirements.txt
-```
+1. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 2. Configuration
-```bash
-# Copy environment template
-cp .env.example .env
+2. **Environment Variables**
+   Create a `.env` file with:
+   ```
+   DISCORD_TOKEN=your_discord_bot_token
+   OPENAI_API_KEY=your_openai_api_key
+   VIP_CHANNEL_ID=your_vip_channel_id
+   FREE_CHANNEL_ID=your_free_channel_id
+   LOTTO_CHANNEL_ID=your_lotto_channel_id
+   ```
 
-# Edit with your tokens
-DISCORD_TOKEN=your_discord_token
-OPENAI_API_KEY=your_openai_key
-```
+3. **Run the Bot**
+   ```bash
+   python main.py
+   ```
 
-### 3. Run Bot
-```bash
-python src/bot/main.py
-```
-
-## 📦 Docker Deployment
+## Docker Deployment
 
 ```bash
-# Build and run
-docker build -t gotlockz-v2 .
-docker run --env-file .env gotlockz-v2
-
-# Or with docker-compose
-docker-compose up -d
+docker build -t gotlockz-bot .
+docker run -d --env-file .env gotlockz-bot
 ```
 
-## 🔧 Development
+## Configuration
 
-### Project Structure
-- **Clean Architecture** - Separation of concerns
-- **Type Hints** - Full type safety
-- **Async/Await** - Non-blocking operations
-- **Error Handling** - Graceful degradation
-- **Testing** - Comprehensive test suite
+The bot uses three main channels:
+- **Free Play**: General betting picks
+- **VIP Pick**: Premium betting picks with unit sizing
+- **Lotto Ticket**: High-risk, high-reward picks
 
-### Key Principles
-1. **Reliability First** - Never timeout or crash
-2. **Performance** - Fast response times
-3. **Maintainability** - Clean, documented code
-4. **Scalability** - Cloud-ready architecture
+Each channel has its own template format and the bot automatically posts to the correct channel based on your selection.
 
-## 📊 Performance Targets
+## Requirements
 
-- **Command Response**: < 3 seconds (Discord requirement)
-- **OCR Processing**: < 2 seconds
-- **API Calls**: < 1 second each
-- **Uptime**: 99.9% availability
+- Python 3.11+
+- Discord Bot Token
+- OpenAI API Key
+- Tesseract OCR (for image processing)
 
-## 🎯 Roadmap
+## Support
 
-### Phase 1: Core Bot ✅
-- [x] Basic Discord integration
-- [x] OCR image processing
-- [x] Live stats integration
-- [x] AI analysis
-
-### Phase 2: Enhancement 🚧
-- [ ] Database integration
-- [ ] Caching layer
-- [ ] Advanced analytics
-- [ ] Team dashboard
-
-### Phase 3: Enterprise 🎯
-- [ ] Multi-server support
-- [ ] Advanced monitoring
-- [ ] Performance optimization
-- [ ] Security hardening
-
----
-
-**Built with ❤️ for the GotLockz team**
+For issues or questions, check the bot logs or contact your development team.
