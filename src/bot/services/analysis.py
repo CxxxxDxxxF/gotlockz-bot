@@ -81,32 +81,32 @@ class AnalysisService:
             return "Error building analysis context"
     
     async def _generate_ai_analysis(self, context: str) -> str:
-        """Generate AI analysis using OpenAI."""
+        """Generate AI analysis using OpenAI with a conversational, energetic, emoji-rich style."""
         try:
             prompt = f"""
-            You are a professional MLB sports betting analyst. Based on the following context, provide a concise but insightful analysis of this betting pick.
-            
-            {context}
-            
-            Please provide:
-            1. A brief analysis of the matchup and key factors
-            2. Why this bet makes sense based on the statistics
-            3. Any potential risks or concerns to consider
-            4. A confident but measured conclusion
-            
-            Keep the analysis professional, factual, and under 150 words. Focus on MLB-specific insights like pitching matchups, recent form, and statistical trends.
-            """
-            
+You are a bold, energetic, and slightly irreverent MLB betting analyst. Write in a conversational, hype, and emoji-rich style. Use colorful language, mix stats with attitude, and make the analysis fun and engaging. Use relevant emojis throughout (e.g., 😂👊, 🏃‍♂️🤙, 🔒🔥). End with a strong call to action like 'LOCK IT IN 🔒🔥'.
+
+Here is the context for the bet:
+
+{context}
+
+Format:
+- Start with a quick, punchy summary of the pitching matchup and why it's a great spot (use stats, but keep it fun)
+- Explain the park/weather factors if relevant
+- Mention what the books/odds are telling us
+- End with a hype call to action: 'LOCK IT IN 🔒🔥' or similar
+- Use line breaks for readability
+- Keep it under 200 words
+"""
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional MLB sports betting analyst with deep knowledge of baseball statistics, trends, and betting strategies. Provide clear, concise analysis that helps bettors make informed decisions."},
+                    {"role": "system", "content": "You are a bold, energetic, and slightly irreverent MLB betting analyst. Write in a conversational, hype, and emoji-rich style. Use colorful language, mix stats with attitude, and make the analysis fun and engaging. Use relevant emojis throughout (e.g., 😂👊, 🏃‍♂️🤙, 🔒🔥). End with a strong call to action like 'LOCK IT IN 🔒🔥'."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=250,
-                temperature=0.7
+                max_tokens=350,
+                temperature=0.85
             )
-            
             if response and response.choices and len(response.choices) > 0:
                 message_content = response.choices[0].message.content
                 if message_content:
@@ -116,7 +116,6 @@ class AnalysisService:
                     return "AI analysis temporarily unavailable. Please check the betting data manually."
             else:
                 return "AI analysis temporarily unavailable. Please check the betting data manually."
-            
         except Exception as e:
             logger.error(f"Error generating AI analysis: {e}")
             return "AI analysis temporarily unavailable. Please check the betting data manually."

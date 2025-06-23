@@ -17,33 +17,24 @@ class TemplateService:
         self.templates = settings.templates
     
     def format_free_play(self, bet_data: Dict[str, Any], stats_data: Optional[Dict[str, Any]] = None, analysis: str = "") -> str:
-        """Format a free play pick."""
+        """Format a free play pick to match the Discord screenshot style."""
         try:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             description = bet_data.get('description', 'TBD')
             odds = bet_data.get('odds', 'TBD')
             units = bet_data.get('units', '1')
-            
             current_date = datetime.now().strftime(self.templates.date_format)
             current_time = datetime.now().strftime(self.templates.time_format)
-            
-            header = f"{self.templates.free_play_header} – {current_date}"
-            game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({current_date} {current_time})"
-            bet_info = f"🎯 | Bet: {description}"
-            if odds != 'TBD':
-                bet_info += f" | Odds: {odds}"
-            
-            stats_section = ""
-            if stats_data:
-                stats_section = f"\n📈 Live Stats: {stats_data.get('summary', 'Data available')}"
-            
-            analysis_section = ""
-            if analysis:
-                analysis_section = f"\n📊 Analysis:\n{analysis}"
-            
-            content = f"{header}\n\n{game_info}\n{bet_info}{stats_section}{analysis_section}"
+
+            header = f"FREE PLAY - {current_date}"
+            game_info = f"⚾ I Game: {teams[0]} @ {teams[1]} ({current_date} {current_time})"
+            bet_info = f"🏆 I {description} ({odds})"
+            analysis_label = "\n👇 I Analysis Below:\n"
+
+            analysis_section = analysis if analysis else "No analysis available."
+
+            content = f"**{header}**\n\n{game_info}\n\n{bet_info}\n{analysis_label}\n{analysis_section}"
             return content
-            
         except Exception as e:
             logger.error(f"Error formatting free play: {e}")
             return self._get_fallback_format(bet_data, "FREE PLAY")
