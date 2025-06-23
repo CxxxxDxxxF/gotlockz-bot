@@ -13,6 +13,7 @@ from typing import Optional
 from datetime import datetime
 import os
 import re
+import asyncio
 
 # Import utilities
 from utils.ocr import ocr_parser
@@ -66,59 +67,89 @@ class BettingCommands(app_commands.Group):
         unitsize: int = 0
     ):
         """Post a pick with custom units and channel specification."""
+        
+        # Immediately acknowledge the interaction to prevent timeout
+        await interaction.response.defer(thinking=True)
+        
         try:
-            await interaction.response.defer(thinking=True)
-
-            # Validate inputs
-            if not image.content_type or not image.content_type.startswith('image/'):
-                await interaction.followup.send("❌ Please upload a valid image file!", ephemeral=True)
-                return
-
-            # Check if user has permission to post in the specified channel
-            member = interaction.guild.get_member(interaction.user.id) if interaction.guild else None
-            if member and not channel.permissions_for(member).send_messages:
-                await interaction.followup.send(f"❌ You don't have permission to post in {channel.mention}!", ephemeral=True)
-                return
-
-            # Analyze the betting slip image
-            bet_data = await self._analyze_betting_slip(image)
-
-            # Fetch live MLB data
-            mlb_data = await self._fetch_mlb_data(bet_data)
-
-            # Get current date and time
-            current_date = datetime.now().strftime("%m/%d/%y")
-            current_time = datetime.now().strftime("%I:%M")
-
-            # Determine channel type and increment counter
-            channel_type = self._get_channel_type(channel.id)
-            if channel_type:
-                self.pick_counters[channel_type] += 1
-                self._save_counters()
-
-            # Generate the pick content with channel-specific template
-            message_content = await self._generate_channel_specific_content(
-                bet_data, mlb_data, current_date, current_time, unitsize, channel_type
-            )
-
-            # Post to the specified channel
-            await channel.send(content=message_content)
-
-            # Confirm to the user
-            await interaction.followup.send(
-                f"✅ Pick posted successfully in {channel.mention}!",
-                ephemeral=True
-            )
-
+            # Set a timeout for the entire processing
+            try:
+                # Use asyncio.wait_for for timeout (compatible with older Python versions)
+                await asyncio.wait_for(self._process_command_async(
+                    interaction, channel, image, unitsize
+                ), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.error("Command processing timed out")
+                await interaction.followup.send(
+                    "❌ The command took too long to process. Please try again with a clearer image.",
+                    ephemeral=True
+                )
+                
         except discord.errors.NotFound:
             logger.error("Interaction timed out and could not be found.")
-            await interaction.followup.send(
-                "❌ The command took too long to respond and timed out. Please try again.",
-                ephemeral=True
-            )
+            # Try to send a followup if possible
+            try:
+                await interaction.followup.send(
+                    "❌ The command took too long to respond and timed out. Please try again.",
+                    ephemeral=True
+                )
+            except:
+                pass
         except Exception as e:
             logger.error(f"Error in postpick command: {e}")
-            await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ An error occurred: {str(e)}",
+                ephemeral=True
+            )
+
+    async def _process_command_async(
+        self, 
+        interaction: discord.Interaction, 
+        channel: discord.TextChannel, 
+        image: discord.Attachment, 
+        unitsize: int
+    ):
+        """Process the command asynchronously with timeout protection."""
+        # Validate inputs
+        if not image.content_type or not image.content_type.startswith('image/'):
+            await interaction.followup.send(
+                "❌ Please provide a valid image file.",
+                ephemeral=True
+            )
+            return
+
+        # Download image
+        image_bytes = await image.read()
+        
+        # Process the bet slip
+        bet_data = await self._analyze_betting_slip(image)
+        
+        # Fetch live data
+        mlb_data = await self._fetch_mlb_data(bet_data)
+        
+        # Get current date and time
+        current_date = datetime.now().strftime("%m/%d/%y")
+        current_time = datetime.now().strftime("%I:%M")
+
+        # Determine channel type and increment counter
+        channel_type = self._get_channel_type(channel.id)
+        if channel_type:
+            self.pick_counters[channel_type] += 1
+            self._save_counters()
+
+        # Generate the pick content with channel-specific template
+        message_content = await self._generate_channel_specific_content(
+            bet_data, mlb_data, current_date, current_time, unitsize, channel_type
+        )
+
+        # Post to the specified channel
+        await channel.send(content=message_content)
+
+        # Confirm to the user
+        await interaction.followup.send(
+            f"✅ Pick posted successfully in {channel.mention}!",
+            ephemeral=True
+        )
 
     def _get_channel_type(self, channel_id: int) -> Optional[str]:
         """Determine the type of channel based on channel ID."""

@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from PIL import Image
 import pytesseract
 import shutil
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -30,25 +31,36 @@ class OCRParser:
             raise RuntimeError(error_msg)
             
         try:
-            image = Image.open(io.BytesIO(image_bytes))
-            
-            # --- Image Preprocessing for improved OCR accuracy ---
-            # 1. Convert to grayscale
-            image = image.convert('L')
-            
-            # 2. Apply a threshold to get a binary image. This helps with contrast.
-            image = image.point(lambda x: 0 if x < 127 else 255, '1')
-
-            # 3. Use Tesseract with a specific Page Segmentation Mode (PSM)
-            # PSM 6: Assume a single uniform block of text, which is good for snippets.
-            custom_config = r'--oem 3 --psm 6'
-            text = pytesseract.image_to_string(image, config=custom_config)
-            
-            logger.info(f"OCR extracted text (post-processing): {text.strip()}")
-            return text
+            # Wrap OCR processing in a timeout
+            return await asyncio.wait_for(
+                self._perform_ocr(image_bytes), 
+                timeout=5.0  # 5 second timeout for OCR
+            )
+        except asyncio.TimeoutError:
+            logger.error("OCR processing timed out")
+            return ""
         except Exception as e:
             logger.error(f"OCR extraction failed: {e}")
             return ""
+
+    async def _perform_ocr(self, image_bytes: bytes) -> str:
+        """Perform the actual OCR processing."""
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # --- Image Preprocessing for improved OCR accuracy ---
+        # 1. Convert to grayscale
+        image = image.convert('L')
+        
+        # 2. Apply a threshold to get a binary image. This helps with contrast.
+        image = image.point(lambda x: 0 if x < 127 else 255, '1')
+
+        # 3. Use Tesseract with a specific Page Segmentation Mode (PSM)
+        # PSM 6: Assume a single uniform block of text, which is good for snippets.
+        custom_config = r'--oem 3 --psm 6'
+        text = pytesseract.image_to_string(image, config=custom_config)
+        
+        logger.info(f"OCR extracted text (post-processing): {text.strip()}")
+        return text
 
     def _preprocess_image(self, image: Image.Image) -> Image.Image:
         """Preprocess image for better OCR results."""
