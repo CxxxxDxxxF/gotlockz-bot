@@ -3,8 +3,6 @@ discord.py>=2.3.0
 python-dotenv>=1.0.0
 
 # OCR and Image Processing
-pytesseract>=0.3.10
-opencv-python>=4.8.0
 Pillow>=10.0.0
 
 # HTTP and API
