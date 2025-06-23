@@ -23,25 +23,29 @@ class OCRParser:
         pass
 
     async def extract_text_from_image(self, image_bytes: bytes) -> str:
-        """Extract text from image using OCR."""
+        """Extract text from image using OCR with preprocessing for better accuracy."""
         if not shutil.which('tesseract'):
             error_msg = "Tesseract OCR engine is not installed or not in your system's PATH."
             logger.error(error_msg)
             raise RuntimeError(error_msg)
             
         try:
-            # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
+            
+            # --- Image Preprocessing for improved OCR accuracy ---
+            # 1. Convert to grayscale
+            image = image.convert('L')
+            
+            # 2. Apply a threshold to get a binary image. This helps with contrast.
+            image = image.point(lambda x: 0 if x < 127 else 255, '1')
 
-            # Preprocess image for better OCR
-            processed_image = self._preprocess_image(image)
-
-            # Extract text using Tesseract
-            text = pytesseract.image_to_string(processed_image)
-
-            logger.info(f"OCR extracted text: {text[:100]}...")
-            return text.strip()
-
+            # 3. Use Tesseract with a specific Page Segmentation Mode (PSM)
+            # PSM 6: Assume a single uniform block of text, which is good for snippets.
+            custom_config = r'--oem 3 --psm 6'
+            text = pytesseract.image_to_string(image, config=custom_config)
+            
+            logger.info(f"OCR extracted text (post-processing): {text.strip()}")
+            return text
         except Exception as e:
             logger.error(f"OCR extraction failed: {e}")
             return ""
@@ -131,8 +135,8 @@ class OCRParser:
                 'sport': 'MLB'
             }
 
-    def _extract_teams(self, text: str) -> Optional[list]:
-        """Extract team names from text."""
+    def _extract_teams(self, text: str) -> Optional[list[str]]:
+        """Extract teams from OCR text."""
         import re
 
         # Common team patterns
