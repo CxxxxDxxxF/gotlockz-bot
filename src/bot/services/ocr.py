@@ -1,17 +1,12 @@
 """
 OCR Service - Image processing and text extraction
 """
-import logging
 import re
-from typing import Dict, Any, Optional
-import asyncio
-
-import cv2
-import numpy as np
-from PIL import Image, ImageEnhance
-import pytesseract
+import logging
 import aiohttp
 import os
+from typing import Dict, Any, Optional
+from PIL import Image
 import io
 
 logger = logging.getLogger(__name__)
@@ -58,25 +53,11 @@ class OCRService:
         self.ocr_space_url = 'https://api.ocr.space/parse/image'
     
     async def extract_bet_data(self, image_bytes: bytes) -> Dict[str, Any]:
-        """Extract betting data from image bytes."""
+        """Extract betting data from image bytes using OCR.space."""
         try:
-            # Try local OCR first
-            local_text = await self._extract_text_local(image_bytes)
-            logger.info(f"Local OCR result: {local_text}")
-            
-            # If local OCR produces poor results (too many garbled characters), try OCR.space
-            if self._is_text_garbled(local_text):
-                logger.info("Local OCR produced garbled text, trying OCR.space...")
-                ocr_space_text = await self._extract_text_ocr_space(image_bytes)
-                if ocr_space_text and len(ocr_space_text.strip()) > 10:
-                    logger.info(f"OCR.space result: {ocr_space_text}")
-                    text = ocr_space_text
-                else:
-                    text = local_text
-            else:
-                text = local_text
-            
-            logger.info(f"Final OCR text: {text}")
+            # Extract text using OCR.space
+            text = await self._extract_text_ocr_space(image_bytes)
+            logger.info(f"OCR.space result: {text}")
             
             # Parse betting data
             bet_data = await self._parse_bet_data(text)
@@ -87,66 +68,6 @@ class OCRService:
         except Exception as e:
             logger.error(f"Error extracting bet data: {e}")
             return self._get_default_bet_data()
-    
-    def _is_text_garbled(self, text: str) -> bool:
-        """Check if text appears to be garbled OCR output."""
-        if not text or len(text.strip()) < 10:
-            return True
-        
-        # Check for common OCR artifacts that indicate garbled text
-        garbled_indicators = [
-            'sedfanatics',  # Should be "Fanatics"
-            'sporjtsbooks', # Should be "Sportsbook"
-            'ketalmertias', # Should be "Ketel Marte"
-            'iketelmarteysig', # Should be "Ketel Marte"
-            'authitsrumso', # Should be "ALT Hits + Runs"
-            'ecizonadiemanchackesat', # Should be "Arizona Diamondbacks at Colorado"
-            'celeradorecdias', # Should be "Colorado Rockies"
-            'musteb2i', # Should be "MUST WIN"
-            'camelingfroelem', # Should be "GAMBLING PROBLEM"
-            'sed fanatics',  # Should be "Fanatics"
-            'sportsoook',    # Should be "Sportsbook"
-            'ketel martet',  # Should be "Ketel Marte"
-            'aqt hits',      # Should be "ALT Hits"
-            'ruws rls',      # Should be "Runs + RBIs"
-            'atzona diemoncbachks',  # Should be "Arizona Diamondbacks"
-            'catesacls reckias',     # Should be "Colorado Rockies"
-            'gameling froelem caml' # Should be "GAMBLING PROBLEM CALL"
-        ]
-        
-        # If any of these garbled patterns are found, consider it garbled
-        for indicator in garbled_indicators:
-            if indicator.lower() in text.lower():
-                logger.info(f"Garbled text detected: found '{indicator}' in text")
-                return True
-        
-        # Count non-alphanumeric characters
-        non_alpha_count = sum(1 for c in text if not c.isalnum() and not c.isspace())
-        total_chars = len(text.replace(' ', ''))
-        
-        if total_chars == 0:
-            return True
-        
-        # If more than 20% are non-alphanumeric, likely garbled
-        garbled_ratio = non_alpha_count / total_chars
-        if garbled_ratio > 0.2:
-            logger.info(f"Garbled text detected: {garbled_ratio:.2%} non-alphanumeric characters")
-            return True
-        
-        # Check for excessive character repetition (common OCR artifact)
-        if len(text) > 50:
-            char_counts = {}
-            for char in text.lower():
-                if char.isalnum():
-                    char_counts[char] = char_counts.get(char, 0) + 1
-            
-            # If any character appears more than 30% of the time, likely garbled
-            for char, count in char_counts.items():
-                if count / len(text) > 0.3:
-                    logger.info(f"Garbled text detected: excessive repetition of '{char}'")
-                    return True
-        
-        return False
     
     async def _extract_text_ocr_space(self, image_bytes: bytes) -> str:
         """Extract text using OCR.space API."""
@@ -196,184 +117,6 @@ class OCRService:
                         
         except Exception as e:
             logger.error(f"Error with OCR.space API: {e}")
-            return ""
-    
-    async def _extract_text_local(self, image_bytes: bytes) -> str:
-        """Extract text using local Tesseract OCR with timeout."""
-        try:
-            # Preprocess image
-            processed_image = await self._preprocess_image(image_bytes)
-            
-            # Extract text using the enhanced local OCR with timeout
-            return await self._extract_text_with_timeout(processed_image)
-            
-        except Exception as e:
-            logger.error(f"Error in local OCR: {e}")
-            return ""
-    
-    async def _preprocess_image(self, image_bytes: bytes) -> np.ndarray:
-        """Preprocess image for better OCR results."""
-        try:
-            # Convert bytes to numpy array
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if img is None:
-                raise ValueError("Could not decode image")
-            
-            # Convert to grayscale
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # Apply noise reduction
-            denoised = cv2.fastNlMeansDenoising(gray)
-            
-            # Apply adaptive thresholding
-            thresh = cv2.adaptiveThreshold(
-                denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            )
-            
-            # Resize for optimal OCR
-            height, width = thresh.shape
-            scale = min(1.0, 1200.0 / width)
-            if scale < 1.0:
-                new_width = int(width * scale)
-                new_height = int(height * scale)
-                thresh = cv2.resize(thresh, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
-            
-            return thresh
-            
-        except Exception as e:
-            logger.error(f"Error preprocessing image: {e}")
-            raise
-    
-    async def _extract_text_with_timeout(self, image_array: np.ndarray) -> str:
-        """Extract text with timeout to prevent Discord heartbeat issues."""
-        try:
-            # Convert to grayscale if needed
-            if len(image_array.shape) == 3:
-                gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = image_array
-            
-            # Apply multiple preprocessing techniques
-            processed_images = []
-            
-            # 1. Basic preprocessing
-            # Resize for better OCR
-            height, width = gray.shape
-            if width > 2000:
-                scale = 2000 / width
-                gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-            
-            # 2. Noise reduction
-            denoised = cv2.fastNlMeansDenoising(gray)
-            processed_images.append(denoised)
-            
-            # 3. Contrast enhancement
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            enhanced = clahe.apply(gray)
-            processed_images.append(enhanced)
-            
-            # 4. Thresholding
-            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            processed_images.append(thresh)
-            
-            # 5. Adaptive thresholding
-            adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-            processed_images.append(adaptive)
-            
-            # 6. Morphological operations to clean up text
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-            morph = cv2.morphologyEx(adaptive, cv2.MORPH_CLOSE, kernel)
-            processed_images.append(morph)
-            
-            # 7. Gaussian blur + threshold for noise reduction
-            blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-            _, gauss_thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            processed_images.append(gauss_thresh)
-            
-            # Try OCR with different configurations (limited attempts to prevent timeouts)
-            best_text = ""
-            best_confidence = 0
-            
-            # Only try first 3 configurations to prevent timeouts
-            for i, img in enumerate(processed_images[:3]):
-                try:
-                    # OCR Configuration 1: Default with timeout
-                    text1 = pytesseract.image_to_string(img, config='--psm 6', timeout=5)
-                    
-                    # OCR Configuration 2: Sparse text with whitelist
-                    text2 = pytesseract.image_to_string(img, config='--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-.@ ', timeout=5)
-                    
-                    # OCR Configuration 3: Single block
-                    text3 = pytesseract.image_to_string(img, config='--psm 8', timeout=5)
-                    
-                    # Get data with confidence scores (with timeout)
-                    data = pytesseract.image_to_data(img, config='--psm 6', output_type=pytesseract.Output.DICT, timeout=5)
-                    
-                    # Calculate average confidence
-                    confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
-                    avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-                    
-                    # Choose best result based on confidence and text quality
-                    texts = [text1, text2, text3]
-                    for text in texts:
-                        if text.strip():
-                            # Simple quality check: more alphanumeric characters = better
-                            alpha_count = sum(c.isalnum() for c in text)
-                            if alpha_count > len(best_text) * 0.5:  # If this text has more readable characters
-                                best_text = text
-                                best_confidence = avg_confidence
-                    
-                    logger.info(f"OCR attempt {i+1} - Confidence: {avg_confidence:.1f}, Text length: {len(text1.strip())}")
-                    
-                except Exception as e:
-                    logger.warning(f"OCR attempt {i+1} failed: {e}")
-                    continue
-            
-            # Clean up the best text with aggressive cleaning
-            if best_text:
-                # Remove extra whitespace and normalize
-                cleaned_text = ' '.join(best_text.split())
-                
-                # Fix common OCR errors
-                ocr_fixes = {
-                    'KedFanatics': 'Fanatics',
-                    'KetelMertie': 'Ketel Marte',
-                    'Ketell/Marte': 'Ketel Marte',
-                    'AUTiitsoRums': 'ALT Hits + Runs',
-                    'EoizoneDiemoncbackset': 'Arizona Diamondbacks at Colorado',
-                    'ColoracloReckias': 'Colorado Rockies',
-                    'MUSTEE21': 'MUST WIN',
-                    'CAMELINGPROELEMPCALL': 'GAMBLING PROBLEM CALL',
-                    'BettlD': 'Bet ID',
-                    'Sed Fanatics': 'Fanatics',
-                    'Sportsoook': 'Sportsbook',
-                    'Ketel Martet': 'Ketel Marte',
-                    'AQT Hits': 'ALT Hits',
-                    'Ruws Rls': 'Runs + RBIs',
-                    'Atzona Diemoncbachks': 'Arizona Diamondbacks',
-                    'Catesacls Reckias': 'Colorado Rockies',
-                    'GAMELING FROELEME CAML': 'GAMBLING PROBLEM CALL'
-                }
-                
-                for wrong, correct in ocr_fixes.items():
-                    cleaned_text = cleaned_text.replace(wrong, correct)
-                
-                # Remove common OCR artifacts and normalize
-                cleaned_text = re.sub(r'[^\w\s+\-@\.]', ' ', cleaned_text)
-                cleaned_text = ' '.join(cleaned_text.split())
-                
-                logger.info(f"Best OCR result - Confidence: {best_confidence:.1f}")
-                logger.info(f"Cleaned text: {cleaned_text}")
-                
-                return cleaned_text
-            
-            logger.warning("All OCR attempts failed")
-            return ""
-            
-        except Exception as e:
-            logger.error(f"Error in OCR text extraction: {e}")
             return ""
     
     async def _parse_bet_data(self, text: str) -> Dict[str, Any]:
