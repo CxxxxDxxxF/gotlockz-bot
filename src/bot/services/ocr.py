@@ -139,67 +139,30 @@ class OCRService:
             # 1. Extract odds (top right or keyword lines)
             odds = None
             odds_patterns = [
-                r'(?i)odds[:\s]*([+-]?\d{2,4})',
-                r'(?i)line[:\s]*([+-]?\d{2,4})',
-                r'(?i)price[:\s]*([+-]?\d{2,4})',
-                r'\b([+-]\d{3,4})\b',
-                r'\b([+-]\d{2,3})\b',
+                r'^([+-]\d{2,4})$'  # Only accept lines that are just odds
             ]
             skip_keywords = ['gambler', '1-800', 'bet id', 'call']
-            # Priority 1: Top 2 lines (top right odds)
-            for line in lines[:2]:
-                if any(k in line.lower() for k in skip_keywords):
+            valid_odds_lines = []
+            for line in lines:
+                line_stripped = line.strip()
+                if any(k in line_stripped.lower() for k in skip_keywords):
                     continue
-                for pattern in odds_patterns:
-                    match = re.search(pattern, line)
-                    if match and self._is_valid_odds(match.group(1)):
-                        odds = match.group(1)
-                        break
-                if odds:
-                    break
-            # Priority 2: Any line with odds/line/price/leg
+                # Only consider lines that are just a valid odds value
+                if re.match(r'^[+-]\d{2,4}$', line_stripped):
+                    valid_odds_lines.append(line_stripped)
+            if valid_odds_lines:
+                odds = valid_odds_lines[-1]  # Pick the last valid odds line
+            # Fallback: previous logic if nothing found
             if not odds:
                 for line in lines:
                     if any(k in line.lower() for k in skip_keywords):
                         continue
-                    if any(k in line.lower() for k in ['odds', 'line', 'price', 'leg']):
-                        for pattern in odds_patterns:
-                            match = re.search(pattern, line)
-                            if match and self._is_valid_odds(match.group(1)):
-                                odds = match.group(1)
-                                break
-                        if odds:
-                            break
-            # Priority 3: Bottom 2 lines (sometimes odds are at the end)
-            if not odds:
-                for line in lines[-2:]:
-                    if any(k in line.lower() for k in skip_keywords):
-                        continue
-                    for pattern in odds_patterns:
+                    for pattern in [r'(?i)odds[:\s]*([+-]?\d{2,4})', r'(?i)line[:\s]*([+-]?\d{2,4})', r'(?i)price[:\s]*([+-]?\d{2,4})', r'\b([+-]\d{3,4})\b', r'\b([+-]\d{2,3})\b']:
                         match = re.search(pattern, line)
                         if match and self._is_valid_odds(match.group(1)):
                             odds = match.group(1)
                             break
                     if odds:
-                        break
-            # Priority 4: Last valid odds-like number in all lines (bottom up)
-            if not odds:
-                for line in reversed(lines):
-                    if any(k in line.lower() for k in skip_keywords):
-                        continue
-                    for pattern in odds_patterns:
-                        match = re.search(pattern, line)
-                        if match and self._is_valid_odds(match.group(1)):
-                            odds = match.group(1)
-                            break
-                    if odds:
-                        break
-            # Fallback: Search whole text
-            if not odds:
-                for pattern in odds_patterns:
-                    match = re.search(pattern, text)
-                    if match and self._is_valid_odds(match.group(1)):
-                        odds = match.group(1)
                         break
             if odds:
                 bet_data['odds'] = odds
