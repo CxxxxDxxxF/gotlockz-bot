@@ -9,15 +9,20 @@ import json
 from typing import Dict, Optional, List
 import logging
 
-# Add weather_scraper to path
+# Add weather_scraper to path and set working directory
 weather_scraper_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'weather_scraper')
 sys.path.insert(0, weather_scraper_path)
 
+# Change to weather_scraper directory for imports
+original_cwd = os.getcwd()
 try:
+    os.chdir(weather_scraper_path)
     from weather_scraper import WeatherScraper
 except ImportError:
     logging.warning("Weather scraper not available - weather data will be limited")
     WeatherScraper = None
+finally:
+    os.chdir(original_cwd)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +33,7 @@ class WeatherService:
     def __init__(self):
         self.scraper = None
         self.stadium_mapping = self._load_stadium_mapping()
+        self.weather_scraper_path = weather_scraper_path
         
     def _load_stadium_mapping(self) -> Dict[str, str]:
         """Load mapping of team names to stadium locations"""
@@ -82,13 +88,20 @@ class WeatherService:
             return False
             
         try:
+            # Change to weather_scraper directory for initialization
+            original_cwd = os.getcwd()
+            os.chdir(self.weather_scraper_path)
+            
             self.scraper = WeatherScraper()
             await self.scraper.initialize()
+            
             logger.info("Weather service initialized successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize weather service: {e}")
             return False
+        finally:
+            os.chdir(original_cwd)
     
     def _get_stadium_for_team(self, team_name: str) -> Optional[str]:
         """Get stadium name for a team"""
@@ -101,24 +114,31 @@ class WeatherService:
             
         weather_data = {}
         
-        for team in teams:
-            stadium = self._get_stadium_for_team(team)
-            if stadium:
-                try:
-                    # Get weather for this stadium
-                    weather = await self.scraper.get_weather_for_location(stadium)
-                    if weather:
-                        weather_data[team] = {
-                            'stadium': stadium,
-                            'temperature': weather.get('temperature'),
-                            'humidity': weather.get('humidity'),
-                            'wind_speed': weather.get('wind_speed'),
-                            'wind_direction': weather.get('wind_direction'),
-                            'conditions': weather.get('conditions'),
-                            'pressure': weather.get('pressure')
-                        }
-                except Exception as e:
-                    logger.error(f"Error getting weather for {team} ({stadium}): {e}")
+        # Change to weather_scraper directory for operations
+        original_cwd = os.getcwd()
+        os.chdir(self.weather_scraper_path)
+        
+        try:
+            for team in teams:
+                stadium = self._get_stadium_for_team(team)
+                if stadium:
+                    try:
+                        # Get weather for this stadium
+                        weather = await self.scraper.get_weather_for_location(stadium)
+                        if weather:
+                            weather_data[team] = {
+                                'stadium': stadium,
+                                'temperature': weather.get('temperature'),
+                                'humidity': weather.get('humidity'),
+                                'wind_speed': weather.get('wind_speed'),
+                                'wind_direction': weather.get('wind_direction'),
+                                'conditions': weather.get('conditions'),
+                                'pressure': weather.get('pressure')
+                            }
+                    except Exception as e:
+                        logger.error(f"Error getting weather for {team} ({stadium}): {e}")
+        finally:
+            os.chdir(original_cwd)
         
         return weather_data
     
