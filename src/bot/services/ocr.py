@@ -145,8 +145,11 @@ class OCRService:
                 r'\b([+-]\d{3,4})\b',
                 r'\b([+-]\d{2,3})\b',
             ]
+            skip_keywords = ['gambler', '1-800', 'bet id', 'call']
             # Priority 1: Top 2 lines (top right odds)
             for line in lines[:2]:
+                if any(k in line.lower() for k in skip_keywords):
+                    continue
                 for pattern in odds_patterns:
                     match = re.search(pattern, line)
                     if match and self._is_valid_odds(match.group(1)):
@@ -157,6 +160,8 @@ class OCRService:
             # Priority 2: Any line with odds/line/price/leg
             if not odds:
                 for line in lines:
+                    if any(k in line.lower() for k in skip_keywords):
+                        continue
                     if any(k in line.lower() for k in ['odds', 'line', 'price', 'leg']):
                         for pattern in odds_patterns:
                             match = re.search(pattern, line)
@@ -168,6 +173,20 @@ class OCRService:
             # Priority 3: Bottom 2 lines (sometimes odds are at the end)
             if not odds:
                 for line in lines[-2:]:
+                    if any(k in line.lower() for k in skip_keywords):
+                        continue
+                    for pattern in odds_patterns:
+                        match = re.search(pattern, line)
+                        if match and self._is_valid_odds(match.group(1)):
+                            odds = match.group(1)
+                            break
+                    if odds:
+                        break
+            # Priority 4: Last valid odds-like number in all lines (bottom up)
+            if not odds:
+                for line in reversed(lines):
+                    if any(k in line.lower() for k in skip_keywords):
+                        continue
                     for pattern in odds_patterns:
                         match = re.search(pattern, line)
                         if match and self._is_valid_odds(match.group(1)):
