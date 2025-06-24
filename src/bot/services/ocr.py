@@ -188,15 +188,16 @@ class OCRService:
                     for m in matchups:
                         bet_data['legs'].append({'teams': [self._resolve_team_name(m[0].strip()), self._resolve_team_name(m[1].strip())]})
 
-            # 2. Robust bet type/description extraction with context
+            # 2. Extract bet description
             bet_keywords = ['over', 'under', 'money line', 'no', 'yes', 'parlay', 'inning', 'earned runs', 'alt', 'hits', 'runs', 'rbis', '+', '-']
             branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook']
             def is_team_line(line):
                 line_lower = line.lower()
                 return any(team.lower() in line_lower for team in teams_found if team and team != 'TBD')
+            
             description = None
-            # For parlays, concatenate all leg descriptions
-            if bet_data.get('is_parlay') and bet_data.get('legs'):
+            # For parlays/SGPs, combine all legs into a description
+            if bet_data['is_parlay'] and bet_data['legs']:
                 leg_descs = []
                 for leg in bet_data['legs']:
                     if 'player' in leg:
@@ -204,7 +205,12 @@ class OCRService:
                     elif 'description' in leg:
                         leg_descs.append(leg['description'])
                 if leg_descs:
-                    description = ' / '.join(leg_descs)
+                    # Remove duplicates and create a clean description
+                    unique_legs = list(dict.fromkeys(leg_descs))
+                    if len(unique_legs) > 1:
+                        description = f"{len(unique_legs)} Leg SGP: {', '.join(unique_legs)}"
+                    else:
+                        description = unique_legs[0]
                     logger.info(f"Selected bet description from parlay legs: {description}")
             # Otherwise, prefer lines with bet keywords or player prop pattern, skipping branding and team lines
             if not description:
