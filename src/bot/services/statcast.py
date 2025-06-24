@@ -3,6 +3,7 @@ Statcast Service - Direct integration with Baseball Savant data
 """
 import logging
 import asyncio
+import io
 from typing import Dict, Any, Optional
 import pandas as pd
 from datetime import datetime, timedelta
@@ -140,7 +141,7 @@ class StatcastService:
                         if response.status == 200:
                             content = await response.text()
                             if content.strip():  # Check if content is not empty
-                                df = pd.read_csv(pd.StringIO(content), low_memory=False)
+                                df = pd.read_csv(io.StringIO(content), low_memory=False)
                                 
                                 # Drop duplicate and deprecated fields if they exist
                                 columns_to_drop = ['pitcher.1', 'fielder_2.1', 'umpire', 'spin_dir',
