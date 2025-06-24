@@ -38,7 +38,7 @@ class PickCommands(app_commands.Group):
     )
     @app_commands.choices(channel_type=[
         app_commands.Choice(name="Free Play", value="free_play"),
-        app_commands.Choice(name="VIP Pick", value="vip_pick"),
+        app_commands.Choice(name="VIP Plays", value="vip_pick"),
         app_commands.Choice(name="Lotto Ticket", value="lotto_ticket")
     ])
     async def post_pick(

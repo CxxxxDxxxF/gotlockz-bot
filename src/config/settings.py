@@ -41,7 +41,7 @@ class ChannelConfig:
 class TemplateConfig:
     """Template configuration for different pick types."""
     free_play_header: str = "**FREE PLAY**"
-    vip_header: str = "**VIP PICK**"
+    vip_header: str = "**VIP PLAY**"
     lotto_header: str = "**LOTTO TICKET**"
     
     # VIP-specific styling
