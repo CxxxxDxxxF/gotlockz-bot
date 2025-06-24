@@ -85,7 +85,6 @@ class TemplateService:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             description = bet_data.get('description', 'TBD')
             odds = bet_data.get('odds', 'TBD')
-            units = bet_data.get('units', '1')
             legs = bet_data.get('legs', [])
             current_date = datetime.now().strftime(self.templates.date_format)
             current_time = datetime.now().strftime(self.templates.time_format)
@@ -228,15 +227,11 @@ class TemplateService:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             description = bet_data.get('description', 'TBD')
             odds = bet_data.get('odds', 'TBD')
-            units = bet_data.get('units', '1')
             legs = bet_data.get('legs', [])
             current_date = datetime.now().strftime(self.templates.date_format)
             current_time = datetime.now().strftime(self.templates.time_format)
 
             header = f"{self.templates.lotto_header} – {current_date}"
-            if units and units != '1':
-                header += f"\n💰 **{units} UNITS**"
-
             game_info = f"⚾ | Game: {teams[0]} @ {teams[1]} ({current_date} {current_time})"
             bet_info = f"🎯 | Bet: {description}"
             if odds != 'TBD':
