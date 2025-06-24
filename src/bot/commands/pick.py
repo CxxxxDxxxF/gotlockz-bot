@@ -118,6 +118,10 @@ class PickCommands(app_commands.Group):
                     timeout=15.0
                 )
                 logger.info("Advanced stats fetched successfully.")
+                # Sanity check for advanced stats
+                if not self.stats_sanity_check(stats_data):
+                    logger.warning("Sanity check failed for advanced stats, falling back to basic stats.")
+                    stats_data = await self.stats_service.get_live_stats(bet_data)
             except asyncio.TimeoutError:
                 logger.warning("Advanced stats fetch timed out, trying basic stats")
                 try:
@@ -236,3 +240,15 @@ class PickCommands(app_commands.Group):
         except Exception as e:
             logger.error(f"Error getting target channel: {e}")
             return None 
+
+    def stats_sanity_check(self, stats_data):
+        if not stats_data or 'team1' not in stats_data or 'team2' not in stats_data:
+            return False
+        # Example checks (customize as needed)
+        for team in ['team1', 'team2']:
+            s = stats_data[team]
+            if s.get('era', 0) < 0 or s.get('era', 0) > 20:
+                return False
+            if s.get('avg', 0) < 0 or s.get('avg', 0) > 1:
+                return False
+        return True 
