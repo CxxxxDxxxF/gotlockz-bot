@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 import openai
 import random
 
-from config.settings import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

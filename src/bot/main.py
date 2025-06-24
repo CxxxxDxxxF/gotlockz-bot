@@ -1,29 +1,25 @@
 """
-GotLockz Bot V2 - Main Entry Point
+Main Discord Bot Application
 """
 import asyncio
 import logging
 import sys
 from pathlib import Path
 
+# Add src to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+
 import discord
 from discord.ext import commands
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent))
-
-from config.settings import settings
-from bot.commands.pick import PickCommands
+from src.config.settings import settings
 from bot.commands.admin import AdminCommands
+from bot.commands.pick import PickCommands
 
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.bot.log_level),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log'),
-        logging.StreamHandler()
-    ]
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 

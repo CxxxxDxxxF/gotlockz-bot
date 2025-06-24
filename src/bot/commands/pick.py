@@ -130,7 +130,7 @@ class PickCommands(app_commands.Group):
     async def _get_target_channel(self, channel_type: str, guild: discord.Guild) -> Optional[discord.TextChannel]:
         """Get the target channel based on channel type."""
         try:
-            from config.settings import settings
+            from src.config.settings import settings
             
             channel_id = None
             if channel_type == "free_play":
