@@ -194,7 +194,7 @@ class StatcastService:
             
             # Exit velocity metrics
             if 'launch_speed' in batting_data.columns:
-                launch_speed = batting_data['launch_speed'].dropna()
+                launch_speed = pd.Series(batting_data['launch_speed']).dropna()
                 if not launch_speed.empty:
                     stats['avg_exit_velocity'] = round(launch_speed.mean(), 1)
                     stats['hard_hit_pct'] = round((launch_speed >= 95).sum() / len(launch_speed) * 100, 1)
@@ -202,7 +202,7 @@ class StatcastService:
             
             # Launch angle metrics
             if 'launch_angle' in batting_data.columns:
-                launch_angle = batting_data['launch_angle'].dropna()
+                launch_angle = pd.Series(batting_data['launch_angle']).dropna()
                 if not launch_angle.empty:
                     stats['avg_launch_angle'] = round(launch_angle.mean(), 1)
                     stats['sweet_spot_pct'] = round(((launch_angle >= 8) & (launch_angle <= 32)).sum() / len(launch_angle) * 100, 1)
@@ -233,13 +233,13 @@ class StatcastService:
             
             # Velocity metrics
             if 'release_speed' in pitching_data.columns:
-                release_speed = pitching_data['release_speed'].dropna()
+                release_speed = pd.Series(pitching_data['release_speed']).dropna()
                 if not release_speed.empty:
                     stats['avg_velocity'] = round(release_speed.mean(), 1)
             
             # Spin rate metrics
             if 'release_spin_rate' in pitching_data.columns:
-                release_spin_rate = pitching_data['release_spin_rate'].dropna()
+                release_spin_rate = pd.Series(pitching_data['release_spin_rate']).dropna()
                 if not release_spin_rate.empty:
                     stats['avg_spin_rate'] = round(release_spin_rate.mean(), 0)
             
@@ -251,7 +251,7 @@ class StatcastService:
             
             # Chase rate (pitches outside zone)
             if 'zone' in pitching_data.columns:
-                zone_data = pitching_data['zone'].dropna()
+                zone_data = pd.Series(pitching_data['zone']).dropna()
                 if not zone_data.empty:
                     chases = (zone_data > 9).sum()
                     stats['chase_pct'] = round(chases / len(zone_data) * 100, 1)
