@@ -188,7 +188,7 @@ class OCRService:
                     for m in matchups:
                         bet_data['legs'].append({'teams': [self._resolve_team_name(m[0].strip()), self._resolve_team_name(m[1].strip())]})
 
-            # 2. Robust bet type/description extraction
+            # 2. Robust bet type/description extraction with context
             bet_keywords = ['over', 'under', 'money line', 'no', 'yes', 'parlay', 'inning', 'earned runs', 'alt', 'hits', 'runs', 'rbis', '+', '-']
             branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook']
             def is_team_line(line):
@@ -208,14 +208,38 @@ class OCRService:
                     logger.info(f"Selected bet description from parlay legs: {description}")
             # Otherwise, prefer lines with bet keywords or player prop pattern, skipping branding and team lines
             if not description:
-                for line in lines:
+                for i, line in enumerate(lines):
                     line_lower = line.lower()
                     if any(b in line_lower for b in branding_keywords):
                         continue
                     if is_team_line(line):
                         continue
+                    # Money Line: combine team and 'Money Line'
+                    if 'money line' in line_lower:
+                        # Try to find the team for the money line bet
+                        # Use the team that appears most recently before this line
+                        team_for_ml = None
+                        for prev_line in reversed(lines[:i]):
+                            if is_team_line(prev_line):
+                                team_for_ml = prev_line.strip()
+                                break
+                        if not team_for_ml and teams_found:
+                            team_for_ml = teams_found[-1]
+                        if team_for_ml:
+                            description = f"{team_for_ml} Money Line"
+                        else:
+                            description = line.strip()
+                        logger.info(f"Selected bet description as Money Line: {description}")
+                        break
+                    # Player prop: combine player and stat if possible
+                    player_prop_match = re.match(r'([A-Z][a-z]+(?: [A-Z][a-z]+)*)(?: - )?([A-Za-z ]+)?', line)
+                    if player_prop_match and player_prop_match.group(2):
+                        description = f"{player_prop_match.group(1).strip()} {player_prop_match.group(2).strip()}"
+                        logger.info(f"Selected bet description as player prop: {description}")
+                        break
+                    # Other bet types: use the full descriptive line
                     if any(k in line_lower for k in bet_keywords) or re.search(r'\d+\+', line):
-                        description = line
+                        description = line.strip()
                         logger.info(f"Selected bet description by keyword: {description}")
                         break
             # Fallback: first non-branding, non-team, non-empty line
@@ -226,7 +250,7 @@ class OCRService:
                         continue
                     if is_team_line(line):
                         continue
-                    description = line
+                    description = line.strip()
                     logger.info(f"Selected bet description by fallback: {description}")
                     break
             if description:
