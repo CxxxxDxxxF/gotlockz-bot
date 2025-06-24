@@ -149,6 +149,9 @@ class OCRService:
                     continue
                 # Only consider lines that are just a valid odds value
                 if re.match(r'^[+-]\d{2,4}$', line_stripped):
+                    # Explicitly ignore -800 (phone number)
+                    if line_stripped == '-800':
+                        continue
                     valid_odds_lines.append(line_stripped)
             if valid_odds_lines:
                 odds = valid_odds_lines[-1]  # Pick the last valid odds line
@@ -159,7 +162,7 @@ class OCRService:
                         continue
                     for pattern in [r'(?i)odds[:\s]*([+-]?\d{2,4})', r'(?i)line[:\s]*([+-]?\d{2,4})', r'(?i)price[:\s]*([+-]?\d{2,4})', r'\b([+-]\d{3,4})\b', r'\b([+-]\d{2,3})\b']:
                         match = re.search(pattern, line)
-                        if match and self._is_valid_odds(match.group(1)):
+                        if match and self._is_valid_odds(match.group(1)) and match.group(1) != '-800':
                             odds = match.group(1)
                             break
                     if odds:
