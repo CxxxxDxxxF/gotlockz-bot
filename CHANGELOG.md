@@ -24,11 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Weather impact assessment
   - Recent form analysis with win/loss trends
 
-- **Statcast Data Foundation**
-  - Added savantscraper dependency for future Statcast integration
-  - Framework for advanced metrics (exit velocity, launch angle, etc.)
+- **Comprehensive MLB Data Foundation**
   - Enhanced data processing with pandas support
   - Improved error handling for advanced stats failures
+  - Framework for future Statcast integration
+  - Extended park factors database for major stadiums
 
 - **Fallback System**
   - Graceful degradation from advanced to basic stats
@@ -51,8 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dependencies**
   - Added pandas>=2.0.0 for data processing
-  - Added savantscraper>=0.1.0 for Statcast integration
   - Added requests>=2.31.0 for enhanced HTTP handling
+  - Removed non-existent savantscraper dependency
 
 #### 🐛 Fixed
 - **Stats Integration**

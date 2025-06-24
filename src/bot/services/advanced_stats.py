@@ -1,5 +1,5 @@
 """
-Advanced Stats Service - Enhanced MLB statistics with Statcast data
+Advanced Stats Service - Enhanced MLB statistics with comprehensive data
 """
 import logging
 import asyncio
@@ -12,12 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class AdvancedStatsService:
-    """Service for fetching advanced MLB statistics including Statcast data."""
+    """Service for fetching advanced MLB statistics including comprehensive team data."""
     
     def __init__(self):
         self.session = None
         self.mlb_base_url = "https://statsapi.mlb.com/api/v1"
-        self.statcast_base_url = "https://baseballsavant.mlb.com/statcast_search/csv"
         
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -63,7 +62,7 @@ class AdvancedStatsService:
             return None
     
     async def get_advanced_team_stats(self, team_name: str) -> Dict[str, Any]:
-        """Get advanced team statistics including Statcast data."""
+        """Get advanced team statistics including comprehensive MLB data."""
         try:
             session = await self._get_session()
             
@@ -115,6 +114,12 @@ class AdvancedStatsService:
                 park_factors = {'runs': 0.85, 'hr': 0.75, 'k': 1.05, 'bb': 0.95}
             elif any(team in team1 for team in ['Boston', 'Red Sox']):
                 park_factors = {'runs': 1.05, 'hr': 1.15, 'k': 0.98, 'bb': 1.02}
+            elif any(team in team1 for team in ['New York', 'Yankees']):
+                park_factors = {'runs': 1.08, 'hr': 1.20, 'k': 0.97, 'bb': 1.03}
+            elif any(team in team1 for team in ['Los Angeles', 'Dodgers']):
+                park_factors = {'runs': 0.95, 'hr': 0.90, 'k': 1.02, 'bb': 0.98}
+            elif any(team in team1 for team in ['Houston', 'Astros']):
+                park_factors = {'runs': 1.02, 'hr': 1.10, 'k': 0.99, 'bb': 1.01}
             
             return park_factors
             
