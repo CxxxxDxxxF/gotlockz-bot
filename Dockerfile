@@ -6,8 +6,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install minimal system dependencies (no OCR dependencies needed)
+# Install system dependencies including git for GitHub packages
 RUN apt-get update && apt-get install -y \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
