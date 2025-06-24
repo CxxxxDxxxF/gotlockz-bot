@@ -173,15 +173,32 @@ class OCRService:
             else:
                 logger.info("No valid odds found.")
 
-            # 2. Extract bet type/description (largest or first bolded text)
-            # Use first non-empty line as main bet type
-            if lines:
-                bet_type = lines[0]
-                # If first line is generic (e.g., '2 Leg Parlay'), try next line
-                if bet_type.lower() in ['2 leg parlay', 'parlay', 'single', 'no', 'yes'] and len(lines) > 1:
-                    bet_type = lines[1]
-                bet_data['description'] = bet_type
-                logger.info(f"Extracted bet type/description: {bet_type}")
+            # 2. Extract bet type/description (skip branding, prefer bet keywords)
+            bet_keywords = ['over', 'under', 'money line', 'no', 'yes', 'parlay', 'inning', 'earned runs', 'alt', 'hits', 'runs', 'rbis', '+', '-']
+            branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook']
+            description = None
+            for line in lines:
+                line_lower = line.lower()
+                # Skip branding
+                if any(b in line_lower for b in branding_keywords):
+                    continue
+                # Prefer lines with bet keywords or player prop pattern
+                if any(k in line_lower for k in bet_keywords) or re.search(r'\d+\+', line):
+                    description = line
+                    logger.info(f"Selected bet description by keyword: {description}")
+                    break
+            # Fallback: first non-branding, non-empty line
+            if not description:
+                for line in lines:
+                    line_lower = line.lower()
+                    if any(b in line_lower for b in branding_keywords):
+                        continue
+                    description = line
+                    logger.info(f"Selected bet description by fallback: {description}")
+                    break
+            if description:
+                bet_data['description'] = description
+            logger.info(f"Extracted bet type/description: {bet_data['description']}")
 
             # 3. Extract player props (e.g., Shohei Ohtani 1+, Nick Lodolo - Earned Runs Allowed)
             player_prop_pattern = r'([A-Z][a-z]+(?: [A-Z][a-z]+)* \d+\+|[A-Z][a-z]+ [A-Z][a-z]+ - [A-Za-z ]+)'  # e.g., Shohei Ohtani 1+, Nick Lodolo - Earned Runs Allowed

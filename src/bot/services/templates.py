@@ -27,11 +27,11 @@ class TemplateService:
             current_time = datetime.now().strftime(self.templates.time_format)
 
             header = f"# __**🔒 FREE PLAY - {current_date} 🔒**__"
-            game_info = f"⚾ I Game: {teams[0]} @ {teams[1]} ({current_date} {current_time})"
-            bet_info = f"🏆 I {description} ({odds})"
-            analysis_label = "\n👇 I Analysis Below:\n"
+            game_info = f"**⚾ GAME:**  __{teams[0]} @ {teams[1]}__  ({current_date} {current_time})"
+            bet_info = f"**🏆 PICK:**  __{description}__  |  **Odds:** __{odds}__"
+            analysis_label = "\n👇 **Analysis Below:**\n"
 
-            analysis_section = analysis if analysis else "No analysis available."
+            analysis_section = f"**{analysis}**" if analysis else "No analysis available."
 
             content = f"{header}\n\n{game_info}\n\n{bet_info}\n{analysis_label}\n{analysis_section}"
             return content
