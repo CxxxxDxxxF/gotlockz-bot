@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from bot.services.statcast import StatcastService
+from bot.services.weather import WeatherService
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class AdvancedStatsService:
         self.session = None
         self.mlb_base_url = "https://statsapi.mlb.com/api/v1"
         self.statcast_service = StatcastService()
+        self.weather_service = WeatherService()
         
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -34,6 +36,9 @@ class AdvancedStatsService:
             teams = bet_data.get('teams', [])
             if len(teams) < 2:
                 return None
+            
+            # Initialize weather service
+            await self.weather_service.initialize()
             
             # Get basic team stats
             team1_stats = await self.get_team_stats(teams[0])
@@ -50,7 +55,7 @@ class AdvancedStatsService:
             park_factors = await self.get_park_factors(teams[0], teams[1])
             
             # Get weather data (if available)
-            weather_data = await self.get_weather_data(teams[0], teams[1])
+            weather_data = await self.get_weather_data(teams)
             
             # Combine all stats
             combined_stats = {
@@ -134,22 +139,48 @@ class AdvancedStatsService:
             logger.error(f"Error getting park factors: {e}")
             return {'runs': 1.0, 'hr': 1.0, 'k': 1.0, 'bb': 1.0}
     
-    async def get_weather_data(self, team1: str, team2: str) -> Dict[str, Any]:
-        """Get weather data for the game location."""
+    async def get_weather_data(self, teams: List[str]) -> Dict[str, Any]:
+        """Get weather data for the game location using the weather service."""
         try:
-            # This would integrate with a weather API
-            # For now, return neutral weather
-            return {
-                'temperature': 72,
-                'wind_speed': 8,
-                'wind_direction': 'SW',
-                'humidity': 65,
-                'conditions': 'Partly Cloudy'
-            }
+            weather_data = await self.weather_service.get_weather_for_teams(teams)
+            
+            if weather_data:
+                # Create a summary for the analysis
+                weather_summary = await self.weather_service.get_weather_summary(teams)
+                return {
+                    'data': weather_data,
+                    'summary': weather_summary,
+                    'available': True
+                }
+            else:
+                # Fallback to neutral weather if no data available
+                return {
+                    'data': {},
+                    'summary': "Weather data unavailable",
+                    'available': False,
+                    'fallback': {
+                        'temperature': 72,
+                        'wind_speed': 8,
+                        'wind_direction': 'SW',
+                        'humidity': 65,
+                        'conditions': 'Partly Cloudy'
+                    }
+                }
             
         except Exception as e:
             logger.error(f"Error getting weather data: {e}")
-            return {}
+            return {
+                'data': {},
+                'summary': "Weather data unavailable",
+                'available': False,
+                'fallback': {
+                    'temperature': 72,
+                    'wind_speed': 8,
+                    'wind_direction': 'SW',
+                    'humidity': 65,
+                    'conditions': 'Partly Cloudy'
+                }
+            }
     
     async def _get_team_id(self, session: aiohttp.ClientSession, team_name: str) -> Optional[int]:
         """Get team ID from MLB API."""
@@ -434,7 +465,9 @@ class AdvancedStatsService:
             return {}
     
     async def close(self):
-        """Close the aiohttp session."""
+        """Close all services."""
         if self.session and not self.session.closed:
             await self.session.close()
-        await self.statcast_service.close() 
+        
+        if hasattr(self, 'weather_service'):
+            await self.weather_service.close() 
