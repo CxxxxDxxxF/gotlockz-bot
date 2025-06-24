@@ -5,6 +5,69 @@ All notable changes to the GotLockz Discord Bot project will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2024-12-25
+
+### 🚀 Advanced Stats Integration
+
+#### ✨ Added
+- **Advanced Stats Service**
+  - New `AdvancedStatsService` for comprehensive MLB statistics
+  - Integration with MLB API for advanced batting and pitching stats
+  - Park factors analysis for venue-specific adjustments
+  - Weather data integration for environmental factors
+  - Recent performance metrics (last 10 games analysis)
+
+- **Enhanced AI Analysis**
+  - Upgraded AI prompts with advanced statistical context
+  - Integration of batting averages, OBP, SLG, ERA, WHIP
+  - Park factor considerations in analysis
+  - Weather impact assessment
+  - Recent form analysis with win/loss trends
+
+- **Statcast Data Foundation**
+  - Added savantscraper dependency for future Statcast integration
+  - Framework for advanced metrics (exit velocity, launch angle, etc.)
+  - Enhanced data processing with pandas support
+  - Improved error handling for advanced stats failures
+
+- **Fallback System**
+  - Graceful degradation from advanced to basic stats
+  - Timeout handling for external API calls
+  - Comprehensive error logging for debugging
+  - Maintains functionality even when advanced stats fail
+
+#### 🔧 Changed
+- **Analysis Service**
+  - Enhanced context building with advanced statistics
+  - Improved AI prompts for more sophisticated analysis
+  - Better formatting of statistical data in posts
+  - Increased token limit for more detailed analysis
+
+- **Pick Command**
+  - Updated to use advanced stats service as primary
+  - Fallback to basic stats when advanced stats unavailable
+  - Extended timeout for comprehensive data fetching
+  - Improved error handling and user feedback
+
+- **Dependencies**
+  - Added pandas>=2.0.0 for data processing
+  - Added savantscraper>=0.1.0 for Statcast integration
+  - Added requests>=2.31.0 for enhanced HTTP handling
+
+#### 🐛 Fixed
+- **Stats Integration**
+  - Fixed timeout issues with external API calls
+  - Improved error handling for network failures
+  - Better fallback mechanisms when services unavailable
+  - Enhanced logging for debugging stats issues
+
+#### 📚 Documentation
+- **Advanced Stats Guide**
+  - Documentation for new advanced stats features
+  - Integration guide for future Statcast data
+  - Performance optimization recommendations
+  - Troubleshooting guide for stats issues
+
 ## [2.0.0] - 2024-12-25
 
 ### 🎉 Major Release - Professional Production System

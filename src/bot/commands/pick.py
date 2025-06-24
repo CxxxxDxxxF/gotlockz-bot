@@ -11,6 +11,7 @@ from discord import app_commands
 
 from bot.services.ocr import OCRService
 from bot.services.stats import StatsService
+from bot.services.advanced_stats import AdvancedStatsService
 from bot.services.analysis import AnalysisService
 from bot.services.templates import TemplateService
 
@@ -25,6 +26,7 @@ class PickCommands(app_commands.Group):
         self.bot = bot
         self.ocr_service = OCRService()
         self.stats_service = StatsService()
+        self.advanced_stats_service = AdvancedStatsService()
         self.analysis_service = AnalysisService()
         self.template_service = TemplateService()
 
@@ -108,19 +110,39 @@ class PickCommands(app_commands.Group):
                 await interaction.followup.send("❌ Could not extract bet description from the slip. Please ensure the bet type (e.g., Over/Under) is visible.", ephemeral=True)
                 return
 
-            # Fetch live MLB stats with timeout
+            # Fetch advanced MLB stats with timeout (try advanced first, fallback to basic)
+            stats_data = None
             try:
                 stats_data = await asyncio.wait_for(
-                    self.stats_service.get_live_stats(bet_data),
-                    timeout=10.0
+                    self.advanced_stats_service.get_advanced_stats(bet_data),
+                    timeout=15.0
                 )
-                logger.info("Stats fetched successfully.")
+                logger.info("Advanced stats fetched successfully.")
             except asyncio.TimeoutError:
-                logger.warning("Stats fetch timed out, continuing without stats")
-                stats_data = None
+                logger.warning("Advanced stats fetch timed out, trying basic stats")
+                try:
+                    stats_data = await asyncio.wait_for(
+                        self.stats_service.get_live_stats(bet_data),
+                        timeout=10.0
+                    )
+                    logger.info("Basic stats fetched successfully as fallback.")
+                except asyncio.TimeoutError:
+                    logger.warning("Basic stats fetch also timed out, continuing without stats")
+                    stats_data = None
+                except Exception as e:
+                    logger.error(f"Basic stats fetch failed: {e}")
+                    stats_data = None
             except Exception as e:
-                logger.error(f"Stats fetch failed: {e}")
-                stats_data = None
+                logger.error(f"Advanced stats fetch failed: {e}, trying basic stats")
+                try:
+                    stats_data = await asyncio.wait_for(
+                        self.stats_service.get_live_stats(bet_data),
+                        timeout=10.0
+                    )
+                    logger.info("Basic stats fetched successfully as fallback.")
+                except Exception as e2:
+                    logger.error(f"Basic stats fetch also failed: {e2}")
+                    stats_data = None
 
             # Generate AI analysis with timeout
             try:

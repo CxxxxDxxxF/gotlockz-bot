@@ -40,7 +40,7 @@ class AnalysisService:
             return self._get_fallback_analysis(bet_data)
     
     def _build_context(self, bet_data: Dict[str, Any], stats_data: Optional[Dict[str, Any]]) -> str:
-        """Build context for AI analysis."""
+        """Build context for AI analysis with enhanced stats."""
         try:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             description = bet_data.get('description', 'TBD')
@@ -59,26 +59,50 @@ class AnalysisService:
             if stats_data:
                 team1_stats = stats_data.get('team1', {})
                 team2_stats = stats_data.get('team2', {})
+                park_factors = stats_data.get('park_factors', {})
+                weather_data = stats_data.get('weather', {})
                 
                 context += f"""
                 
-            Team Statistics:
+            Advanced Team Statistics:
             
             {teams[0]}:
-            - Record: {team1_stats.get('wins', 0)}-{team1_stats.get('losses', 0)}
-            - Win %: {team1_stats.get('win_pct', 0):.3f}
-            - Runs Scored: {team1_stats.get('runs_scored', 0)}
-            - Runs Allowed: {team1_stats.get('runs_allowed', 0)}
+            - Record: {team1_stats.get('wins', 0)}-{team1_stats.get('losses', 0)} ({team1_stats.get('win_pct', 0):.3f})
+            - Runs: {team1_stats.get('runs_scored', 0)} scored, {team1_stats.get('runs_allowed', 0)} allowed
             - Run Differential: {team1_stats.get('run_diff', 0)}
-            - Games Played: {team1_stats.get('games_played', 0)}
+            - Batting: .{team1_stats.get('avg', 0):.3f} AVG, .{team1_stats.get('obp', 0):.3f} OBP, .{team1_stats.get('slg', 0):.3f} SLG
+            - Pitching: {team1_stats.get('era', 0):.2f} ERA, {team1_stats.get('whip', 0):.2f} WHIP
+            - Recent: {team1_stats.get('recent_wins', 0)}-{team1_stats.get('recent_losses', 0)} last {team1_stats.get('recent_games', 0)} games
+            - Recent Avg: {team1_stats.get('avg_runs_scored', 0)} scored, {team1_stats.get('avg_runs_allowed', 0)} allowed
             
             {teams[1]}:
-            - Record: {team2_stats.get('wins', 0)}-{team2_stats.get('losses', 0)}
-            - Win %: {team2_stats.get('win_pct', 0):.3f}
-            - Runs Scored: {team2_stats.get('runs_scored', 0)}
-            - Runs Allowed: {team2_stats.get('runs_allowed', 0)}
+            - Record: {team2_stats.get('wins', 0)}-{team2_stats.get('losses', 0)} ({team2_stats.get('win_pct', 0):.3f})
+            - Runs: {team2_stats.get('runs_scored', 0)} scored, {team2_stats.get('runs_allowed', 0)} allowed
             - Run Differential: {team2_stats.get('run_diff', 0)}
-            - Games Played: {team2_stats.get('games_played', 0)}
+            - Batting: .{team2_stats.get('avg', 0):.3f} AVG, .{team2_stats.get('obp', 0):.3f} OBP, .{team2_stats.get('slg', 0):.3f} SLG
+            - Pitching: {team2_stats.get('era', 0):.2f} ERA, {team2_stats.get('whip', 0):.2f} WHIP
+            - Recent: {team2_stats.get('recent_wins', 0)}-{team2_stats.get('recent_losses', 0)} last {team2_stats.get('recent_games', 0)} games
+            - Recent Avg: {team2_stats.get('avg_runs_scored', 0)} scored, {team2_stats.get('avg_runs_allowed', 0)} allowed
+            """
+                
+                if park_factors:
+                    context += f"""
+            
+            Park Factors:
+            - Runs: {park_factors.get('runs', 1.0):.2f}x (1.0 = neutral)
+            - Home Runs: {park_factors.get('hr', 1.0):.2f}x
+            - Strikeouts: {park_factors.get('k', 1.0):.2f}x
+            - Walks: {park_factors.get('bb', 1.0):.2f}x
+            """
+                
+                if weather_data:
+                    context += f"""
+            
+            Weather Conditions:
+            - Temperature: {weather_data.get('temperature', 72)}°F
+            - Wind: {weather_data.get('wind_speed', 8)} mph {weather_data.get('wind_direction', 'SW')}
+            - Humidity: {weather_data.get('humidity', 65)}%
+            - Conditions: {weather_data.get('conditions', 'Partly Cloudy')}
             """
             
             return context
@@ -88,7 +112,7 @@ class AnalysisService:
             return "Error building analysis context"
     
     async def _generate_ai_analysis(self, context: str) -> str:
-        """Generate AI analysis using OpenAI with a dynamic intro, bolded key phrases, and three concise paragraphs."""
+        """Generate AI analysis using OpenAI with enhanced stats-driven insights."""
         try:
             intros = [
                 "GotLockz family, Free Play is here!",
@@ -99,14 +123,19 @@ class AnalysisService:
             ]
             intro = random.choice(intros)
             prompt = f"""
-Write as if you're a sharp, trusted MLB bettor talking to your 21+ Discord community. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs:
-1. Why this matchup/bet is interesting
-2. The key stats/factors (pitching, park, weather, odds)
-3. A confident, concise call to action
-Each paragraph should be 2-3 sentences, direct and to the point. Use a mature, confident, stats-driven, and slightly witty tone. No corny or kid language. Use emojis only for emphasis, not as filler or punchlines. End with 'Let's cash.' or 'Lock it in.'
-Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph.
+You are a sharp, trusted MLB bettor analyzing for a 21+ Discord community. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs:
 
-Here's the context for the bet:
+1. **Matchup Analysis**: Why this specific matchup/bet is interesting based on the advanced stats provided (recent form, park factors, weather, team trends)
+
+2. **Key Factors**: Highlight the most relevant stats that support this bet (ERA, WHIP, recent performance, park factors, weather impact, run differentials)
+
+3. **Confident Call**: A decisive, stats-backed conclusion with clear reasoning
+
+Each paragraph should be 2-3 sentences, direct and analytical. Use a mature, confident, stats-driven tone. Reference specific numbers from the data provided. Use emojis sparingly and only for emphasis. End with 'Let's cash.' or 'Lock it in.'
+
+Do NOT generate an intro - start directly with paragraph 1.
+
+Context:
 {context}
 """
             # Use asyncio to run the OpenAI call in a thread pool to prevent blocking
@@ -116,11 +145,11 @@ Here's the context for the bet:
                 lambda: self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": "You are a sharp, trusted MLB bettor writing for a 21+ Discord audience. Use a mature, confident, stats-driven, and slightly witty tone. Avoid corny or kid language and forced hype. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs as described. Use emojis only for emphasis. Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph. End with 'Let's cash.' or 'Lock it in.'"},
+                        {"role": "system", "content": "You are a sharp, trusted MLB bettor writing for a 21+ Discord audience. Use a mature, confident, stats-driven, and analytical tone. Avoid corny or kid language and forced hype. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs as described. Use emojis only for emphasis. Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph. End with 'Let's cash.' or 'Lock it in.'"},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=350,
-                    temperature=0.76
+                    max_tokens=400,
+                    temperature=0.7
                 )
             )
             
@@ -199,35 +228,28 @@ Here's the context for the bet:
             if teams[0] == 'TBD' or teams[1] == 'TBD':
                 return "Risk Assessment: Unable to assess risk without team information."
             
-            risk_factors = []
+            risk_level = "Medium"
+            reasoning = []
             
-            # Check if it's a parlay
             if is_parlay:
-                risk_factors.append("Parlay bet - higher risk due to multiple outcomes required")
+                risk_level = "High"
+                reasoning.append("Parlay bets have higher variance")
             
-            # Check if we have stats
             if stats_data:
                 team1_stats = stats_data.get('team1', {})
                 team2_stats = stats_data.get('team2', {})
                 
-                # Check for close records
-                team1_wins = team1_stats.get('wins', 0)
-                team1_losses = team1_stats.get('losses', 0)
-                team2_wins = team2_stats.get('wins', 0)
-                team2_losses = team2_stats.get('losses', 0)
+                # Analyze recent performance
+                team1_recent = team1_stats.get('recent_win_pct', 0.5)
+                team2_recent = team2_stats.get('recent_win_pct', 0.5)
                 
-                if abs((team1_wins - team1_losses) - (team2_wins - team2_losses)) <= 5:
-                    risk_factors.append("Close team records - unpredictable outcome")
-                
-                # Check for high scoring teams
-                if team1_stats.get('runs_scored', 0) > 500 or team2_stats.get('runs_scored', 0) > 500:
-                    risk_factors.append("High scoring teams - consider over/under implications")
+                if abs(team1_recent - team2_recent) > 0.3:
+                    reasoning.append("Significant recent performance gap")
+                elif abs(team1_recent - team2_recent) < 0.1:
+                    reasoning.append("Teams performing similarly recently")
             
-            if not risk_factors:
-                return "Risk Assessment: Standard risk level. Review recent performance and trends."
-            
-            return f"Risk Assessment: {'; '.join(risk_factors)}"
+            return f"Risk Assessment: {risk_level}\nReasoning: {'; '.join(reasoning) if reasoning else 'Standard MLB betting risk'}"
             
         except Exception as e:
             logger.error(f"Error generating risk assessment: {e}")
-            return "Risk Assessment: Unable to assess risk at this time." 
+            return "Risk Assessment: Unable to assess at this time." 
