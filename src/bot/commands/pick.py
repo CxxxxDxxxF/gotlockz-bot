@@ -39,6 +39,7 @@ class PickCommands(app_commands.Group):
     @app_commands.choices(channel_type=[
         app_commands.Choice(name="Free Play", value="free_play"),
         app_commands.Choice(name="VIP Pick", value="vip_pick"),
+        app_commands.Choice(name="Premium VIP", value="premium_vip"),
         app_commands.Choice(name="Lotto Ticket", value="lotto_ticket")
     ])
     async def post_pick(
@@ -164,6 +165,8 @@ class PickCommands(app_commands.Group):
                     content = self.template_service.format_free_play(bet_data, stats_data, analysis)
                 elif channel_type == "vip_pick":
                     content = self.template_service.format_vip_pick(bet_data, stats_data, analysis)
+                elif channel_type == "premium_vip":
+                    content = self.template_service.format_premium_vip_pick(bet_data, stats_data, analysis)
                 elif channel_type == "lotto_ticket":
                     content = self.template_service.format_lotto_ticket(bet_data, stats_data, analysis)
                 else:
@@ -221,6 +224,8 @@ class PickCommands(app_commands.Group):
                 channel_id = settings.channels.free_channel_id
             elif channel_type == "vip_pick":
                 channel_id = settings.channels.vip_channel_id
+            elif channel_type == "premium_vip":
+                channel_id = settings.channels.premium_vip_channel_id
             elif channel_type == "lotto_ticket":
                 channel_id = settings.channels.lotto_channel_id
             

@@ -33,6 +33,7 @@ class APIConfig:
 class ChannelConfig:
     """Channel configuration settings."""
     vip_channel_id: Optional[int] = None
+    premium_vip_channel_id: Optional[int] = None
     free_channel_id: Optional[int] = None
     lotto_channel_id: Optional[int] = None
 
@@ -43,6 +44,15 @@ class TemplateConfig:
     free_play_header: str = "**FREE PLAY**"
     vip_header: str = "**VIP PICK**"
     lotto_header: str = "**LOTTO TICKET**"
+    
+    # VIP-specific styling
+    vip_emoji: str = "👑"
+    vip_diamond: str = "💎"
+    vip_units_emoji: str = "💰"
+    vip_matchup_emoji: str = "⚾"
+    vip_selection_emoji: str = "🎯"
+    vip_stats_emoji: str = "📊"
+    vip_analysis_emoji: str = "🔍"
     
     # Template placeholders
     date_format: str = "%m/%d/%y"
@@ -67,6 +77,7 @@ class Settings:
         
         self.channels = ChannelConfig(
             vip_channel_id=int(os.getenv("VIP_CHANNEL_ID", "0")) if os.getenv("VIP_CHANNEL_ID") else None,
+            premium_vip_channel_id=int(os.getenv("PREMIUM_VIP_CHANNEL_ID", "0")) if os.getenv("PREMIUM_VIP_CHANNEL_ID") else None,
             free_channel_id=int(os.getenv("FREE_CHANNEL_ID", "0")) if os.getenv("FREE_CHANNEL_ID") else None,
             lotto_channel_id=int(os.getenv("LOTTO_CHANNEL_ID", "0")) if os.getenv("LOTTO_CHANNEL_ID") else None
         )
