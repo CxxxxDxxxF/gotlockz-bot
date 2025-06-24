@@ -26,7 +26,7 @@ class TemplateService:
             current_date = datetime.now().strftime(self.templates.date_format)
             current_time = datetime.now().strftime(self.templates.time_format)
 
-            header = f"__**FREE PLAY - {current_date}**__"
+            header = f"# __**🔒 FREE PLAY - {current_date} 🔒**__"
             game_info = f"⚾ I Game: {teams[0]} @ {teams[1]} ({current_date} {current_time})"
             bet_info = f"🏆 I {description} ({odds})"
             analysis_label = "\n👇 I Analysis Below:\n"

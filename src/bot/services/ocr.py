@@ -136,41 +136,53 @@ class OCRService:
             # 1. Extract odds (e.g., -170, +347, -165, -80, +150)
             odds_patterns = [
                 r'(?i)odds[:\s]*([+-]?\d{2,4})',  # Odds: -110 or odds -110
-                r'([+-]\d{2,4})',                  # -110, +200
-                r'([+-]\d{3,4})',                  # -110, +2000
-                r'\b([+-]\d{2,4})\b',            # -110, +200 (word boundary)
+                r'(?i)line[:\s]*([+-]?\d{2,4})',  # Line: -110 or line -110
+                r'(?i)price[:\s]*([+-]?\d{2,4})', # Price: -110 or price -110
+                r'\b([+-]\d{3,4})\b',            # -110, +2000 (word boundary, 3-4 digits)
+                r'\b([+-]\d{2,3})\b',            # -110, +200 (word boundary, 2-3 digits)
             ]
             odds = None
             lines = text.splitlines()
-            # Search for odds in lines containing 'odds' first
-            for line in reversed(lines):
-                if 'odds' in line.lower():
+            
+            # Priority 1: Look for lines with odds-related keywords
+            for line in lines:
+                line_lower = line.lower()
+                if any(keyword in line_lower for keyword in ['odds', 'line', 'price', 'bet']):
                     for pattern in odds_patterns:
                         match = re.search(pattern, line)
                         if match:
-                            odds = match.group(1).strip()
-                            break
-                if odds:
-                    break
-            # If not found, search all lines from bottom up
+                            potential_odds = match.group(1).strip()
+                            # Validate it's actually odds (not a score or other number)
+                            if self._is_valid_odds(potential_odds):
+                                odds = potential_odds
+                                break
+                    if odds:
+                        break
+            
+            # Priority 2: Look at bottom lines (where odds usually appear)
             if not odds:
                 for line in reversed(lines):
                     for pattern in odds_patterns:
                         match = re.search(pattern, line)
                         if match:
-                            odds = match.group(1).strip()
-                            break
+                            potential_odds = match.group(1).strip()
+                            if self._is_valid_odds(potential_odds):
+                                odds = potential_odds
+                                break
                     if odds:
                         break
-            # Fallback: search whole text
+            
+            # Priority 3: Search whole text for any valid odds
             if not odds:
                 for pattern in odds_patterns:
                     match = re.search(pattern, text)
                     if match:
-                        odds = match.group(1).strip()
-                        break
-            # Filter out false positives (e.g., scores like 3-2)
-            if odds and len(odds) >= 3 and (odds.startswith('+') or odds.startswith('-')) and odds[1:].isdigit():
+                        potential_odds = match.group(1).strip()
+                        if self._is_valid_odds(potential_odds):
+                            odds = potential_odds
+                            break
+            
+            if odds:
                 bet_data['odds'] = odds
                 logger.info(f"Extracted odds: {bet_data['odds']}")
             else:
@@ -346,4 +358,17 @@ class OCRService:
             'odds': 'TBD',
             'units': '1',
             'is_parlay': False
-        } 
+        }
+
+    def _is_valid_odds(self, odds: str) -> bool:
+        """Validate if a given string is a valid odds format."""
+        try:
+            if not odds or not isinstance(odds, str):
+                return False
+            # Check if the string is a valid odds format
+            if len(odds) >= 3 and (odds.startswith('+') or odds.startswith('-')) and odds[1:].isdigit():
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error validating odds: {e}")
+            return False 
