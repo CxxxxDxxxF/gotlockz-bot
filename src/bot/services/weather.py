@@ -13,16 +13,23 @@ import logging
 weather_scraper_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'weather_scraper')
 sys.path.insert(0, weather_scraper_path)
 
-# Change to weather_scraper directory for imports
-original_cwd = os.getcwd()
+# Try to import WeatherScraper, but make it optional
+WeatherScraper = None
 try:
-    os.chdir(weather_scraper_path)
-    from weather_scraper import WeatherScraper
-except ImportError:
-    logging.warning("Weather scraper not available - weather data will be limited")
-    WeatherScraper = None
-finally:
-    os.chdir(original_cwd)
+    if os.path.exists(weather_scraper_path):
+        # Change to weather_scraper directory for imports
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(weather_scraper_path)
+            from weather_scraper import WeatherScraper
+        except ImportError:
+            logging.warning("Weather scraper import failed - weather data will be limited")
+        finally:
+            os.chdir(original_cwd)
+    else:
+        logging.warning("Weather scraper directory not found - weather data will be limited")
+except Exception as e:
+    logging.warning(f"Weather scraper not available: {e} - weather data will be limited")
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +41,7 @@ class WeatherService:
         self.scraper = None
         self.stadium_mapping = self._load_stadium_mapping()
         self.weather_scraper_path = weather_scraper_path
+        self.weather_available = WeatherScraper is not None and os.path.exists(weather_scraper_path)
         
     def _load_stadium_mapping(self) -> Dict[str, str]:
         """Load mapping of team names to stadium locations"""
@@ -83,8 +91,8 @@ class WeatherService:
     
     async def initialize(self):
         """Initialize the weather scraper"""
-        if WeatherScraper is None:
-            logger.warning("Weather scraper not available")
+        if not self.weather_available:
+            logger.warning("Weather scraper not available - using fallback weather data")
             return False
             
         try:
@@ -101,7 +109,8 @@ class WeatherService:
             logger.error(f"Failed to initialize weather service: {e}")
             return False
         finally:
-            os.chdir(original_cwd)
+            if 'original_cwd' in locals():
+                os.chdir(original_cwd)
     
     def _get_stadium_for_team(self, team_name: str) -> Optional[str]:
         """Get stadium name for a team"""
@@ -109,16 +118,16 @@ class WeatherService:
     
     async def get_weather_for_teams(self, teams: List[str]) -> Dict:
         """Get weather data for teams involved in a bet"""
-        if not self.scraper:
+        if not self.weather_available or not self.scraper:
             return {}
             
         weather_data = {}
         
         # Change to weather_scraper directory for operations
         original_cwd = os.getcwd()
-        os.chdir(self.weather_scraper_path)
-        
         try:
+            os.chdir(self.weather_scraper_path)
+            
             for team in teams:
                 stadium = self._get_stadium_for_team(team)
                 if stadium:
@@ -137,6 +146,8 @@ class WeatherService:
                             }
                     except Exception as e:
                         logger.error(f"Error getting weather for {team} ({stadium}): {e}")
+        except Exception as e:
+            logger.error(f"Error accessing weather scraper directory: {e}")
         finally:
             os.chdir(original_cwd)
         

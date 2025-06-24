@@ -38,7 +38,10 @@ class AdvancedStatsService:
                 return None
             
             # Initialize weather service
-            await self.weather_service.initialize()
+            try:
+                await self.weather_service.initialize()
+            except Exception as e:
+                logger.warning(f"Weather service initialization failed: {e}")
             
             # Get basic team stats
             team1_stats = await self.get_team_stats(teams[0])
@@ -142,6 +145,22 @@ class AdvancedStatsService:
     async def get_weather_data(self, teams: List[str]) -> Dict[str, Any]:
         """Get weather data for the game location using the weather service."""
         try:
+            # Check if weather service is available
+            if not hasattr(self, 'weather_service') or not self.weather_service.weather_available:
+                # Return fallback weather data
+                return {
+                    'data': {},
+                    'summary': "Weather data unavailable",
+                    'available': False,
+                    'fallback': {
+                        'temperature': 72,
+                        'wind_speed': 8,
+                        'wind_direction': 'SW',
+                        'humidity': 65,
+                        'conditions': 'Partly Cloudy'
+                    }
+                }
+            
             weather_data = await self.weather_service.get_weather_for_teams(teams)
             
             if weather_data:
