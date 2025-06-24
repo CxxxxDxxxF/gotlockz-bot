@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Any, Optional
 import openai
 import random
+import asyncio
 
 from config.settings import settings
 
@@ -108,15 +109,21 @@ Do NOT generate an intro, the intro will be provided. Start your response direct
 Here's the context for the bet:
 {context}
 """
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a sharp, trusted MLB bettor writing for a 21+ Discord audience. Use a mature, confident, stats-driven, and slightly witty tone. Avoid corny or kid language and forced hype. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs as described. Use emojis only for emphasis. Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph. End with 'Let's cash.' or 'Lock it in.'"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=350,
-                temperature=0.76
+            # Use asyncio to run the OpenAI call in a thread pool to prevent blocking
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a sharp, trusted MLB bettor writing for a 21+ Discord audience. Use a mature, confident, stats-driven, and slightly witty tone. Avoid corny or kid language and forced hype. Use Discord bold markdown (**text**) for key teams, stats, or phrases. Write exactly three short paragraphs as described. Use emojis only for emphasis. Do NOT generate an intro, the intro will be provided. Start your response directly with the first paragraph. End with 'Let's cash.' or 'Lock it in.'"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=350,
+                    temperature=0.76
+                )
             )
+            
             if response and response.choices and len(response.choices) > 0:
                 message_content = response.choices[0].message.content
                 if message_content:

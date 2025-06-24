@@ -46,12 +46,22 @@ class PickCommands(app_commands.Group):
         description: Optional[str] = None
     ):
         logger.info("Received /pick post command, deferring response immediately.")
+        
+        # Defer immediately to prevent timeout
         try:
             await interaction.response.defer(thinking=True)
-            logger.info("Deferred interaction response.")
+            logger.info("Deferred interaction response successfully.")
+        except discord.NotFound:
+            logger.error("Interaction already expired - user may have clicked multiple times")
+            return
         except Exception as e:
             logger.error(f"Failed to defer interaction: {e}")
+            try:
+                await interaction.followup.send("❌ Bot is processing your request. Please wait...", ephemeral=True)
+            except:
+                pass
             return
+
         try:
             # Validate image
             if not image.content_type or not image.content_type.startswith('image/'):
@@ -60,17 +70,23 @@ class PickCommands(app_commands.Group):
 
             # Download image with timeout
             try:
-                image_bytes = await asyncio.wait_for(image.read(), timeout=5.0)
+                image_bytes = await asyncio.wait_for(image.read(), timeout=10.0)
+                logger.info("Image downloaded successfully.")
             except asyncio.TimeoutError:
                 await interaction.followup.send("❌ Image download timed out. Please try again.", ephemeral=True)
+                return
+            except Exception as e:
+                logger.error(f"Image download failed: {e}")
+                await interaction.followup.send("❌ Failed to download image. Please try again.", ephemeral=True)
                 return
 
             # Extract betting data with OCR
             try:
                 bet_data = await asyncio.wait_for(
                     self.ocr_service.extract_bet_data(image_bytes),
-                    timeout=10.0
+                    timeout=15.0
                 )
+                logger.info(f"OCR extraction completed: {bet_data}")
             except asyncio.TimeoutError:
                 await interaction.followup.send("❌ Image processing timed out. Please try with a clearer image.", ephemeral=True)
                 return
@@ -91,21 +107,49 @@ class PickCommands(app_commands.Group):
                 await interaction.followup.send("❌ Could not extract bet description from the slip. Please ensure the bet type (e.g., Over/Under) is visible.", ephemeral=True)
                 return
 
-            # Fetch live MLB stats
-            stats_data = await self.stats_service.get_live_stats(bet_data)
+            # Fetch live MLB stats with timeout
+            try:
+                stats_data = await asyncio.wait_for(
+                    self.stats_service.get_live_stats(bet_data),
+                    timeout=10.0
+                )
+                logger.info("Stats fetched successfully.")
+            except asyncio.TimeoutError:
+                logger.warning("Stats fetch timed out, continuing without stats")
+                stats_data = None
+            except Exception as e:
+                logger.error(f"Stats fetch failed: {e}")
+                stats_data = None
 
-            # Generate AI analysis
-            analysis = await self.analysis_service.generate_analysis(bet_data, stats_data)
+            # Generate AI analysis with timeout
+            try:
+                analysis = await asyncio.wait_for(
+                    self.analysis_service.generate_analysis(bet_data, stats_data),
+                    timeout=20.0
+                )
+                logger.info("AI analysis generated successfully.")
+            except asyncio.TimeoutError:
+                logger.warning("AI analysis timed out, using fallback")
+                analysis = "AI analysis temporarily unavailable. Please check the betting data manually."
+            except Exception as e:
+                logger.error(f"AI analysis failed: {e}")
+                analysis = "AI analysis temporarily unavailable. Please check the betting data manually."
 
             # Format content based on channel type
-            if channel_type == "free_play":
-                content = self.template_service.format_free_play(bet_data, stats_data, analysis)
-            elif channel_type == "vip_pick":
-                content = self.template_service.format_vip_pick(bet_data, stats_data, analysis)
-            elif channel_type == "lotto_ticket":
-                content = self.template_service.format_lotto_ticket(bet_data, stats_data, analysis)
-            else:
-                await interaction.followup.send("❌ Invalid channel type selected.", ephemeral=True)
+            try:
+                if channel_type == "free_play":
+                    content = self.template_service.format_free_play(bet_data, stats_data, analysis)
+                elif channel_type == "vip_pick":
+                    content = self.template_service.format_vip_pick(bet_data, stats_data, analysis)
+                elif channel_type == "lotto_ticket":
+                    content = self.template_service.format_lotto_ticket(bet_data, stats_data, analysis)
+                else:
+                    await interaction.followup.send("❌ Invalid channel type selected.", ephemeral=True)
+                    return
+                logger.info("Content formatted successfully.")
+            except Exception as e:
+                logger.error(f"Content formatting failed: {e}")
+                await interaction.followup.send("❌ Failed to format content. Please try again.", ephemeral=True)
                 return
 
             # Get target channel
@@ -118,14 +162,26 @@ class PickCommands(app_commands.Group):
                 return
 
             # Post to target channel
-            await target_channel.send(content)
+            try:
+                await target_channel.send(content)
+                logger.info(f"Pick posted successfully to {target_channel.name}")
+            except Exception as e:
+                logger.error(f"Failed to post to channel: {e}")
+                await interaction.followup.send("❌ Failed to post to target channel. Please check bot permissions.", ephemeral=True)
+                return
             
             # Confirm to user
             await interaction.followup.send(f"✅ Pick posted to {target_channel.mention}!", ephemeral=True)
 
+        except discord.NotFound:
+            logger.error("Interaction expired during processing")
+            return
         except Exception as e:
             logger.error(f"Error in post_pick: {e}")
-            await interaction.followup.send("❌ An error occurred. Please try again or contact support.", ephemeral=True)
+            try:
+                await interaction.followup.send("❌ An error occurred. Please try again or contact support.", ephemeral=True)
+            except:
+                pass
 
     async def _get_target_channel(self, channel_type: str, guild: discord.Guild) -> Optional[discord.TextChannel]:
         """Get the target channel based on channel type."""
