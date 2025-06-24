@@ -8,6 +8,8 @@ import aiohttp
 import pandas as pd
 from datetime import datetime, timedelta
 
+from bot.services.statcast import StatcastService
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,6 +19,7 @@ class AdvancedStatsService:
     def __init__(self):
         self.session = None
         self.mlb_base_url = "https://statsapi.mlb.com/api/v1"
+        self.statcast_service = StatcastService()
         
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -41,7 +44,7 @@ class AdvancedStatsService:
             team2_advanced = await self.get_advanced_team_stats(teams[1])
             
             # Get Statcast data (if available)
-            statcast_data = await self.get_statcast_data(teams[0], teams[1])
+            statcast_data = await self.statcast_service.get_statcast_data(teams[0], teams[1])
             
             # Get park factors
             park_factors = await self.get_park_factors(teams[0], teams[1])
@@ -64,148 +67,6 @@ class AdvancedStatsService:
         except Exception as e:
             logger.error(f"Error getting advanced stats: {e}")
             return None
-    
-    async def get_statcast_data(self, team1: str, team2: str) -> Dict[str, Any]:
-        """Get Statcast data using savantscraper."""
-        try:
-            # Import savantscraper
-            try:
-                from savantscraper import SavantScraper
-                scraper = SavantScraper()
-                
-                # Get current date for recent data
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=30)
-                
-                # Get team Statcast data
-                team1_statcast = await self._get_team_statcast(scraper, team1, start_date, end_date)
-                team2_statcast = await self._get_team_statcast(scraper, team2, start_date, end_date)
-                
-                return {
-                    'team1': team1_statcast,
-                    'team2': team2_statcast,
-                    'summary': f"Statcast data loaded for {team1} vs {team2}"
-                }
-                
-            except ImportError:
-                logger.warning("savantscraper not available, skipping Statcast data")
-                return {}
-            except Exception as e:
-                logger.error(f"Error getting Statcast data: {e}")
-                return {}
-                
-        except Exception as e:
-            logger.error(f"Error in get_statcast_data: {e}")
-            return {}
-    
-    async def _get_team_statcast(self, scraper, team_name: str, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
-        """Get Statcast data for a specific team."""
-        try:
-            # Map team names to MLB team IDs for Statcast
-            team_mapping = {
-                'Los Angeles Angels': 'LAA',
-                'Oakland Athletics': 'OAK',
-                'New York Yankees': 'NYY',
-                'Boston Red Sox': 'BOS',
-                'Houston Astros': 'HOU',
-                'Los Angeles Dodgers': 'LAD',
-                'San Francisco Giants': 'SF',
-                'Colorado Rockies': 'COL',
-                'Chicago Cubs': 'CHC',
-                'Chicago White Sox': 'CWS',
-                'Cleveland Guardians': 'CLE',
-                'Detroit Tigers': 'DET',
-                'Kansas City Royals': 'KC',
-                'Minnesota Twins': 'MIN',
-                'Baltimore Orioles': 'BAL',
-                'Tampa Bay Rays': 'TB',
-                'Toronto Blue Jays': 'TOR',
-                'Atlanta Braves': 'ATL',
-                'Miami Marlins': 'MIA',
-                'New York Mets': 'NYM',
-                'Philadelphia Phillies': 'PHI',
-                'Washington Nationals': 'WSH',
-                'Arizona Diamondbacks': 'ARI',
-                'San Diego Padres': 'SD',
-                'Seattle Mariners': 'SEA',
-                'Texas Rangers': 'TEX',
-                'Cincinnati Reds': 'CIN',
-                'Milwaukee Brewers': 'MIL',
-                'Pittsburgh Pirates': 'PIT',
-                'St. Louis Cardinals': 'STL'
-            }
-            
-            team_abbr = team_mapping.get(team_name, team_name)
-            
-            # Get batting Statcast data
-            batting_data = scraper.scrape_batting(
-                start_date=start_date.strftime('%Y-%m-%d'),
-                end_date=end_date.strftime('%Y-%m-%d'),
-                team=team_abbr
-            )
-            
-            # Get pitching Statcast data
-            pitching_data = scraper.scrape_pitching(
-                start_date=start_date.strftime('%Y-%m-%d'),
-                end_date=end_date.strftime('%Y-%m-%d'),
-                team=team_abbr
-            )
-            
-            # Process the data
-            batting_stats = self._process_statcast_batting(batting_data)
-            pitching_stats = self._process_statcast_pitching(pitching_data)
-            
-            return {
-                'batting': batting_stats,
-                'pitching': pitching_stats
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting Statcast data for {team_name}: {e}")
-            return {}
-    
-    def _process_statcast_batting(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Process Statcast batting data."""
-        try:
-            if data.empty:
-                return {}
-            
-            # Calculate advanced metrics
-            stats = {
-                'avg_exit_velocity': round(data['launch_speed'].mean(), 1) if 'launch_speed' in data.columns else 0,
-                'avg_launch_angle': round(data['launch_angle'].mean(), 1) if 'launch_angle' in data.columns else 0,
-                'barrel_pct': round((data['launch_speed'] >= 98).sum() / len(data) * 100, 1) if 'launch_speed' in data.columns else 0,
-                'hard_hit_pct': round((data['launch_speed'] >= 95).sum() / len(data) * 100, 1) if 'launch_speed' in data.columns else 0,
-                'sweet_spot_pct': round(((data['launch_angle'] >= 8) & (data['launch_angle'] <= 32)).sum() / len(data) * 100, 1) if 'launch_angle' in data.columns else 0,
-                'total_pitches': len(data)
-            }
-            
-            return stats
-            
-        except Exception as e:
-            logger.error(f"Error processing Statcast batting data: {e}")
-            return {}
-    
-    def _process_statcast_pitching(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Process Statcast pitching data."""
-        try:
-            if data.empty:
-                return {}
-            
-            # Calculate advanced metrics
-            stats = {
-                'avg_velocity': round(data['release_speed'].mean(), 1) if 'release_speed' in data.columns else 0,
-                'avg_spin_rate': round(data['release_spin_rate'].mean(), 0) if 'release_spin_rate' in data.columns else 0,
-                'whiff_pct': round((data['description'] == 'swinging_strike').sum() / len(data) * 100, 1) if 'description' in data.columns else 0,
-                'chase_pct': round((data['zone'] > 9).sum() / len(data) * 100, 1) if 'zone' in data.columns else 0,
-                'total_pitches': len(data)
-            }
-            
-            return stats
-            
-        except Exception as e:
-            logger.error(f"Error processing Statcast pitching data: {e}")
-            return {}
     
     async def get_advanced_team_stats(self, team_name: str) -> Dict[str, Any]:
         """Get advanced team statistics including comprehensive MLB data."""
@@ -575,4 +436,5 @@ class AdvancedStatsService:
     async def close(self):
         """Close the aiohttp session."""
         if self.session and not self.session.closed:
-            await self.session.close() 
+            await self.session.close()
+        await self.statcast_service.close() 

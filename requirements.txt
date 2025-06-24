@@ -17,7 +17,7 @@ pandas>=2.0.0
 
 # Advanced MLB Stats
 requests>=2.31.0
-git+https://github.com/alanrkessler/savantscraper.git
+tqdm>=4.65.0
 
 # System Monitoring
 psutil>=5.9.0

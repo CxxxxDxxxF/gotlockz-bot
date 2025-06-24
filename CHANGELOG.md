@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Advanced Stats Service**
   - New `AdvancedStatsService` for comprehensive MLB statistics
   - Integration with MLB API for advanced batting and pitching stats
-  - **Statcast data integration** using savantscraper from GitHub
+  - **Custom Statcast service** with direct Baseball Savant integration
   - Park factors analysis for venue-specific adjustments
   - Weather data integration for environmental factors
   - Recent performance metrics (last 10 games analysis)
@@ -26,12 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Weather impact assessment
   - Recent form analysis with win/loss trends
 
-- **Statcast Data Integration**
-  - Direct GitHub installation of savantscraper
+- **Custom Statcast Integration**
+  - Direct Baseball Savant API integration
   - Advanced metrics: exit velocity, launch angle, barrel %, hard hit %
   - Pitching metrics: velocity, spin rate, whiff %, chase %
-  - Last 30 days of Statcast data for recent trends
+  - Current season Statcast data for both teams
   - Team mapping for all 30 MLB teams
+  - Robust error handling and retry logic
 
 - **Fallback System**
   - Graceful degradation from advanced to basic stats
@@ -56,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dependencies**
   - Added pandas>=2.0.0 for data processing
   - Added requests>=2.31.0 for enhanced HTTP handling
-  - **Added savantscraper from GitHub** for Statcast integration
+  - Added tqdm>=4.65.0 for progress tracking
+  - **Removed problematic external dependencies**
 
 #### 🐛 Fixed
 - **Stats Integration**
@@ -64,11 +66,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved error handling for network failures
   - Better fallback mechanisms when services unavailable
   - Enhanced logging for debugging stats issues
+  - **Resolved deployment issues with external packages**
 
 #### 📚 Documentation
 - **Advanced Stats Guide**
   - Documentation for new advanced stats features
-  - **Statcast integration guide**
+  - **Custom Statcast integration guide**
   - Performance optimization recommendations
   - Troubleshooting guide for stats issues
 
