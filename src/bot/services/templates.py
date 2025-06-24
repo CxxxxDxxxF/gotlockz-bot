@@ -65,6 +65,12 @@ class TemplateService:
             # Unit size
             units_display = f"💵 I Unit Size: {units}"
             
+            # Stats section if available
+            stats_section = ""
+            if stats_data:
+                stats_summary = stats_data.get('summary', 'Advanced stats available')
+                stats_section = f"📊 I Live Stats: {stats_summary}"
+            
             # Analysis section
             analysis_label = "👇 I Analysis Below:"
             
@@ -72,7 +78,14 @@ class TemplateService:
             analysis_section = analysis if analysis else "Analysis to be provided."
             
             # Combine all sections
-            content = f"{header}\n{game_info}\n\n{bet_info}\n\n{units_display}\n\n{analysis_label}\n\n{analysis_section}"
+            content_parts = [header, game_info, "", bet_info, "", units_display]
+            
+            if stats_data:
+                content_parts.extend(["", stats_section])
+            
+            content_parts.extend(["", analysis_label, "", analysis_section])
+            
+            content = "\n".join(content_parts)
             self.vip_play_counter += 1
             return content
             
@@ -149,6 +162,12 @@ class TemplateService:
             # Unit size
             units_display = f"💵 I Unit Size: {units}"
             
+            # Stats section if available
+            stats_section = ""
+            if stats_data:
+                stats_summary = stats_data.get('summary', 'Advanced stats available')
+                stats_section = f"📊 I Live Stats: {stats_summary}"
+            
             # Analysis section
             analysis_label = "👇 I Analysis Below:"
             
@@ -165,12 +184,13 @@ class TemplateService:
                 "",
                 bet_info,
                 "",
-                units_display,
-                "",
-                analysis_label,
-                "",
-                analysis_section
+                units_display
             ])
+            
+            if stats_data:
+                content_parts.extend(["", stats_section])
+            
+            content_parts.extend(["", analysis_label, "", analysis_section])
             
             content = "\n".join(content_parts)
             self.vip_play_counter += 1
