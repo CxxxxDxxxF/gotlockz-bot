@@ -137,12 +137,12 @@ class OCRService:
             logger.info(f"Non-empty OCR lines: {lines}")
 
             # Improved SGP/parlay leg extraction
-            branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook']
+            branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook', 'fcash', 'bet id', 'must be 21+', 'gambling problem', 'call', '1-800-gambler', 'rg']
             legs = []
             seen_leg_keys = set()
             i = 0
             while i < len(lines):
-                # Skip branding lines
+                # Skip branding/supporting lines
                 if any(b in lines[i].lower() for b in branding_keywords):
                     i += 1
                     continue
@@ -215,8 +215,24 @@ class OCRService:
                     legs.append(leg)
                 else:
                     i += 1
-            # Only treat as SGP/parlay if there are 2+ unique, meaningful legs
-            if len(legs) > 1:
+            # Stricter deduplication: if all legs are essentially the same, treat as single-leg
+            def leg_signature(leg):
+                return (leg.get('player', ''), leg.get('description', ''), tuple(leg.get('teams', [])))
+            unique_leg_signatures = set(leg_signature(leg) for leg in legs)
+            if len(unique_leg_signatures) <= 1 and len(legs) > 0:
+                # Collapse to single-leg
+                bet_data['is_parlay'] = False
+                main_leg = legs[0]
+                if 'teams' in main_leg:
+                    bet_data['teams'] = main_leg['teams']
+                if 'player' in main_leg and 'description' in main_leg:
+                    bet_data['description'] = f"{main_leg['player']} {main_leg['description']}"
+                elif 'description' in main_leg:
+                    bet_data['description'] = main_leg['description']
+                elif 'player' in main_leg:
+                    bet_data['description'] = main_leg['player']
+                bet_data['legs'] = []
+            elif len(legs) > 1:
                 bet_data['is_parlay'] = True
                 bet_data['legs'] = legs
                 # Set teams as all unique teams from legs
