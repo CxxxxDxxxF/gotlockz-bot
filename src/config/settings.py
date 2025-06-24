@@ -33,7 +33,6 @@ class APIConfig:
 class ChannelConfig:
     """Channel configuration settings."""
     vip_channel_id: Optional[int] = None
-    premium_vip_channel_id: Optional[int] = None
     free_channel_id: Optional[int] = None
     lotto_channel_id: Optional[int] = None
 
@@ -77,7 +76,6 @@ class Settings:
         
         self.channels = ChannelConfig(
             vip_channel_id=int(os.getenv("VIP_CHANNEL_ID", "0")) if os.getenv("VIP_CHANNEL_ID") else None,
-            premium_vip_channel_id=int(os.getenv("PREMIUM_VIP_CHANNEL_ID", "0")) if os.getenv("PREMIUM_VIP_CHANNEL_ID") else None,
             free_channel_id=int(os.getenv("FREE_CHANNEL_ID", "0")) if os.getenv("FREE_CHANNEL_ID") else None,
             lotto_channel_id=int(os.getenv("LOTTO_CHANNEL_ID", "0")) if os.getenv("LOTTO_CHANNEL_ID") else None
         )
