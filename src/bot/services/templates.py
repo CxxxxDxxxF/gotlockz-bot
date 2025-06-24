@@ -145,14 +145,18 @@ class TemplateService:
                 # List each leg with stat summary if available
                 leg_lines = []
                 for leg in legs:
-                    player = leg.get('player', '')
-                    desc = leg.get('description', '')
+                    player = leg.get('player', '').strip()
+                    desc = leg.get('description', '').strip()
                     team = ''
                     if 'teams' in leg and len(leg['teams']) == 2:
                         team = f" [{leg['teams'][0][:3].upper()}]"
-                    # Prefer player+desc, fallback to desc
+                    # Only show the most informative, non-redundant pick line
                     if player and desc:
-                        leg_line = f"🏆 I {player} {desc}{team}"
+                        # If desc is just a repeat of player, only show one
+                        if player == desc or player in desc or desc in player:
+                            leg_line = f"🏆 I {desc}{team}"
+                        else:
+                            leg_line = f"🏆 I {player} {desc}{team}"
                     elif player:
                         leg_line = f"🏆 I {player}{team}"
                     elif desc:
