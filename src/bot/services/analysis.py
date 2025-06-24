@@ -59,6 +59,7 @@ class AnalysisService:
             if stats_data:
                 team1_stats = stats_data.get('team1', {})
                 team2_stats = stats_data.get('team2', {})
+                statcast_data = stats_data.get('statcast', {})
                 park_factors = stats_data.get('park_factors', {})
                 weather_data = stats_data.get('weather', {})
                 
@@ -83,6 +84,25 @@ class AnalysisService:
             - Pitching: {team2_stats.get('era', 0):.2f} ERA, {team2_stats.get('whip', 0):.2f} WHIP
             - Recent: {team2_stats.get('recent_wins', 0)}-{team2_stats.get('recent_losses', 0)} last {team2_stats.get('recent_games', 0)} games
             - Recent Avg: {team2_stats.get('avg_runs_scored', 0)} scored, {team2_stats.get('avg_runs_allowed', 0)} allowed
+            """
+                
+                # Add Statcast data if available
+                if statcast_data:
+                    team1_statcast = statcast_data.get('team1', {})
+                    team2_statcast = statcast_data.get('team2', {})
+                    
+                    if team1_statcast or team2_statcast:
+                        context += f"""
+                
+            Statcast Data (Last 30 Days):
+            
+            {teams[0]}:
+            - Batting: {team1_statcast.get('batting', {}).get('avg_exit_velocity', 0)} mph exit velo, {team1_statcast.get('batting', {}).get('barrel_pct', 0)}% barrel rate
+            - Pitching: {team1_statcast.get('pitching', {}).get('avg_velocity', 0)} mph avg velo, {team1_statcast.get('pitching', {}).get('whiff_pct', 0)}% whiff rate
+            
+            {teams[1]}:
+            - Batting: {team2_statcast.get('batting', {}).get('avg_exit_velocity', 0)} mph exit velo, {team2_statcast.get('batting', {}).get('barrel_pct', 0)}% barrel rate
+            - Pitching: {team2_statcast.get('pitching', {}).get('avg_velocity', 0)} mph avg velo, {team2_statcast.get('pitching', {}).get('whiff_pct', 0)}% whiff rate
             """
                 
                 if park_factors:

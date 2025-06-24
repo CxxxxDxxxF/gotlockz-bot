@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.0] - 2024-12-25
 
-### 🚀 Advanced Stats Integration
+### 🚀 Advanced Stats Integration with Statcast
 
 #### ✨ Added
 - **Advanced Stats Service**
   - New `AdvancedStatsService` for comprehensive MLB statistics
   - Integration with MLB API for advanced batting and pitching stats
+  - **Statcast data integration** using savantscraper from GitHub
   - Park factors analysis for venue-specific adjustments
   - Weather data integration for environmental factors
   - Recent performance metrics (last 10 games analysis)
@@ -20,15 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced AI Analysis**
   - Upgraded AI prompts with advanced statistical context
   - Integration of batting averages, OBP, SLG, ERA, WHIP
+  - **Statcast metrics** including exit velocity, barrel %, whiff rate
   - Park factor considerations in analysis
   - Weather impact assessment
   - Recent form analysis with win/loss trends
 
-- **Comprehensive MLB Data Foundation**
-  - Enhanced data processing with pandas support
-  - Improved error handling for advanced stats failures
-  - Framework for future Statcast integration
-  - Extended park factors database for major stadiums
+- **Statcast Data Integration**
+  - Direct GitHub installation of savantscraper
+  - Advanced metrics: exit velocity, launch angle, barrel %, hard hit %
+  - Pitching metrics: velocity, spin rate, whiff %, chase %
+  - Last 30 days of Statcast data for recent trends
+  - Team mapping for all 30 MLB teams
 
 - **Fallback System**
   - Graceful degradation from advanced to basic stats
@@ -42,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved AI prompts for more sophisticated analysis
   - Better formatting of statistical data in posts
   - Increased token limit for more detailed analysis
+  - **Statcast data integration** in AI context
 
 - **Pick Command**
   - Updated to use advanced stats service as primary
@@ -52,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dependencies**
   - Added pandas>=2.0.0 for data processing
   - Added requests>=2.31.0 for enhanced HTTP handling
-  - Removed non-existent savantscraper dependency
+  - **Added savantscraper from GitHub** for Statcast integration
 
 #### 🐛 Fixed
 - **Stats Integration**
@@ -64,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### 📚 Documentation
 - **Advanced Stats Guide**
   - Documentation for new advanced stats features
-  - Integration guide for future Statcast data
+  - **Statcast integration guide**
   - Performance optimization recommendations
   - Troubleshooting guide for stats issues
 
