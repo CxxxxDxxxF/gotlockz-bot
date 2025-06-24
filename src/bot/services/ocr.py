@@ -137,9 +137,15 @@ class OCRService:
             logger.info(f"Non-empty OCR lines: {lines}")
 
             # Improved SGP/parlay leg extraction
+            branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook']
             legs = []
+            seen_leg_keys = set()
             i = 0
             while i < len(lines):
+                # Skip branding lines
+                if any(b in lines[i].lower() for b in branding_keywords):
+                    i += 1
+                    continue
                 # Look for a player prop or over/under leg
                 player_match = re.match(r'^([A-Z][a-z]+(?: [A-Z][a-z]+)* ?\d*\+?)$', lines[i])
                 ou_match = re.match(r'^(Over|Under) ?([\d\.]+)', lines[i])
@@ -163,6 +169,12 @@ class OCRService:
                     if i+1 < len(lines) and re.match(r'^[+-]\d{2,4}$', lines[i+1]):
                         odds = lines[i+1]
                         i += 1
+                    # Deduplicate by player+desc+teams
+                    leg_key = (player, desc, tuple(teams))
+                    if leg_key in seen_leg_keys:
+                        i += 1
+                        continue
+                    seen_leg_keys.add(leg_key)
                     leg = {'player': player}
                     if desc:
                         leg['description'] = desc
@@ -190,6 +202,11 @@ class OCRService:
                     if i+1 < len(lines) and re.match(r'^[+-]\d{2,4}$', lines[i+1]):
                         odds = lines[i+1]
                         i += 1
+                    leg_key = (desc, tuple(teams))
+                    if leg_key in seen_leg_keys:
+                        i += 1
+                        continue
+                    seen_leg_keys.add(leg_key)
                     leg = {'description': desc}
                     if teams:
                         leg['teams'] = teams
@@ -198,7 +215,7 @@ class OCRService:
                     legs.append(leg)
                 else:
                     i += 1
-            # If we found multiple legs, treat as parlay/SGP
+            # Only treat as SGP/parlay if there are 2+ unique, meaningful legs
             if len(legs) > 1:
                 bet_data['is_parlay'] = True
                 bet_data['legs'] = legs
