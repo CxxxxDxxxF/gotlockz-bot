@@ -120,7 +120,7 @@ class OCRService:
             return ""
     
     async def _parse_bet_data(self, text: str) -> Dict[str, Any]:
-        """Parse betting data from extracted text."""
+        """Parse betting data from extracted text. Handles all Fanatics MLB slip types."""
         try:
             bet_data = {
                 'teams': ['TBD', 'TBD'],
@@ -133,66 +133,88 @@ class OCRService:
             }
             logger.info(f"Parsing OCR text: {text}")
 
-            # 1. Extract odds (e.g., -170, +347, -165, -80, +150)
-            odds_patterns = [
-                r'(?i)odds[:\s]*([+-]?\d{2,4})',  # Odds: -110 or odds -110
-                r'(?i)line[:\s]*([+-]?\d{2,4})',  # Line: -110 or line -110
-                r'(?i)price[:\s]*([+-]?\d{2,4})', # Price: -110 or price -110
-                r'\b([+-]\d{3,4})\b',            # -110, +2000 (word boundary, 3-4 digits)
-                r'\b([+-]\d{2,3})\b',            # -110, +200 (word boundary, 2-3 digits)
-            ]
+            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            logger.info(f"Non-empty OCR lines: {lines}")
+
+            # 1. Extract odds (top right or keyword lines)
             odds = None
-            lines = text.splitlines()
-            
-            # Priority 1: Look for lines with odds-related keywords
-            for line in lines:
-                line_lower = line.lower()
-                if any(keyword in line_lower for keyword in ['odds', 'line', 'price', 'bet']):
-                    for pattern in odds_patterns:
-                        match = re.search(pattern, line)
-                        if match:
-                            potential_odds = match.group(1).strip()
-                            # Validate it's actually odds (not a score or other number)
-                            if self._is_valid_odds(potential_odds):
-                                odds = potential_odds
-                                break
-                    if odds:
+            odds_patterns = [
+                r'(?i)odds[:\s]*([+-]?\d{2,4})',
+                r'(?i)line[:\s]*([+-]?\d{2,4})',
+                r'(?i)price[:\s]*([+-]?\d{2,4})',
+                r'\b([+-]\d{3,4})\b',
+                r'\b([+-]\d{2,3})\b',
+            ]
+            # Priority 1: Top 2 lines (top right odds)
+            for line in lines[:2]:
+                for pattern in odds_patterns:
+                    match = re.search(pattern, line)
+                    if match and self._is_valid_odds(match.group(1)):
+                        odds = match.group(1)
                         break
-            
-            # Priority 2: Look at bottom lines (where odds usually appear)
+                if odds:
+                    break
+            # Priority 2: Any line with odds/line/price/leg
             if not odds:
-                for line in reversed(lines):
+                for line in lines:
+                    if any(k in line.lower() for k in ['odds', 'line', 'price', 'leg']):
+                        for pattern in odds_patterns:
+                            match = re.search(pattern, line)
+                            if match and self._is_valid_odds(match.group(1)):
+                                odds = match.group(1)
+                                break
+                        if odds:
+                            break
+            # Priority 3: Bottom 2 lines (sometimes odds are at the end)
+            if not odds:
+                for line in lines[-2:]:
                     for pattern in odds_patterns:
                         match = re.search(pattern, line)
-                        if match:
-                            potential_odds = match.group(1).strip()
-                            if self._is_valid_odds(potential_odds):
-                                odds = potential_odds
-                                break
+                        if match and self._is_valid_odds(match.group(1)):
+                            odds = match.group(1)
+                            break
                     if odds:
                         break
-            
-            # Priority 3: Search whole text for any valid odds
+            # Fallback: Search whole text
             if not odds:
                 for pattern in odds_patterns:
                     match = re.search(pattern, text)
-                    if match:
-                        potential_odds = match.group(1).strip()
-                        if self._is_valid_odds(potential_odds):
-                            odds = potential_odds
-                            break
-            
+                    if match and self._is_valid_odds(match.group(1)):
+                        odds = match.group(1)
+                        break
             if odds:
                 bet_data['odds'] = odds
-                logger.info(f"Extracted odds: {bet_data['odds']}")
+                logger.info(f"Extracted odds: {odds}")
             else:
                 logger.info("No valid odds found.")
 
-            # 2. Extract all team matchups (e.g., Arizona Diamondbacks at Colorado Rockies)
-            matchup_pattern = r'([A-Za-z ]+) at ([A-Za-z ]+)'  # e.g., Arizona Diamondbacks at Colorado Rockies
+            # 2. Extract bet type/description (largest or first bolded text)
+            # Use first non-empty line as main bet type
+            if lines:
+                bet_type = lines[0]
+                # If first line is generic (e.g., '2 Leg Parlay'), try next line
+                if bet_type.lower() in ['2 leg parlay', 'parlay', 'single', 'no', 'yes'] and len(lines) > 1:
+                    bet_type = lines[1]
+                bet_data['description'] = bet_type
+                logger.info(f"Extracted bet type/description: {bet_type}")
+
+            # 3. Extract player props (e.g., Shohei Ohtani 1+, Nick Lodolo - Earned Runs Allowed)
+            player_prop_pattern = r'([A-Z][a-z]+(?: [A-Z][a-z]+)* \d+\+|[A-Z][a-z]+ [A-Z][a-z]+ - [A-Za-z ]+)'  # e.g., Shohei Ohtani 1+, Nick Lodolo - Earned Runs Allowed
+            player_props = re.findall(player_prop_pattern, text)
+            if player_props:
+                bet_data['player'] = player_props[0]
+                logger.info(f"Extracted player prop: {player_props[0]}")
+                # For SGPs, collect all unique player props
+                unique_props = list(dict.fromkeys(player_props))
+                if len(unique_props) > 1:
+                    bet_data['is_parlay'] = True
+                    for p in unique_props:
+                        bet_data['legs'].append({'player': p})
+
+            # 4. Extract all team matchups (e.g., New York Yankees at Cincinnati Reds)
+            matchup_pattern = r'([A-Za-z ]+) at ([A-Za-z ]+)'  # e.g., New York Yankees at Cincinnati Reds
             matchups = re.findall(matchup_pattern, text)
             if matchups:
-                # Use the first matchup for main bet, others for SGP legs
                 main_matchup = matchups[0]
                 bet_data['teams'] = [self._resolve_team_name(main_matchup[0].strip()), self._resolve_team_name(main_matchup[1].strip())]
                 logger.info(f"Extracted teams: {bet_data['teams']}")
@@ -202,44 +224,11 @@ class OCRService:
                     for m in matchups:
                         bet_data['legs'].append({'teams': [self._resolve_team_name(m[0].strip()), self._resolve_team_name(m[1].strip())]})
 
-            # 3. Extract player props (e.g., Ketel Marte 3+, Shohei Ohtani 2+)
-            player_prop_pattern = r'([A-Z][a-z]+(?: [A-Z][a-z]+)* \d+\+)'  # e.g., Ketel Marte 3+
-            player_props = re.findall(player_prop_pattern, text)
-            if player_props:
-                # Remove duplicates while preserving order
-                unique_player_props = []
-                for prop in player_props:
-                    if prop not in unique_player_props:
-                        unique_player_props.append(prop)
-                
-                bet_data['player'] = unique_player_props[0]
-                bet_data['description'] = unique_player_props[0]
-                logger.info(f"Extracted player prop: {bet_data['player']}")
-                # For SGPs, collect all unique player props
-                if len(unique_player_props) > 1:
-                    bet_data['is_parlay'] = True
-                    for p in unique_player_props:
-                        bet_data['legs'].append({'player': p})
-
-            # 4. Extract bet types (e.g., Money Line, ALT Hits + Runs + RBIs, Over 1.5)
-            # Try to find a line with 'Over', 'Under', 'Money Line', or 'ALT'
-            bet_type = None
-            for line in text.splitlines():
-                if not isinstance(line, str):
-                    continue
-                line_lower = line.lower()
-                if any(kw in line_lower for kw in ['over', 'under', 'money line', 'alt', 'stack']):
-                    bet_type = line.strip()
-                    break
-            if bet_type:
-                bet_data['description'] = bet_type
-                logger.info(f"Extracted bet type: {bet_type}")
-
-            # 5. If SGP stack, extract all legs
-            if 'sgp stack' in text.lower() or 'leg' in text.lower():
+            # 5. SGP/Parlay detection and leg extraction
+            if any('parlay' in l.lower() or 'leg' in l.lower() for l in lines):
                 bet_data['is_parlay'] = True
-                # Try to extract each leg as a block
-                leg_pattern = r'([A-Z][a-z]+(?: [A-Z][a-z]+)* \d+\+).*?([A-Za-z ]+ at [A-Za-z ]+)'  # Player prop + matchup
+                # Try to extract each leg as a block (player prop + matchup)
+                leg_pattern = r'([A-Z][a-z]+(?: [A-Z][a-z]+)* \d+\+|[A-Z][a-z]+ [A-Z][a-z]+ - [A-Za-z ]+).*?([A-Za-z ]+ at [A-Za-z ]+)'  # Player prop + matchup
                 legs = re.findall(leg_pattern, text, re.DOTALL)
                 for leg in legs:
                     bet_data['legs'].append({'player': leg[0].strip(), 'teams': [self._resolve_team_name(t.strip()) for t in leg[1].split(' at ')]})
@@ -250,16 +239,10 @@ class OCRService:
                     bet_data['legs'].append({'description': f"{ou_leg[0]} {ou_leg[1]}", 'teams': [self._resolve_team_name(t.strip()) for t in ou_leg[2].split(' at ')]})
                 logger.info(f"Extracted SGP legs: {bet_data['legs']}")
 
-            # 6. Parlay detection
-            if (isinstance(text, str) and 'parlay' in text.lower()) or (isinstance(bet_data['description'], str) and 'parlay' in bet_data['description'].lower()):
-                bet_data['is_parlay'] = True
-
-            # 7. Fallback: If no player or bet type, use first non-empty line as description
-            if bet_data['description'] == 'TBD':
-                lines = [l for l in text.splitlines() if isinstance(l, str) and l.strip()]
-                if lines:
-                    bet_data['description'] = lines[0].strip()
-                    logger.info(f"Fallback description: {bet_data['description']}")
+            # 6. Fallback: If no player or bet type, use first non-empty line as description
+            if bet_data['description'] == 'TBD' and lines:
+                bet_data['description'] = lines[0]
+                logger.info(f"Fallback description: {bet_data['description']}")
 
             logger.info(f"Final parsed bet data: {bet_data}")
             return bet_data
