@@ -214,22 +214,22 @@ class OCRService:
                         continue
                     if is_team_line(line):
                         continue
-                    # Money Line: combine team and 'Money Line'
+                    # Money Line: always use the first non-branding, non-empty line as the pick team
                     if 'money line' in line_lower:
-                        # Try to find the team for the money line bet
-                        # Use the team that appears most recently before this line
-                        team_for_ml = None
-                        for prev_line in reversed(lines[:i]):
-                            if is_team_line(prev_line):
-                                team_for_ml = prev_line.strip()
+                        # Find the first non-branding, non-empty line (bolded team at top)
+                        pick_team = None
+                        for candidate in lines:
+                            candidate_lower = candidate.lower()
+                            if any(b in candidate_lower for b in branding_keywords):
+                                continue
+                            if candidate and candidate != line and not candidate.isdigit() and not candidate.startswith('-') and not candidate.startswith('+'):
+                                pick_team = candidate.strip()
                                 break
-                        if not team_for_ml and teams_found:
-                            team_for_ml = teams_found[-1]
-                        if team_for_ml:
-                            description = f"{team_for_ml} Money Line"
+                        if pick_team:
+                            description = f"{pick_team} Money Line"
                         else:
                             description = line.strip()
-                        logger.info(f"Selected bet description as Money Line: {description}")
+                        logger.info(f"Selected bet description as Money Line (top team): {description}")
                         break
                     # Player prop: combine player and stat if possible
                     player_prop_match = re.match(r'([A-Z][a-z]+(?: [A-Z][a-z]+)*)(?: - )?([A-Za-z ]+)?', line)
