@@ -26,14 +26,14 @@ class TemplateService:
             current_date = datetime.now().strftime(self.templates.date_format)
             current_time = datetime.now().strftime(self.templates.time_format)
 
-            header = f"FREE PLAY - {current_date}"
+            header = f"__**FREE PLAY - {current_date}**__"
             game_info = f"⚾ I Game: {teams[0]} @ {teams[1]} ({current_date} {current_time})"
             bet_info = f"🏆 I {description} ({odds})"
             analysis_label = "\n👇 I Analysis Below:\n"
 
             analysis_section = analysis if analysis else "No analysis available."
 
-            content = f"**{header}**\n\n{game_info}\n\n{bet_info}\n{analysis_label}\n{analysis_section}"
+            content = f"{header}\n\n{game_info}\n\n{bet_info}\n{analysis_label}\n{analysis_section}"
             return content
         except Exception as e:
             logger.error(f"Error formatting free play: {e}")

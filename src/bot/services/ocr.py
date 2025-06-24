@@ -134,10 +134,47 @@ class OCRService:
             logger.info(f"Parsing OCR text: {text}")
 
             # 1. Extract odds (e.g., -170, +347, -165, -80, +150)
-            odds_match = re.search(r'([+-]\d{2,4})', text)
-            if odds_match:
-                bet_data['odds'] = odds_match.group(1)
+            odds_patterns = [
+                r'(?i)odds[:\s]*([+-]?\d{2,4})',  # Odds: -110 or odds -110
+                r'([+-]\d{2,4})',                  # -110, +200
+                r'([+-]\d{3,4})',                  # -110, +2000
+                r'\b([+-]\d{2,4})\b',            # -110, +200 (word boundary)
+            ]
+            odds = None
+            lines = text.splitlines()
+            # Search for odds in lines containing 'odds' first
+            for line in reversed(lines):
+                if 'odds' in line.lower():
+                    for pattern in odds_patterns:
+                        match = re.search(pattern, line)
+                        if match:
+                            odds = match.group(1).strip()
+                            break
+                if odds:
+                    break
+            # If not found, search all lines from bottom up
+            if not odds:
+                for line in reversed(lines):
+                    for pattern in odds_patterns:
+                        match = re.search(pattern, line)
+                        if match:
+                            odds = match.group(1).strip()
+                            break
+                    if odds:
+                        break
+            # Fallback: search whole text
+            if not odds:
+                for pattern in odds_patterns:
+                    match = re.search(pattern, text)
+                    if match:
+                        odds = match.group(1).strip()
+                        break
+            # Filter out false positives (e.g., scores like 3-2)
+            if odds and len(odds) >= 3 and (odds.startswith('+') or odds.startswith('-')) and odds[1:].isdigit():
+                bet_data['odds'] = odds
                 logger.info(f"Extracted odds: {bet_data['odds']}")
+            else:
+                logger.info("No valid odds found.")
 
             # 2. Extract all team matchups (e.g., Arizona Diamondbacks at Colorado Rockies)
             matchup_pattern = r'([A-Za-z ]+) at ([A-Za-z ]+)'  # e.g., Arizona Diamondbacks at Colorado Rockies
