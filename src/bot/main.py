@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 import discord
 from discord.ext import commands
 
-from src.config.settings import settings
+from config.settings import settings
 from bot.commands.admin import AdminCommands
 from bot.commands.pick import PickCommands
 

@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from src.config.settings import settings
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
