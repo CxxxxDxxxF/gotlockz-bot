@@ -4,6 +4,7 @@ Pick Command - MLB betting pick command with channel selection
 import asyncio
 import logging
 from typing import Optional
+from datetime import datetime
 
 import discord
 from discord import app_commands
@@ -161,10 +162,15 @@ class PickCommands(app_commands.Group):
                 await interaction.followup.send("❌ Target channel not found. Please check bot configuration.", ephemeral=True)
                 return
 
-            # Post to target channel
+            # Post to target channel with image
             try:
-                await target_channel.send(content)
-                logger.info(f"Pick posted successfully to {target_channel.name}")
+                # Create a Discord file from the image bytes
+                from io import BytesIO
+                image_file = discord.File(BytesIO(image_bytes), filename=f"betslip_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                
+                # Post content with image attachment
+                await target_channel.send(content, file=image_file)
+                logger.info(f"Pick posted successfully to {target_channel.name} with image")
             except Exception as e:
                 logger.error(f"Failed to post to channel: {e}")
                 await interaction.followup.send("❌ Failed to post to target channel. Please check bot permissions.", ephemeral=True)
