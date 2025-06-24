@@ -77,9 +77,8 @@ class Settings:
         """Validate required settings."""
         if not self.bot.token:
             raise ValueError("DISCORD_TOKEN is required")
-        # OpenAI API key is optional - bot can work without AI analysis
         if not self.api.openai_api_key:
-            logger.warning("OPENAI_API_KEY not configured - AI analysis will be disabled")
+            raise ValueError("OPENAI_API_KEY is required")
         return True
 
 

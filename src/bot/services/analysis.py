@@ -15,29 +15,17 @@ class AnalysisService:
     """Service for AI-powered MLB betting analysis."""
     
     def __init__(self):
-        # Check if OpenAI API key is configured
-        if not settings.api.openai_api_key:
-            logger.warning("OpenAI API key not configured. AI analysis will be disabled.")
-            self.client = None
-            self.model = None
-        else:
-            try:
-                self.client = openai.OpenAI(api_key=settings.api.openai_api_key)
-                self.model = settings.api.openai_model or "gpt-4"
-                logger.info(f"OpenAI client initialized with model: {self.model}")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI client: {e}")
-                self.client = None
-                self.model = None
+        try:
+            self.client = openai.OpenAI(api_key=settings.api.openai_api_key)
+            self.model = settings.api.openai_model or "gpt-4"
+            logger.info(f"OpenAI client initialized with model: {self.model}")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {e}")
+            raise Exception(f"Failed to initialize OpenAI client: {e}")
     
     async def generate_analysis(self, bet_data: Dict[str, Any], stats_data: Optional[Dict[str, Any]] = None) -> str:
         """Generate AI analysis for MLB betting data."""
         try:
-            # Check if AI analysis is available
-            if not self.client or not self.model:
-                logger.warning("AI analysis not available - using fallback analysis")
-                return self._get_fallback_analysis(bet_data)
-            
             # Build context
             context = self._build_context(bet_data, stats_data)
             
@@ -101,9 +89,6 @@ class AnalysisService:
     async def _generate_ai_analysis(self, context: str) -> str:
         """Generate AI analysis using OpenAI with a dynamic intro, bolded key phrases, and three concise paragraphs."""
         try:
-            if not self.client or not self.model:
-                raise Exception("OpenAI client or model not available")
-                
             intros = [
                 "GotLockz family, Free Play is here!",
                 "Free Play drop for the squad!",
