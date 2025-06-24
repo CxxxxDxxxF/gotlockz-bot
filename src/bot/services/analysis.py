@@ -15,12 +15,29 @@ class AnalysisService:
     """Service for AI-powered MLB betting analysis."""
     
     def __init__(self):
-        self.client = openai.OpenAI(api_key=settings.api.openai_api_key)
-        self.model = settings.api.openai_model
+        # Check if OpenAI API key is configured
+        if not settings.api.openai_api_key:
+            logger.warning("OpenAI API key not configured. AI analysis will be disabled.")
+            self.client = None
+            self.model = None
+        else:
+            try:
+                self.client = openai.OpenAI(api_key=settings.api.openai_api_key)
+                self.model = settings.api.openai_model or "gpt-4"
+                logger.info(f"OpenAI client initialized with model: {self.model}")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {e}")
+                self.client = None
+                self.model = None
     
     async def generate_analysis(self, bet_data: Dict[str, Any], stats_data: Optional[Dict[str, Any]] = None) -> str:
         """Generate AI analysis for MLB betting data."""
         try:
+            # Check if AI analysis is available
+            if not self.client or not self.model:
+                logger.warning("AI analysis not available - using fallback analysis")
+                return self._get_fallback_analysis(bet_data)
+            
             # Build context
             context = self._build_context(bet_data, stats_data)
             
@@ -84,6 +101,9 @@ class AnalysisService:
     async def _generate_ai_analysis(self, context: str) -> str:
         """Generate AI analysis using OpenAI with a dynamic intro, bolded key phrases, and three concise paragraphs."""
         try:
+            if not self.client or not self.model:
+                raise Exception("OpenAI client or model not available")
+                
             intros = [
                 "GotLockz family, Free Play is here!",
                 "Free Play drop for the squad!",
@@ -118,9 +138,20 @@ Here's the context for the bet:
                     analysis = message_content.strip()
                     return f"{intro}\n\n{analysis}"
                 else:
+                    logger.warning("Empty response from OpenAI API")
                     return f"{intro}\n\nAI analysis temporarily unavailable. Please check the betting data manually."
             else:
+                logger.warning("No response choices from OpenAI API")
                 return f"{intro}\n\nAI analysis temporarily unavailable. Please check the betting data manually."
+        except openai.AuthenticationError:
+            logger.error("OpenAI authentication failed - check API key")
+            return "AI analysis unavailable: Authentication error. Please check OpenAI API configuration."
+        except openai.RateLimitError:
+            logger.error("OpenAI rate limit exceeded")
+            return "AI analysis temporarily unavailable due to rate limits. Please try again later."
+        except openai.APIError as e:
+            logger.error(f"OpenAI API error: {e}")
+            return f"AI analysis unavailable: API error. Please try again later."
         except Exception as e:
             logger.error(f"Error generating AI analysis: {e}")
             return "AI analysis temporarily unavailable. Please check the betting data manually."
@@ -130,18 +161,19 @@ Here's the context for the bet:
         try:
             teams = bet_data.get('teams', ['TBD', 'TBD'])
             description = bet_data.get('description', 'TBD')
+            odds = bet_data.get('odds', 'TBD')
             
             if teams[0] == 'TBD' or teams[1] == 'TBD':
-                return "Analysis: Unable to extract team information from the betting slip. Please verify the image quality and try again."
+                return "GotLockz family, Free Play is here!\n\nAnalysis: Unable to extract team information from the betting slip. Please verify the image quality and try again."
             
             if description == 'TBD':
-                return f"Analysis: MLB betting pick for {teams[0]} vs {teams[1]}. Please review the betting slip for specific bet details and odds."
+                return f"GotLockz family, Free Play is here!\n\nAnalysis: MLB betting pick for {teams[0]} vs {teams[1]}. Please review the betting slip for specific bet details and odds."
             
-            return f"Analysis: {description} for {teams[0]} vs {teams[1]}. Review recent team performance, pitching matchups, and head-to-head statistics before placing this bet."
+            return f"GotLockz family, Free Play is here!\n\nAnalysis: {description} for {teams[0]} vs {teams[1]} at {odds}. Review recent team performance, pitching matchups, and head-to-head statistics before placing this bet. Let's cash."
             
         except Exception as e:
             logger.error(f"Error generating fallback analysis: {e}")
-            return "Analysis: Unable to generate analysis at this time. Please review the betting slip manually."
+            return "GotLockz family, Free Play is here!\n\nAnalysis: Unable to generate analysis at this time. Please review the betting slip manually."
     
     async def generate_quick_analysis(self, bet_data: Dict[str, Any]) -> str:
         """Generate a quick analysis without API calls."""

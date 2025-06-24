@@ -5,9 +5,12 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,8 +77,9 @@ class Settings:
         """Validate required settings."""
         if not self.bot.token:
             raise ValueError("DISCORD_TOKEN is required")
+        # OpenAI API key is optional - bot can work without AI analysis
         if not self.api.openai_api_key:
-            raise ValueError("OPENAI_API_KEY is required")
+            logger.warning("OPENAI_API_KEY not configured - AI analysis will be disabled")
         return True
 
 
