@@ -33,6 +33,7 @@ except Exception as e:
 
 logger = logging.getLogger(__name__)
 
+IS_PRODUCTION = os.environ.get('ENV', '').lower() == 'production'
 
 class WeatherService:
     """Service for fetching weather data for MLB stadiums"""
@@ -92,7 +93,10 @@ class WeatherService:
     async def initialize(self):
         """Initialize the weather scraper"""
         if not self.weather_available:
-            logger.warning("Weather scraper not available - using fallback weather data")
+            if IS_PRODUCTION:
+                logger.info("Weather scraper not available - using fallback weather data")
+            else:
+                logger.warning("Weather scraper not available - using fallback weather data")
             return False
             
         try:

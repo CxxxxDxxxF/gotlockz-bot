@@ -7,11 +7,15 @@ from typing import Dict, Any, Optional, List
 import aiohttp
 import pandas as pd
 from datetime import datetime, timedelta
+import os
 
 from bot.services.statcast import StatcastService
 from bot.services.weather import WeatherService
+from src.bot.utils import kelly_fraction
 
 logger = logging.getLogger(__name__)
+
+IS_PRODUCTION = os.environ.get('ENV', '').lower() == 'production'
 
 
 class AdvancedStatsService:
@@ -32,49 +36,51 @@ class AdvancedStatsService:
     
     async def get_advanced_stats(self, bet_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get comprehensive advanced stats for betting analysis."""
-        try:
-            teams = bet_data.get('teams', [])
-            if len(teams) < 2:
-                return None
-            
-            # Initialize weather service
-            try:
-                await self.weather_service.initialize()
-            except Exception as e:
-                logger.warning(f"Weather service initialization failed: {e}")
-            
-            # Get basic team stats
-            team1_stats = await self.get_team_stats(teams[0])
-            team2_stats = await self.get_team_stats(teams[1])
-            
-            # Get advanced stats
-            team1_advanced = await self.get_advanced_team_stats(teams[0])
-            team2_advanced = await self.get_advanced_team_stats(teams[1])
-            
-            # Get Statcast data (if available)
-            statcast_data = await self.statcast_service.get_statcast_data(teams[0], teams[1])
-            
-            # Get park factors
-            park_factors = await self.get_park_factors(teams[0], teams[1])
-            
-            # Get weather data (if available)
-            weather_data = await self.get_weather_data(teams)
-            
-            # Combine all stats
-            combined_stats = {
-                'team1': {**team1_stats, **team1_advanced},
-                'team2': {**team2_stats, **team2_advanced},
-                'statcast': statcast_data,
-                'park_factors': park_factors,
-                'weather': weather_data,
-                'summary': f"Advanced stats loaded for {teams[0]} vs {teams[1]}"
-            }
-            
-            return combined_stats
-            
-        except Exception as e:
-            logger.error(f"Error getting advanced stats: {e}")
+        teams = bet_data.get('teams', [])
+        if len(teams) < 2:
             return None
+        # Initialize weather service
+        try:
+            await self.weather_service.initialize()
+        except Exception as e:
+            logger.warning(f"Weather service initialization failed: {e}")
+        # Get basic team stats
+        team1_stats = await self.get_team_stats(teams[0])
+        team2_stats = await self.get_team_stats(teams[1])
+        # Retry logic for advanced stats
+        for attempt in range(2):
+            try:
+                # Get advanced stats
+                team1_advanced = await self.get_advanced_team_stats(teams[0])
+                team2_advanced = await self.get_advanced_team_stats(teams[1])
+                # Get Statcast data (if available)
+                statcast_data = await self.statcast_service.get_statcast_data(teams[0], teams[1])
+                # Get park factors
+                park_factors = await self.get_park_factors(teams[0], teams[1])
+                # Get weather data (if available)
+                weather_data = await self.get_weather_data(teams)
+                # Combine all stats
+                combined_stats = {
+                    'team1': {**team1_stats, **team1_advanced},
+                    'team2': {**team2_stats, **team2_advanced},
+                    'statcast': statcast_data,
+                    'park_factors': park_factors,
+                    'weather': weather_data,
+                    'summary': f"Advanced stats loaded for {teams[0]} vs {teams[1]}"
+                }
+                return combined_stats
+            except Exception as e:
+                if IS_PRODUCTION:
+                    logger.info(f"Advanced stats fetch attempt {attempt+1} failed: {e}")
+                else:
+                    logger.warning(f"Advanced stats fetch attempt {attempt+1} failed: {e}")
+                await asyncio.sleep(1)  # brief pause before retry
+        # If both attempts fail, log and return None
+        if IS_PRODUCTION:
+            logger.info("Advanced stats fetch failed twice, falling back to basic stats.")
+        else:
+            logger.warning("Advanced stats fetch failed twice, falling back to basic stats.")
+        return None
     
     async def get_advanced_team_stats(self, team_name: str) -> Dict[str, Any]:
         """Get advanced team statistics including comprehensive MLB data."""
@@ -489,4 +495,15 @@ class AdvancedStatsService:
             await self.session.close()
         
         if hasattr(self, 'weather_service'):
-            await self.weather_service.close() 
+            await self.weather_service.close()
+
+    def suggest_kelly_risk(self, prob: float, odds: float, bankroll: float = 1.0) -> float:
+        """
+        Suggest a risk amount using the Kelly criterion.
+        prob: estimated probability (0-1)
+        odds: decimal odds (e.g., 2.20 for +120 American odds)
+        bankroll: current bankroll (default 1.0 for unit-based)
+        returns: suggested risk amount (fraction of bankroll)
+        """
+        kelly = kelly_fraction(prob, odds)
+        return round(kelly * bankroll, 4) 
