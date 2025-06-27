@@ -1,0 +1,60 @@
+{
+  "commands": [
+    {
+      "name": "pick",
+      "description": "Post a betting pick with image analysis and AI",
+      "options": [
+        {
+          "name": "channel_type",
+          "description": "Type of pick to post",
+          "type": "STRING",
+          "required": true,
+          "choices": [
+            {
+              "name": "Free Play",
+              "value": "free_play"
+            },
+            {
+              "name": "VIP Pick",
+              "value": "vip_pick"
+            },
+            {
+              "name": "Lotto Ticket",
+              "value": "lotto_ticket"
+            }
+          ]
+        },
+        {
+          "name": "image",
+          "description": "Betting slip image",
+          "type": "ATTACHMENT",
+          "required": true
+        },
+        {
+          "name": "description",
+          "description": "Additional notes (optional)",
+          "type": "STRING",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "admin",
+      "description": "Admin commands",
+      "options": [
+        {
+          "name": "ping",
+          "description": "Test bot responsiveness",
+          "type": "SUB_COMMAND",
+          "required": true
+        },
+        {
+          "name": "status",
+          "description": "Check bot and system status",
+          "type": "SUB_COMMAND",
+          "required": true
+        }
+      ]
+    }
+  ]
+} 
