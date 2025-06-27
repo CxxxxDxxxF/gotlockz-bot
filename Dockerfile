@@ -1,40 +1,21 @@
-# Production Dockerfile for GotLockz Discord Bot
-FROM python:3.11-slim
+# Use official Node.js 18 image
+FROM node:18-slim
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install system dependencies including git for GitHub packages
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+# Create app directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy package manifests & install deps
+COPY package*.json ./
+RUN npm ci
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy rest of the source
+COPY . .
 
-# Copy bot source code
-COPY src/ ./src/
-COPY main.py .
+# Build TypeScript
+RUN npm run build
 
-# Create data directory
-RUN mkdir -p data
+# Expose health port
+EXPOSE 3000
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash bot && \
-    chown -R bot:bot /app
-USER bot
-
-# Set Python path
-ENV PYTHONPATH=/app
-
-# Run the bot
-CMD ["python", "main.py"]
+# Start the bot
+CMD ["node", "dist/index.js"]
