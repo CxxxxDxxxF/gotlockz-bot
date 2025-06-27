@@ -1,10 +1,24 @@
 export function getEnv() {
-  const DISCORD_BOT_TOKEN = process.env['DISCORD_BOT_TOKEN'];
-  const OPENAI_API_KEY = process.env['OPENAI_API_KEY'];
-  const OCR_SPACE_API_KEY = process.env['OCR_SPACE_API_KEY'];
+  // Allow either DISCORD_BOT_TOKEN or DISCORD_TOKEN for backwards compatibility
+  const DISCORD_BOT_TOKEN = process.env['DISCORD_BOT_TOKEN'] ?? process.env['DISCORD_TOKEN'];
+  const { DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPENAI_API_KEY, OCR_SPACE_API_KEY, PORT } = process.env;
   
-  if (!DISCORD_BOT_TOKEN) throw new Error('Missing DISCORD_BOT_TOKEN');
-  if (!OPENAI_API_KEY) throw new Error('Missing OPENAI_API_KEY');
+  if (!DISCORD_BOT_TOKEN) {
+    throw new Error('Missing DISCORD_BOT_TOKEN');
+  }
+  if (!DISCORD_CLIENT_ID) {
+    throw new Error('Missing DISCORD_CLIENT_ID');
+  }
+  if (!OPENAI_API_KEY) {
+    throw new Error('Missing OPENAI_API_KEY');
+  }
   
-  return { DISCORD_BOT_TOKEN, OPENAI_API_KEY, OCR_SPACE_API_KEY };
+  return {
+    DISCORD_BOT_TOKEN,
+    DISCORD_CLIENT_ID,
+    DISCORD_GUILD_ID,
+    OPENAI_API_KEY,
+    OCR_SPACE_API_KEY,
+    PORT: PORT ? Number(PORT) : undefined,
+  };
 } 

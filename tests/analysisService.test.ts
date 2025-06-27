@@ -2,6 +2,7 @@ import { generateAnalysis } from '../src/services/analysisService';
 
 // Mock environment variables
 process.env['DISCORD_BOT_TOKEN'] = 'test-token';
+process.env['DISCORD_CLIENT_ID'] = 'test-client-id';
 process.env['OPENAI_API_KEY'] = 'test-openai-key';
 
 jest.mock('openai', () => {
