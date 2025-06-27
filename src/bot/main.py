@@ -1,112 +1,91 @@
 """
-Main Discord Bot Application
+Main Discord bot file with proper logging and error handling
 """
+import discord
+from discord.ext import commands
 import asyncio
 import logging
 import sys
-from pathlib import Path
+import os
 
-# Add src to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-import discord
-from discord.ext import commands
+from config.settings import setup_logging, BOT_TOKEN, LOG_LEVEL
 
-from config.settings import settings
-from bot.commands.admin import AdminCommands
-from bot.commands.pick import PickCommands
-
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.bot.log_level),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Setup logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
+# Bot setup
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-class GotLockzBot(commands.Bot):
-    """Main bot class for GotLockz V2."""
+@bot.event
+async def on_ready():
+    """Bot startup event with logging"""
+    logger.info(f'Bot logged in as {bot.user.name} (ID: {bot.user.id})')
+    logger.info(f'Connected to {len(bot.guilds)} guilds')
     
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.guilds = True
-        
-        super().__init__(
-            command_prefix="!",
-            intents=intents,
-            help_command=None
-        )
-        
-        self.settings = settings
-        self.start_time = None
-        logger.info("Bot initialized")
-    
-    async def setup_hook(self):
-        """Set up bot commands and extensions."""
-        try:
-            # Add command groups
-            self.tree.add_command(PickCommands(self))
-            self.tree.add_command(AdminCommands(self))
-            
-            logger.info("Commands loaded successfully")
-            
-        except Exception as e:
-            logger.error(f"Error setting up bot: {e}")
-            raise
-    
-    async def on_ready(self):
-        """Called when bot is ready."""
-        logger.info(f"Bot is ready! Logged in as {self.user}")
-        logger.info(f"Connected to {len(self.guilds)} guilds")
-        
-        # Set start time
-        self.start_time = asyncio.get_event_loop().time()
-        
-        # Sync commands
-        try:
-            synced = await self.tree.sync()
-            logger.info(f"Synced {len(synced)} command(s)")
-        except Exception as e:
-            logger.error(f"Error syncing commands: {e}")
-    
-    async def on_command_error(self, ctx, error):
-        """Global error handler."""
-        if isinstance(error, commands.CommandNotFound):
-            return
-        
-        logger.error(f"Command error: {error}")
-        
-        error_msg = "❌ An error occurred while processing your command. Please try again."
-        if isinstance(error, commands.MissingPermissions):
-            error_msg = "❌ You don't have permission to use this command."
-        elif isinstance(error, commands.BotMissingPermissions):
-            error_msg = "❌ I don't have the required permissions to execute this command."
-        
-        try:
-            await ctx.send(error_msg, ephemeral=True)
-        except Exception:
-            pass
+    # Log guild information
+    for guild in bot.guilds:
+        logger.info(f'Guild: {guild.name} (ID: {guild.id}) - Members: {guild.member_count}')
 
+@bot.event
+async def on_command(ctx):
+    """Log all command usage"""
+    logger.info(f'Command executed: {ctx.command.name} by {ctx.author} in {ctx.guild.name}')
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Log command errors"""
+    if isinstance(error, commands.CommandNotFound):
+        logger.warning(f'Command not found: {ctx.message.content} by {ctx.author}')
+    elif isinstance(error, commands.MissingPermissions):
+        logger.warning(f'Missing permissions: {ctx.author} tried to use {ctx.command.name}')
+    else:
+        logger.error(f'Command error in {ctx.command.name}: {error}', exc_info=True)
+
+async def load_extensions():
+    """Load bot command extensions with error handling"""
+    extensions = [
+        'bot.commands.pick',
+        'bot.commands.admin'
+    ]
+    
+    for extension in extensions:
+        try:
+            await bot.load_extension(extension)
+            logger.info(f'Loaded extension: {extension}')
+        except Exception as e:
+            logger.error(f'Failed to load extension {extension}: {e}')
 
 async def main():
-    """Main entry point."""
+    """Main bot startup function"""
     try:
-        # Validate settings
-        settings.validate()
+        logger.info('Starting MLB bot...')
         
-        # Create and start bot
-        bot = GotLockzBot()
-        logger.info("Starting GotLockz Bot V2...")
+        # Load command extensions
+        await load_extensions()
         
-        await bot.start(settings.bot.token)
+        # Start the bot
+        if not BOT_TOKEN:
+            logger.error('No Discord bot token found! Set DISCORD_BOT_TOKEN environment variable.')
+            return
         
-    except KeyboardInterrupt:
-        logger.info("Bot shutdown requested")
+        logger.info('Bot starting up...')
+        await bot.start(BOT_TOKEN)
+        
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f'Fatal error starting bot: {e}', exc_info=True)
         sys.exit(1)
 
-
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info('Bot shutdown requested by user')
+    except Exception as e:
+        logger.error(f'Unexpected error: {e}', exc_info=True)
+        sys.exit(1) 

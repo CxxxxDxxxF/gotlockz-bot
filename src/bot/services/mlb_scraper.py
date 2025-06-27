@@ -5,26 +5,26 @@ import asyncio
 import aiohttp
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
-import json
+from datetime import datetime
 import time
 import os
 
 logger = logging.getLogger(__name__)
 
+
 class MLBScraper:
     """High-performance MLB data scraper"""
-    
+
     def __init__(self):
         self.session = None
         self.cache = {}
         self.cache_timeout = 300  # 5 minutes
         self.timeout = aiohttp.ClientTimeout(total=10)
-        
+
         # MLB API endpoints
         self.mlb_base = "https://statsapi.mlb.com/api/v1"
         self.weather_api = "https://api.openweathermap.org/data/2.5/weather"
-        
+
         # Team mappings
         self.team_mapping = {
             'Los Angeles Angels': {'id': 108, 'abbr': 'LAA', 'city': 'Anaheim'},
@@ -58,7 +58,7 @@ class MLBScraper:
             'Pittsburgh Pirates': {'id': 134, 'abbr': 'PIT', 'city': 'Pittsburgh'},
             'St. Louis Cardinals': {'id': 138, 'abbr': 'STL', 'city': 'St. Louis'}
         }
-    
+
     async def initialize(self):
         """Initialize the scraper session"""
         try:
@@ -68,19 +68,19 @@ class MLBScraper:
         except Exception as e:
             logger.error(f"Failed to initialize MLB scraper: {e}")
             return False
-    
+
     async def get_game_data(self, team1: str, team2: str) -> Dict[str, Any]:
         """Get comprehensive game data for two teams"""
         try:
             start_time = time.time()
-            
+
             # Get team info
             team1_info = self.team_mapping.get(team1)
             team2_info = self.team_mapping.get(team2)
-            
+
             if not team1_info or not team2_info:
                 return {'error': 'Team not found'}
-            
+
             # Fetch data concurrently
             tasks = [
                 self._get_team_stats(team1_info['id']),
@@ -89,21 +89,23 @@ class MLBScraper:
                 self._get_weather_data(team2_info['city']),
                 self._get_live_scores()
             ]
-            
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Process results
             team1_stats = results[0] if not isinstance(results[0], Exception) else {}
             team2_stats = results[1] if not isinstance(results[1], Exception) else {}
             team1_weather = results[2] if not isinstance(results[2], Exception) else {}
             team2_weather = results[3] if not isinstance(results[3], Exception) else {}
-            live_scores = results[4] if not isinstance(results[4], Exception) and isinstance(results[4], list) else []
-            
+            live_scores = (results[4] if not isinstance(results[4], Exception)
+                           and isinstance(results[4], list) else [])
+
             # Check if teams are playing today
-            today_game = self._find_today_game(live_scores, team1_info['abbr'], team2_info['abbr'])
-            
+            today_game = self._find_today_game(live_scores, team1_info['abbr'],
+                team2_info['abbr'])
+
             total_time = time.time() - start_time
-            
+
             return {
                 'teams': {
                     team1: {
@@ -122,52 +124,98 @@ class MLBScraper:
                 'fetch_time': total_time,
                 'summary': f"Data loaded for {team1} vs {team2} in {total_time:.2f}s"
             }
-            
+
         except Exception as e:
             logger.error(f"Error getting game data: {e}")
             return {'error': str(e)}
-    
+
     async def _get_team_stats(self, team_id: int) -> Dict[str, Any]:
         """Get team statistics from MLB API, merging standings and stats endpoints."""
         cache_key = f"team_stats_{team_id}"
+        
+        # Check cache first
+        cached_data = self._get_cached_team_stats(cache_key)
+        if cached_data:
+            return cached_data
+            
+        try:
+            current_year = datetime.now().year
+            
+            # Get standings and stats
+            standings = await self._get_team_standings(team_id, current_year)
+            stats = await self._fetch_team_stats_with_fallback(team_id, current_year)
+            
+            # Merge and handle edge cases
+            merged = self._merge_team_data(standings, stats, current_year)
+            
+            # Cache the result
+            self.cache[cache_key] = (time.time(), merged)
+            return merged
+            
+        except Exception as e:
+            logger.error(f"Error getting team stats: {e}")
+            return {'note': f'Error fetching stats: {e}'}
+
+    def _get_cached_team_stats(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get cached team stats if available and not expired."""
         if cache_key in self.cache:
             cache_time, data = self.cache[cache_key]
             if time.time() - cache_time < self.cache_timeout:
                 return data
-        try:
-            current_year = datetime.now().year
-            # 1. Try to get standings (for win/loss)
-            standings = await self._get_team_standings(team_id, current_year)
-            # 2. Try to get stats (for advanced stats)
-            url = f"{self.mlb_base}/teams/{team_id}/stats"
-            params = {
-                'season': current_year,
-                'group': 'hitting',
-                'stats': 'season'
-            }
-            async with self.session.get(url, params=params) as response:
-                stats = {}
-                if response.status == 200:
-                    data = await response.json()
-                    stats = self._parse_team_stats(data)
-                # Fallback to previous year if no stats
-                if not stats or (stats.get('games_played', 0) == 0):
-                    params['season'] = current_year - 1
-                    async with self.session.get(url, params=params) as response2:
-                        if response2.status == 200:
-                            data2 = await response2.json()
-                            stats = self._parse_team_stats(data2)
-                            if not stats:
-                                stats['note'] = 'No stats found for current or previous season.'
-                # Merge standings and stats
-                merged = {**standings, **stats}
-                if not merged or (merged.get('games_played', 0) == 0 and merged.get('wins', 0) == 0):
-                    merged['note'] = 'Offseason or no data available.'
-                self.cache[cache_key] = (time.time(), merged)
-                return merged
-        except Exception as e:
-            logger.error(f"Error getting team stats: {e}")
-            return {'note': f'Error fetching stats: {e}'}
+        return None
+
+    async def _fetch_team_stats_with_fallback(self, team_id: int, current_year: int) -> Dict[str, Any]:
+        """Fetch team stats with fallback to previous year if needed."""
+        # Try current year first
+        stats = await self._fetch_team_stats(team_id, current_year)
+        
+        # Fallback to previous year if no stats or offseason
+        if self._should_fallback_to_previous_year(stats):
+            stats = await self._fetch_team_stats(team_id, current_year - 1)
+            if stats:
+                stats['note'] = 'Using previous season data (offseason).'
+            else:
+                stats = {'note': 'No stats found for current or previous season.'}
+        
+        return stats
+
+    async def _fetch_team_stats(self, team_id: int, season: int) -> Dict[str, Any]:
+        """Fetch team stats for a specific season."""
+        url = f"{self.mlb_base}/teams/{team_id}/stats"
+        params = {
+            'season': season,
+            'group': 'hitting',
+            'stats': 'season'
+        }
+        
+        async with self.session.get(url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                return self._parse_team_stats(data)
+            return {}
+
+    def _should_fallback_to_previous_year(self, stats: Dict[str, Any]) -> bool:
+        """Determine if we should fallback to previous year data."""
+        return not stats or stats.get('games_played', 0) == 0
+
+    def _merge_team_data(self, standings: Dict[str, Any], stats: Dict[str, Any], 
+                        current_year: int) -> Dict[str, Any]:
+        """Merge standings and stats data, handling offseason cases."""
+        merged = {**standings, **stats}
+        
+        # Handle offseason case
+        if self._is_offseason_data(merged):
+            if current_year == datetime.now().year:
+                merged['note'] = 'Offseason - no current season data available.'
+            else:
+                merged['note'] = 'No data available for this season.'
+        
+        return merged
+
+    def _is_offseason_data(self, data: Dict[str, Any]) -> bool:
+        """Check if the data indicates offseason (no games played and no wins)."""
+        return (not data or 
+                (data.get('games_played', 0) == 0 and data.get('wins', 0) == 0))
 
     async def _get_team_standings(self, team_id: int, season: int) -> Dict[str, Any]:
         """Get win/loss records from MLB standings endpoint."""
@@ -177,7 +225,10 @@ class MLBScraper:
                 'leagueId': '103,104',  # AL and NL
                 'season': season,
                 'standingsTypes': 'regularSeason',
-                'fields': 'records,team,id,name,wins,losses,runDifferential,divisionRank,leagueRank,divisionGamesBack,leagueGamesBack,elimNumber,clinched,divisionRecord,leagueRecord,home,away'
+                'fields': ('records,team,id,name,wins,losses,runDifferential,'
+                           'divisionRank,leagueRank,divisionGamesBack,'
+                           'leagueGamesBack,elimNumber,clinched,divisionRecord,'
+                           'leagueRecord,home,away')
             }
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
@@ -190,277 +241,254 @@ class MLBScraper:
                                 return {
                                     'wins': teamrec.get('wins', 0),
                                     'losses': teamrec.get('losses', 0),
-                                    'win_pct': teamrec.get('winningPercentage', 0.0),
-                                    'run_diff': teamrec.get('runDifferential', 0),
-                                    'games_played': teamrec.get('gamesPlayed', 0),
-                                    'division_rank': teamrec.get('divisionRank'),
-                                    'league_rank': teamrec.get('leagueRank'),
-                                    'note': ''
+                                    'win_pct': teamrec.get('winPercentage', 0),
+                                    'games_back': teamrec.get('divisionGamesBack', 0),
+                                    'division_rank': teamrec.get('divisionRank', 0),
+                                    'league_rank': teamrec.get('leagueRank', 0),
+                                    'run_differential': teamrec.get('runDifferential', 0),
+                                    'home_record': teamrec.get('home', {}),
+                                    'away_record': teamrec.get('away', {})
                                 }
-            return {}
+                return {}
         except Exception as e:
             logger.error(f"Error getting team standings: {e}")
             return {}
 
     async def _get_weather_data(self, city: str) -> Dict[str, Any]:
-        """Get weather data for a city (using OpenWeatherMap as fallback)"""
-        cache_key = f"weather_{city}"
-        if cache_key in self.cache:
-            cache_time, data = self.cache[cache_key]
-            if time.time() - cache_time < self.cache_timeout:
-                return data
+        """Get weather data from OpenWeatherMap API with fallback."""
         try:
-            api_key = os.environ.get('OPENWEATHER_API_KEY')
-            if api_key:
-                url = f"{self.weather_api}?q={city},US&appid={api_key}&units=imperial"
-                async with self.session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        weather_data = {
-                            'temperature': data.get('main', {}).get('temp', 72),
-                            'humidity': data.get('main', {}).get('humidity', 65),
-                            'wind_speed': data.get('wind', {}).get('speed', 8),
-                            'wind_direction': self._get_wind_direction(data.get('wind', {}).get('deg', 225)),
-                            'conditions': data.get('weather', [{}])[0].get('description', 'Partly Cloudy'),
-                            'pressure': data.get('main', {}).get('pressure', 1013),
-                            'source': 'OpenWeatherMap'
-                        }
-                    else:
-                        weather_data = self._get_mock_weather(city)
-                        weather_data['note'] = 'OpenWeatherMap API failed, using mock.'
-            else:
-                weather_data = self._get_mock_weather(city)
-                weather_data['note'] = 'No API key, using mock.'
-            self.cache[cache_key] = (time.time(), weather_data)
-            return weather_data
-        except Exception as e:
-            logger.error(f"Error getting weather data: {e}")
-            fallback = self._get_mock_weather(city)
-            fallback['note'] = f'Weather error: {e} (using mock)'
-            return fallback
-    
-    def _get_mock_weather(self, city: str) -> Dict[str, Any]:
-        """Get mock weather data based on city"""
-        # Simple mock weather that varies by city
-        import hashlib
-        city_hash = int(hashlib.md5(city.encode()).hexdigest()[:8], 16)
-        
-        return {
-            'temperature': 65 + (city_hash % 30),  # 65-95°F
-            'humidity': 40 + (city_hash % 40),     # 40-80%
-            'wind_speed': 5 + (city_hash % 15),    # 5-20 mph
-            'wind_direction': ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][city_hash % 8],
-            'conditions': ['Sunny', 'Partly Cloudy', 'Cloudy', 'Light Rain'][city_hash % 4],
-            'pressure': 1000 + (city_hash % 30)    # 1000-1030 hPa
-        }
-    
-    def _get_wind_direction(self, degrees: float) -> str:
-        """Convert wind degrees to direction"""
-        if degrees is None:
-            return 'N'
-        
-        directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
-                     'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
-        index = round(degrees / 22.5) % 16
-        return directions[index]
-    
-    async def _get_live_scores(self) -> List[Dict[str, Any]]:
-        """Get live game scores"""
-        cache_key = "live_scores"
-        
-        # Check cache (shorter timeout for live data)
-        if cache_key in self.cache:
-            cache_time, data = self.cache[cache_key]
-            if time.time() - cache_time < 60:  # 1 minute cache for live data
-                return data
-        
-        try:
-            # Get today's games
-            today = datetime.now().strftime('%Y-%m-%d')
-            url = f"{self.mlb_base}/schedule"
+            api_key = os.getenv('OPENWEATHER_API_KEY')
+            if not api_key:
+                return self._get_mock_weather(city)
+
+            url = self.weather_api
             params = {
-                'sportId': 1,
-                'date': today,
-                'fields': 'dates,games,gamePk,teams,away,home,team,abbreviation,score,status,detailedState'
+                'q': city,
+                'appid': api_key,
+                'units': 'imperial'
             }
-            
+
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    games = self._parse_live_scores(data)
-                    
-                    # Cache the result
-                    self.cache[cache_key] = (time.time(), games)
-                    return games
+                    return {
+                        'temperature': data.get('main', {}).get('temp'),
+                        'humidity': data.get('main', {}).get('humidity'),
+                        'pressure': data.get('main', {}).get('pressure'),
+                        'wind_speed': data.get('wind', {}).get('speed'),
+                        'wind_direction': self._get_wind_direction(
+                            data.get('wind', {}).get('deg', 0)),
+                        'condition': data.get('weather', [{}])[0].get('description', 'Unknown'),
+                        'source': 'OpenWeatherMap'
+                    }
                 else:
-                    logger.warning(f"Failed to get live scores: {response.status}")
+                    logger.warning(f"Weather API error: {response.status}")
+                    return self._get_mock_weather(city)
+
+        except Exception as e:
+            logger.error(f"Error getting weather data: {e}")
+            return self._get_mock_weather(city)
+
+    def _get_mock_weather(self, city: str) -> Dict[str, Any]:
+        """Get mock weather data as fallback."""
+        return {
+            'temperature': 72,
+            'humidity': 65,
+            'pressure': 30.1,
+            'wind_speed': 8,
+            'wind_direction': 'SW',
+            'condition': 'Partly Cloudy',
+            'source': 'Mock Data'
+        }
+
+    def _get_wind_direction(self, degrees: float) -> str:
+        """Convert wind degrees to cardinal direction."""
+        directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+                      'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+        index = round(degrees / 22.5) % 16
+        return directions[index]
+
+    async def _get_live_scores(self) -> List[Dict[str, Any]]:
+        """Get live scores for today's games."""
+        try:
+            today = datetime.now().strftime('%Y-%m-%d')
+            url = f"{self.mlb_base}/schedule"
+            params = {
+                'date': today,
+                'sportId': 1,
+                'fields': 'dates,games,gamePk,gameDate,status,teams,away,home,team,id,name,score'
+            }
+
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return self._parse_live_scores(data)
+                else:
+                    logger.warning(f"Live scores API error: {response.status}")
                     return []
-                    
+
         except Exception as e:
             logger.error(f"Error getting live scores: {e}")
             return []
-    
+
     def _parse_team_stats(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse team statistics from MLB API response"""
+        """Parse team statistics from MLB API response."""
         try:
-            if not data:
-                return {}
-                
             stats = data.get('stats', [])
             if not stats:
                 return {}
-            
-            # Get the most recent stats
-            stat = stats[0]
-            splits = stat.get('splits', [])
-            if not splits:
-                return {}
-            
-            split = splits[0]
-            stat_data = split.get('stat', {})
-            
-            return {
-                'wins': stat_data.get('wins', 0),
-                'losses': stat_data.get('losses', 0),
-                'win_pct': stat_data.get('winPct', 0.0),
-                'runs_scored': stat_data.get('runs', 0),
-                'runs_allowed': stat_data.get('runsAllowed', 0),
-                'run_diff': stat_data.get('runDifferential', 0),
-                'games_played': stat_data.get('gamesPlayed', 0),
-                'avg': stat_data.get('avg', 0.0),
-                'obp': stat_data.get('obp', 0.0),
-                'slg': stat_data.get('slg', 0.0),
-                'era': stat_data.get('era', 0.0)
-            }
-            
+
+            # Look for hitting stats
+            for stat_group in stats:
+                if stat_group.get('group', {}).get('displayName') == 'hitting':
+                    splits = stat_group.get('splits', [])
+                    if splits:
+                        stat = splits[0].get('stat', {})
+                        return {
+                            'games_played': stat.get('gamesPlayed', 0),
+                            'runs': stat.get('runs', 0),
+                            'hits': stat.get('hits', 0),
+                            'doubles': stat.get('doubles', 0),
+                            'triples': stat.get('triples', 0),
+                            'home_runs': stat.get('homeRuns', 0),
+                            'rbis': stat.get('rbi', 0),
+                            'walks': stat.get('baseOnBalls', 0),
+                            'strikeouts': stat.get('strikeOuts', 0),
+                            'batting_avg': stat.get('avg', 0),
+                            'on_base_pct': stat.get('obp', 0),
+                            'slugging_pct': stat.get('slg', 0),
+                            'ops': stat.get('ops', 0)
+                        }
+            return {}
+
         except Exception as e:
             logger.error(f"Error parsing team stats: {e}")
             return {}
-    
+
     def _parse_live_scores(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Parse live scores from MLB API response"""
+        """Parse live scores from MLB API response."""
         try:
-            if not data:
-                return []
-                
             games = []
             dates = data.get('dates', [])
-            
-            for date in dates:
-                for game in date.get('games', []):
+            if dates:
+                for game in dates[0].get('games', []):
                     away_team = game.get('teams', {}).get('away', {})
                     home_team = game.get('teams', {}).get('home', {})
-                    
                     games.append({
-                        'away_team': away_team.get('team', {}).get('abbreviation', 'TBD'),
-                        'home_team': home_team.get('team', {}).get('abbreviation', 'TBD'),
-                        'away_score': away_team.get('score', 0),
-                        'home_score': home_team.get('score', 0),
+                        'game_pk': game.get('gamePk'),
                         'status': game.get('status', {}).get('detailedState', 'Unknown'),
-                        'game_pk': game.get('gamePk', 0)
+                        'away_team': away_team.get('team', {}).get('name', 'Unknown'),
+                        'away_score': away_team.get('score', 0),
+                        'home_team': home_team.get('team', {}).get('name', 'Unknown'),
+                        'home_score': home_team.get('score', 0)
                     })
-            
             return games
-            
+
         except Exception as e:
             logger.error(f"Error parsing live scores: {e}")
             return []
-    
-    def _find_today_game(self, games: List[Dict[str, Any]], team1_abbr: str, team2_abbr: str) -> Optional[Dict[str, Any]]:
-        """Find if the two teams are playing today"""
-        if not isinstance(games, list):
+
+    def _find_today_game(self, games: List[Dict[str, Any]], team1_abbr: str,
+                         team2_abbr: str) -> Optional[Dict[str, Any]]:
+        """Find if the specified teams are playing today."""
+        try:
+            for game in games:
+                away_team = game.get('away_team', '')
+                home_team = game.get('home_team', '')
+
+                # Check if either team matches
+                if (team1_abbr in away_team or team1_abbr in home_team) and \
+                   (team2_abbr in away_team or team2_abbr in home_team):
+                    return game
             return None
-            
-        for game in games:
-            if not isinstance(game, dict):
-                continue
-                
-            away = game.get('away_team')
-            home = game.get('home_team')
-            
-            if (away == team1_abbr and home == team2_abbr) or (away == team2_abbr and home == team1_abbr):
-                return game
-        
-        return None
-    
+
+        except Exception as e:
+            logger.error(f"Error finding today's game: {e}")
+            return None
+
     async def close(self):
         """Close the scraper session"""
-        if self.session and not self.session.closed:
+        if self.session:
             await self.session.close()
-    
+
     async def get_live_game_updates(self, game_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get real-time game updates and current state."""
+        """Get real-time updates for live games."""
         try:
             if not self.session:
-                return {}
-            
-            # Get live scores and find specific game or all active games
+                await self.initialize()
+
+            # Get live scores first
             live_scores = await self._get_live_scores()
-            
+
+            if not live_scores:
+                return {'error': 'No live games found'}
+
+            # If specific game_id provided, find that game
             if game_id:
-                # Find specific game
                 for game in live_scores:
-                    if str(game.get('game_pk')) == game_id:
-                        return await self._get_detailed_game_state(game)
-                return {}
-            else:
-                # Get all active games
-                active_games = []
-                for game in live_scores:
-                    if game.get('status') in ['Live', 'In Progress', 'Delayed']:
-                        detailed_state = await self._get_detailed_game_state(game)
-                        if detailed_state:
-                            active_games.append(detailed_state)
-                
-                return {
-                    'active_games': active_games,
-                    'total_active': len(active_games),
-                    'last_updated': datetime.now().isoformat()
-                }
-                
+                    if str(game.get('game_pk')) == str(game_id):
+                        detailed_game = await self._get_detailed_game_state(game)
+                        return {
+                            'game': detailed_game,
+                            'live_update': self._format_live_update(detailed_game)
+                        }
+                return {'error': f'Game {game_id} not found in live games'}
+
+            # Otherwise, return updates for all live games
+            live_updates = []
+            for game in live_scores:
+                if game.get('status') in ['Live', 'In Progress']:
+                    detailed_game = await self._get_detailed_game_state(game)
+                    live_updates.append({
+                        'game': detailed_game,
+                        'live_update': self._format_live_update(detailed_game)
+                    })
+
+            return {
+                'live_games': live_updates,
+                'total_live': len(live_updates)
+            }
+
         except Exception as e:
             logger.error(f"Error getting live game updates: {e}")
             return {}
-    
+
     async def _get_detailed_game_state(self, game: Dict[str, Any]) -> Dict[str, Any]:
         """Get detailed game state including inning, score, and situation."""
         try:
             game_pk = game.get('game_pk')
             if not game_pk:
                 return {}
-            
+
             # Get detailed game data from MLB API
             url = f"{self.mlb_base}/game/{game_pk}/feed/live"
-            
+
             async with self.session.get(url) as response:
                 if response.status != 200:
                     return {}
-                
+
                 data = await response.json()
                 return self._parse_detailed_game_state(data, game)
-                
+
         except Exception as e:
             logger.error(f"Error getting detailed game state: {e}")
             return {}
-    
-    def _parse_detailed_game_state(self, data: Dict[str, Any], basic_game: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _parse_detailed_game_state(self, data: Dict[str, Any],
+                                   basic_game: Dict[str, Any]) -> Dict[str, Any]:
         """Parse detailed game state from MLB API response."""
         try:
             game_data = data.get('gameData', {})
             live_data = data.get('liveData', {})
-            
+
             # Get current inning info
             plays = live_data.get('plays', {})
             current_play = plays.get('currentPlay', {})
             all_plays = plays.get('allPlays', [])
-            
-            # Get boxscore for detailed stats
-            boxscore = live_data.get('boxscore', {})
-            teams = boxscore.get('teams', {})
-            
+
             # Determine current situation
             situation = self._determine_game_situation(current_play, all_plays)
-            
+
             return {
                 'game_id': basic_game.get('game_pk'),
                 'away_team': basic_game.get('away_team'),
@@ -480,66 +508,41 @@ class MLBScraper:
                 'venue': game_data.get('venue', {}).get('name'),
                 'last_updated': datetime.now().isoformat()
             }
-            
+
         except Exception as e:
             logger.error(f"Error parsing detailed game state: {e}")
             return {}
-    
-    def _determine_game_situation(self, current_play: Dict[str, Any], all_plays: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Determine current game situation from plays data."""
+
+    def _determine_game_situation(self, current_play: Dict[str, Any],
+                                  all_plays: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Determine the current game situation from live data."""
         try:
             situation = {
-                'inning': 1,
-                'inning_state': 'top',
-                'outs': 0,
-                'runners': [],
-                'batter': None,
-                'pitcher': None,
-                'last_play': None
+                'inning': current_play.get('about', {}).get('inning', 0),
+                'inning_state': current_play.get('about', {}).get('inningState', 'Unknown'),
+                'outs': current_play.get('count', {}).get('outs', 0),
+                'balls': current_play.get('count', {}).get('balls', 0),
+                'strikes': current_play.get('count', {}).get('strikes', 0),
+                'bases': [False, False, False],  # 1B, 2B, 3B
+                'batter': current_play.get('matchup', {}).get('batter', {}).get('fullName', 'Unknown'),
+                'pitcher': current_play.get('matchup', {}).get('pitcher', {}).get('fullName', 'Unknown'),
+                'home_team': current_play.get('teams', {}).get('home', {}).get('team', {}).get('name', 'Unknown'),
+                'away_team': current_play.get('teams', {}).get('away', {}).get('team', {}).get('name', 'Unknown')
             }
-            
-            if current_play:
-                # Extract info from current play
-                situation['inning'] = current_play.get('about', {}).get('inning', 1)
-                situation['inning_state'] = current_play.get('about', {}).get('inningState', 'top')
-                situation['outs'] = current_play.get('count', {}).get('outs', 0)
-                
-                # Get batter and pitcher
-                situation['batter'] = current_play.get('matchup', {}).get('batter', {}).get('fullName')
-                situation['pitcher'] = current_play.get('matchup', {}).get('pitcher', {}).get('fullName')
-                
-                # Get runners on base
-                situation['runners'] = self._get_runners_on_base(current_play)
-                
-                # Get last play description
-                situation['last_play'] = current_play.get('result', {}).get('description', 'No play data')
-            
+
+            # Determine base situation from recent plays
+            recent_plays = all_plays[-10:] if len(all_plays) > 10 else all_plays
+            for play in reversed(recent_plays):
+                if play.get('result', {}).get('event') in ['Single', 'Double', 'Triple', 'Walk', 'Hit By Pitch']:
+                    # This is a simplified base tracking - in reality would need more complex logic
+                    break
+
             return situation
-            
+
         except Exception as e:
             logger.error(f"Error determining game situation: {e}")
-            return {'inning': 1, 'inning_state': 'top', 'outs': 0, 'runners': []}
-    
-    def _get_runners_on_base(self, play: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get current runners on base."""
-        try:
-            runners = []
-            runner_data = play.get('runners', [])
-            
-            for runner in runner_data:
-                if runner.get('movement', {}).get('start') != 'batter':
-                    runners.append({
-                        'name': runner.get('details', {}).get('runner', {}).get('fullName'),
-                        'base': runner.get('movement', {}).get('start'),
-                        'out': runner.get('movement', {}).get('end') == 'out'
-                    })
-            
-            return runners
-            
-        except Exception as e:
-            logger.error(f"Error getting runners on base: {e}")
-            return []
-    
+            return {}
+
     def _get_game_weather(self, game_data: Dict[str, Any]) -> Dict[str, Any]:
         """Get weather data for the game."""
         try:
@@ -553,4 +556,92 @@ class MLBScraper:
             }
         except Exception as e:
             logger.error(f"Error getting game weather: {e}")
-            return {} 
+            return {}
+
+    def _extract_live_game_data(self, boxscore: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract live game data from boxscore."""
+        try:
+            game_data = {
+                'status': boxscore.get('status', {}).get('detailedState', 'Unknown'),
+                'current_inning': boxscore.get('currentInning', 0),
+                'inning_state': boxscore.get('inningState', 'Unknown'),
+                'home_score': 0,
+                'away_score': 0,
+                'home_hits': 0,
+                'away_hits': 0,
+                'home_errors': 0,
+                'away_errors': 0,
+                'last_play': None,
+                'game_situation': {}
+            }
+
+            # Extract team data
+            home_team = boxscore.get('teams', {}).get('home', {})
+            away_team = boxscore.get('teams', {}).get('away', {})
+
+            if home_team:
+                game_data['home_score'] = home_team.get('score', 0)
+                game_data['home_hits'] = home_team.get('hits', 0)
+                game_data['home_errors'] = home_team.get('errors', 0)
+
+            if away_team:
+                game_data['away_score'] = away_team.get('score', 0)
+                game_data['away_hits'] = away_team.get('hits', 0)
+                game_data['away_errors'] = away_team.get('errors', 0)
+
+            # Extract live feed data
+            live_data = boxscore.get('liveData', {})
+            plays = live_data.get('plays', {}).get('allPlays', [])
+            current_play = live_data.get('plays', {}).get('currentPlay', {})
+
+            if current_play:
+                game_data['last_play'] = current_play.get('result', {}).get('description', 'No play data')
+                game_data['game_situation'] = self._determine_game_situation(current_play, plays)
+
+            return game_data
+
+        except Exception as e:
+            logger.error(f"Error extracting live game data: {e}")
+            return {}
+
+    def _format_live_update(self, game_data: Dict[str, Any]) -> str:
+        """Format live game data for display."""
+        try:
+            if not game_data or game_data.get('status') == 'Final':
+                return "Game is final or no live data available"
+
+            status = game_data.get('status', 'Unknown')
+            inning = game_data.get('current_inning', 0)
+            inning_state = game_data.get('inning_state', 'Unknown')
+            home_score = game_data.get('home_score', 0)
+            away_score = game_data.get('away_score', 0)
+            home_hits = game_data.get('home_hits', 0)
+            away_hits = game_data.get('away_hits', 0)
+
+            update = "⚾ **LIVE UPDATE** ⚾\n\n"
+            update += f"**Status:** {status}\n"
+            update += f"**Inning:** {inning} ({inning_state})\n"
+            update += f"**Score:** {away_score} - {home_score}\n"
+            update += f"**Hits:** {away_hits} - {home_hits}\n"
+
+            last_play = game_data.get('last_play')
+            if last_play:
+                update += f"\n**Last Play:** {last_play}\n"
+
+            situation = game_data.get('game_situation', {})
+            if situation:
+                outs = situation.get('outs', 0)
+                balls = situation.get('balls', 0)
+                strikes = situation.get('strikes', 0)
+                batter = situation.get('batter', 'Unknown')
+                pitcher = situation.get('pitcher', 'Unknown')
+
+                update += f"\n**Current:** {balls}-{strikes} count, {outs} outs\n"
+                update += f"**Batter:** {batter}\n"
+                update += f"**Pitcher:** {pitcher}\n"
+
+            return update
+
+        except Exception as e:
+            logger.error(f"Error formatting live update: {e}")
+            return "Error formatting live update"

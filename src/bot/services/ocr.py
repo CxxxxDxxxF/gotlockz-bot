@@ -5,49 +5,51 @@ import re
 import logging
 import aiohttp
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from PIL import Image
 import io
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
 class OCRService:
-    """Service for OCR processing of betting slip images."""
+    """Service for parsing betting slips from OCR text."""
     
     def __init__(self):
         """Initialize OCR service."""
-        self.team_abbreviations = {
-            "NYY": "New York Yankees", "YANKEES": "New York Yankees",
-            "BOS": "Boston Red Sox", "RED SOX": "Boston Red Sox",
-            "LAD": "Los Angeles Dodgers", "DODGERS": "Los Angeles Dodgers",
-            "HOU": "Houston Astros", "ASTROS": "Houston Astros",
-            "ATL": "Atlanta Braves", "BRAVES": "Atlanta Braves",
-            "NYM": "New York Mets", "METS": "New York Mets",
-            "CHC": "Chicago Cubs", "CUBS": "Chicago Cubs",
-            "CWS": "Chicago White Sox", "WHITE SOX": "Chicago White Sox",
-            "SF": "San Francisco Giants", "GIANTS": "San Francisco Giants",
-            "SD": "San Diego Padres", "PADRES": "San Diego Padres",
-            "TB": "Tampa Bay Rays", "RAYS": "Tampa Bay Rays",
-            "TOR": "Toronto Blue Jays", "BLUE JAYS": "Toronto Blue Jays",
-            "BAL": "Baltimore Orioles", "ORIOLES": "Baltimore Orioles",
-            "CLE": "Cleveland Guardians", "GUARDIANS": "Cleveland Guardians",
-            "MIN": "Minnesota Twins", "TWINS": "Minnesota Twins",
-            "DET": "Detroit Tigers", "TIGERS": "Detroit Tigers",
-            "KC": "Kansas City Royals", "ROYALS": "Kansas City Royals",
-            "TEX": "Texas Rangers", "RANGERS": "Texas Rangers",
-            "LAA": "Los Angeles Angels", "ANGELS": "Los Angeles Angels",
-            "OAK": "Oakland Athletics", "A'S": "Oakland Athletics",
-            "SEA": "Seattle Mariners", "MARINERS": "Seattle Mariners",
-            "COL": "Colorado Rockies", "ROCKIES": "Colorado Rockies",
-            "ARI": "Arizona Diamondbacks", "DIAMONDBACKS": "Arizona Diamondbacks",
-            "MIA": "Miami Marlins", "MARLINS": "Miami Marlins",
-            "MIL": "Milwaukee Brewers", "BREWERS": "Milwaukee Brewers",
-            "CIN": "Cincinnati Reds", "REDS": "Cincinnati Reds",
-            "PIT": "Pittsburgh Pirates", "PIRATES": "Pittsburgh Pirates",
-            "STL": "St. Louis Cardinals", "CARDINALS": "St. Louis Cardinals",
-            "PHI": "Philadelphia Phillies", "PHILLIES": "Philadelphia Phillies",
-            "WSH": "Washington Nationals", "NATIONALS": "Washington Nationals",
+        self.team_mappings = {
+            # MLB Teams
+            'nyy': 'New York Yankees', 'yankees': 'New York Yankees',
+            'bos': 'Boston Red Sox', 'red sox': 'Boston Red Sox',
+            'tor': 'Toronto Blue Jays', 'blue jays': 'Toronto Blue Jays',
+            'tb': 'Tampa Bay Rays', 'rays': 'Tampa Bay Rays',
+            'bal': 'Baltimore Orioles', 'orioles': 'Baltimore Orioles',
+            'cle': 'Cleveland Guardians', 'guardians': 'Cleveland Guardians',
+            'min': 'Minnesota Twins', 'twins': 'Minnesota Twins',
+            'det': 'Detroit Tigers', 'tigers': 'Detroit Tigers',
+            'kc': 'Kansas City Royals', 'royals': 'Kansas City Royals',
+            'chw': 'Chicago White Sox', 'white sox': 'Chicago White Sox',
+            'hou': 'Houston Astros', 'astros': 'Houston Astros',
+            'tex': 'Texas Rangers', 'rangers': 'Texas Rangers',
+            'oak': 'Oakland Athletics', 'athletics': 'Oakland Athletics',
+            'laa': 'Los Angeles Angels', 'angels': 'Los Angeles Angels',
+            'sea': 'Seattle Mariners', 'mariners': 'Seattle Mariners',
+            'atl': 'Atlanta Braves', 'braves': 'Atlanta Braves',
+            'nym': 'New York Mets', 'mets': 'New York Mets',
+            'phi': 'Philadelphia Phillies', 'phillies': 'Philadelphia Phillies',
+            'was': 'Washington Nationals', 'nationals': 'Washington Nationals',
+            'mia': 'Miami Marlins', 'marlins': 'Miami Marlins',
+            'chc': 'Chicago Cubs', 'cubs': 'Chicago Cubs',
+            'mil': 'Milwaukee Brewers', 'brewers': 'Milwaukee Brewers',
+            'cin': 'Cincinnati Reds', 'reds': 'Cincinnati Reds',
+            'pit': 'Pittsburgh Pirates', 'pirates': 'Pittsburgh Pirates',
+            'stl': 'St. Louis Cardinals', 'cardinals': 'St. Louis Cardinals',
+            'ari': 'Arizona Diamondbacks', 'diamondbacks': 'Arizona Diamondbacks',
+            'col': 'Colorado Rockies', 'rockies': 'Colorado Rockies',
+            'sf': 'San Francisco Giants', 'giants': 'San Francisco Giants',
+            'sd': 'San Diego Padres', 'padres': 'San Diego Padres',
+            'lad': 'Los Angeles Dodgers', 'dodgers': 'Los Angeles Dodgers'
         }
         self.ocr_space_api_key = os.getenv('OCR_SPACE_API_KEY', 'K87115193688957')
         self.ocr_space_url = 'https://api.ocr.space/parse/image'
@@ -60,7 +62,7 @@ class OCRService:
             logger.info(f"OCR.space result: {text}")
             
             # Parse betting data
-            bet_data = await self._parse_bet_data(text)
+            bet_data = self.parse_betting_slip(text)
             logger.info(f"Parsed bet data: {bet_data}")
             
             return bet_data
@@ -119,350 +121,337 @@ class OCRService:
             logger.error(f"Error with OCR.space API: {e}")
             return ""
     
-    async def _parse_bet_data(self, text: str) -> Dict[str, Any]:
+    def parse_betting_slip(self, text: str) -> Dict[str, Any]:
         """Parse betting data from extracted text. Handles all Fanatics MLB slip types, with improved SGP/parlay leg extraction."""
+
+        if not text or not isinstance(text, str):
+            logger.warning("Invalid text input for parsing")
+            return {}
+
         try:
-            bet_data = {
-                'teams': ['TBD', 'TBD'],
-                'description': 'TBD',
-                'odds': 'TBD',
-                'units': '1',
-                'is_parlay': False,
-                'player': None,
-                'legs': []
+            # Clean and normalize text
+            text = text.strip().lower()
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+            # Extract basic slip info
+            slip_info = self._extract_slip_info(lines)
+            if not slip_info:
+                return {}
+
+            # Extract teams and matchups
+            teams = self._extract_teams(lines)
+            if not teams or len(teams) < 2:
+                logger.warning("Could not extract teams from slip")
+                return {}
+
+            # Extract bet details
+            bet_details = self._extract_bet_details(lines, teams)
+
+            # Combine all extracted data
+            result = {
+                'teams': teams,
+                'bet_type': slip_info.get('bet_type', 'Unknown'),
+                'bet_amount': slip_info.get('bet_amount'),
+                'potential_payout': slip_info.get('potential_payout'),
+                'odds': slip_info.get('odds'),
+                'description': bet_details.get('description', ''),
+                'legs': bet_details.get('legs', []),
+                'parlay_type': slip_info.get('parlay_type'),
+                'timestamp': datetime.now().isoformat(),
+                'raw_text': text[:500]  # Store first 500 chars for debugging
             }
-            logger.info(f"Parsing OCR text: {text}")
 
-            lines = [l.strip() for l in text.splitlines() if l.strip()]
-            logger.info(f"Non-empty OCR lines: {lines}")
+            logger.info(f"Successfully parsed betting slip: {result['bet_type']} - {teams[0]} vs {teams[1]}")
+            return result
 
-            # Improved SGP/parlay leg extraction
-            branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook', 'fcash', 'bet id', 'must be 21+', 'gambling problem', 'call', '1-800-gambler', 'rg']
-            legs = []
-            seen_leg_keys = set()
-            i = 0
-            while i < len(lines):
-                # Skip branding/supporting lines
-                if any(b in lines[i].lower() for b in branding_keywords):
-                    i += 1
-                    continue
-                # Look for a player prop or over/under leg
-                player_match = re.match(r'^([A-Z][a-z]+(?: [A-Z][a-z]+)* ?\d*\+?)$', lines[i])
-                ou_match = re.match(r'^(Over|Under) ?([\d\.]+)', lines[i])
-                if player_match:
-                    player = player_match.group(1)
-                    desc = ''
-                    teams = []
-                    odds = None
-                    # Next line: prop/description?
-                    if i+1 < len(lines) and not re.search(r'at', lines[i+1], re.IGNORECASE):
-                        desc = lines[i+1]
-                        i += 1
-                    # Next line: matchup?
-                    if i+1 < len(lines) and re.search(r'at', lines[i+1], re.IGNORECASE):
-                        matchup = lines[i+1]
-                        matchup_teams = re.findall(r'([A-Za-z ]+) at ([A-Za-z ]+)', matchup)
-                        if matchup_teams:
-                            teams = [self._resolve_team_name(matchup_teams[0][0].strip()), self._resolve_team_name(matchup_teams[0][1].strip())]
-                        i += 1
-                    # Next line: odds?
-                    if i+1 < len(lines) and re.match(r'^[+-]\d{2,4}$', lines[i+1]):
-                        odds = lines[i+1]
-                        i += 1
-                    # Deduplicate by player+desc+teams
-                    leg_key = (player, desc, tuple(teams))
-                    if leg_key in seen_leg_keys:
-                        i += 1
-                        continue
-                    seen_leg_keys.add(leg_key)
-                    leg = {'player': player}
-                    if desc:
-                        leg['description'] = desc
-                    if teams:
-                        leg['teams'] = teams
-                    if odds:
-                        leg['odds'] = odds
-                    legs.append(leg)
-                elif ou_match:
-                    desc = f"{ou_match.group(1)} {ou_match.group(2)}"
-                    teams = []
-                    odds = None
-                    # Next line: player/prop?
-                    if i+1 < len(lines) and not re.search(r'at', lines[i+1], re.IGNORECASE):
-                        desc += f" {lines[i+1]}"
-                        i += 1
-                    # Next line: matchup?
-                    if i+1 < len(lines) and re.search(r'at', lines[i+1], re.IGNORECASE):
-                        matchup = lines[i+1]
-                        matchup_teams = re.findall(r'([A-Za-z ]+) at ([A-Za-z ]+)', matchup)
-                        if matchup_teams:
-                            teams = [self._resolve_team_name(matchup_teams[0][0].strip()), self._resolve_team_name(matchup_teams[0][1].strip())]
-                        i += 1
-                    # Next line: odds?
-                    if i+1 < len(lines) and re.match(r'^[+-]\d{2,4}$', lines[i+1]):
-                        odds = lines[i+1]
-                        i += 1
-                    leg_key = (desc, tuple(teams))
-                    if leg_key in seen_leg_keys:
-                        i += 1
-                        continue
-                    seen_leg_keys.add(leg_key)
-                    leg = {'description': desc}
-                    if teams:
-                        leg['teams'] = teams
-                    if odds:
-                        leg['odds'] = odds
-                    legs.append(leg)
-                else:
-                    i += 1
-            # Stricter deduplication: if all legs are essentially the same, treat as single-leg
-            def leg_signature(leg):
-                return (leg.get('player', ''), leg.get('description', ''), tuple(leg.get('teams', [])))
-            unique_leg_signatures = set(leg_signature(leg) for leg in legs)
-            if len(unique_leg_signatures) <= 1 and len(legs) > 0:
-                # Collapse to single-leg
-                bet_data['is_parlay'] = False
-                main_leg = legs[0]
-                if 'teams' in main_leg:
-                    bet_data['teams'] = main_leg['teams']
-                if 'player' in main_leg and 'description' in main_leg:
-                    bet_data['description'] = f"{main_leg['player']} {main_leg['description']}"
-                elif 'description' in main_leg:
-                    bet_data['description'] = main_leg['description']
-                elif 'player' in main_leg:
-                    bet_data['description'] = main_leg['player']
-                bet_data['legs'] = []
-            elif len(legs) > 1:
-                bet_data['is_parlay'] = True
-                bet_data['legs'] = legs
-                # Set teams as all unique teams from legs
-                all_teams = []
-                for leg in legs:
-                    if 'teams' in leg:
-                        all_teams.extend(leg['teams'])
-                unique_teams = list(dict.fromkeys([t for t in all_teams if t and t != 'TBD']))
-                if len(unique_teams) >= 2:
-                    bet_data['teams'] = [unique_teams[0], unique_teams[1]]  # type: ignore
-                elif len(unique_teams) == 1:
-                    bet_data['teams'] = [unique_teams[0], unique_teams[0]]  # type: ignore
-                else:
-                    bet_data['teams'] = ['TBD', 'TBD']  # type: ignore
-                # Description: SGP summary
-                leg_descs = []
-                for leg in legs:
-                    if 'player' in leg and 'description' in leg:
-                        leg_descs.append(f"{leg['player']} {leg['description']}")
-                    elif 'player' in leg:
-                        leg_descs.append(leg['player'])
-                    elif 'description' in leg:
-                        leg_descs.append(leg['description'])
-                if leg_descs:
-                    bet_data['description'] = f"{len(legs)} Leg SGP: {', '.join(leg_descs)}"
-            else:
-                # Fallback to original parsing for single-leg bets
-                # 1. Extract odds (top right or keyword lines)
-                odds = None
-                odds_patterns = [
-                    r'^([+-]\d{2,4})$'  # Only accept lines that are just odds
-                ]
-                skip_keywords = ['gambler', '1-800', 'bet id', 'call']
-                valid_odds_lines = []
-                for line in lines:
-                    line_stripped = line.strip()
-                    if any(k in line_stripped.lower() for k in skip_keywords):
-                        continue
-                    # Only consider lines that are just a valid odds value
-                    if re.match(r'^[+-]\d{2,4}$', line_stripped):
-                        # Explicitly ignore -800 (phone number)
-                        if line_stripped == '-800':
-                            continue
-                        valid_odds_lines.append(line_stripped)
-                if valid_odds_lines:
-                    odds = valid_odds_lines[-1]  # Pick the last valid odds line
-                # Fallback: previous logic if nothing found
-                if not odds:
-                    for line in lines:
-                        if any(k in line.lower() for k in skip_keywords):
-                            continue
-                        for pattern in [r'(?i)odds[:\s]*([+-]?\d{2,4})', r'(?i)line[:\s]*([+-]?\d{2,4})', r'(?i)price[:\s]*([+-]?\d{2,4})', r'\b([+-]\d{3,4})\b', r'\b([+-]\d{2,3})\b']:
-                            match = re.search(pattern, line)
-                            if match and self._is_valid_odds(match.group(1)) and match.group(1) != '-800':
-                                odds = match.group(1)
-                                break
-                        if odds:
-                            break
-                if odds:
-                    bet_data['odds'] = odds
-                    logger.info(f"Extracted odds: {odds}")
-                else:
-                    logger.info("No valid odds found.")
-                # 4. Extract all team matchups (e.g., New York Yankees at Cincinnati Reds)
-                matchup_pattern = r'([A-Za-z ]+) at ([A-Za-z ]+)'  # e.g., New York Yankees at Cincinnati Reds
-                matchups = re.findall(matchup_pattern, text)
-                teams_found = []
-                if matchups:
-                    main_matchup = matchups[0]
-                    teams_found = [self._resolve_team_name(main_matchup[0].strip()), self._resolve_team_name(main_matchup[1].strip())]
-                    bet_data['teams'] = teams_found
-                    logger.info(f"Extracted teams: {bet_data['teams']}")
-                # 2. Extract bet description
-                bet_keywords = ['over', 'under', 'money line', 'no', 'yes', 'parlay', 'inning', 'earned runs', 'alt', 'hits', 'runs', 'rbis', '+', '-']
-                branding_keywords = ['fanatics sportsbook', 'fanatics', 'sportsbook']
-                def is_team_line(line):
-                    line_lower = line.lower()
-                    return any(team.lower() in line_lower for team in teams_found if team and team != 'TBD')
-                description = None
-                for i, line in enumerate(lines):
-                    line_lower = line.lower()
-                    if any(b in line_lower for b in branding_keywords):
-                        continue
-                    if is_team_line(line):
-                        continue
-                    if 'money line' in line_lower:
-                        pick_team = None
-                        for candidate in lines:
-                            candidate_lower = candidate.lower()
-                            if any(b in candidate_lower for b in branding_keywords):
-                                continue
-                            if candidate and candidate != line and not candidate.isdigit() and not candidate.startswith('-') and not candidate.startswith('+'):
-                                pick_team = candidate.strip()
-                                break
-                        if pick_team:
-                            description = f"{pick_team} Money Line"
-                        else:
-                            description = line.strip()
-                        logger.info(f"Selected bet description as Money Line (top team): {description}")
-                        break
-                    player_prop_match = re.match(r'([A-Z][a-z]+(?: [A-Z][a-z]+)*)(?: - )?([A-Za-z ]+)?', line)
-                    if player_prop_match and player_prop_match.group(2):
-                        description = f"{player_prop_match.group(1).strip()} {player_prop_match.group(2).strip()}"
-                        logger.info(f"Selected bet description as player prop: {description}")
-                        break
-                    if any(k in line_lower for k in bet_keywords) or re.search(r'\d+\+', line):
-                        description = line.strip()
-                        logger.info(f"Selected bet description by keyword: {description}")
-                        break
-                if not description:
-                    for line in lines:
-                        line_lower = line.lower()
-                        if any(b in line_lower for b in branding_keywords):
-                            continue
-                        if is_team_line(line):
-                            continue
-                        description = line.strip()
-                        logger.info(f"Selected bet description by fallback: {description}")
-                        break
-                if description:
-                    bet_data['description'] = description
-                logger.info(f"Extracted bet type/description: {bet_data['description']}")
-            logger.info(f"Final parsed bet data: {bet_data}")
-            return bet_data
         except Exception as e:
-            logger.error(f"Error parsing bet data: {e}")
-            return self._get_default_bet_data()
-    
-    def _extract_teams(self, text: str) -> Optional[list]:
+            logger.error(f"Error parsing betting slip: {e}")
+            return {}
+
+    def _extract_slip_info(self, lines: List[str]) -> Dict[str, Any]:
+        """Extract basic slip information."""
+        try:
+            info = {}
+            branding_keywords = [
+                'fanatics sportsbook', 'fanatics', 'sportsbook', 'fcash', 
+                'bet id', 'must be 21+', 'gambling problem', 'call', 
+                '1-800-gambler', 'rg'
+            ]
+
+            # Determine bet type
+            for line in lines:
+                if any(keyword in line for keyword in branding_keywords):
+                    continue
+
+                if 'parlay' in line:
+                    info['bet_type'] = 'Parlay'
+                    if 'same game' in line or 'sgp' in line:
+                        info['parlay_type'] = 'Same Game Parlay'
+                    else:
+                        info['parlay_type'] = 'Multi-Game Parlay'
+                    break
+                elif 'straight' in line or 'single' in line:
+                    info['bet_type'] = 'Straight'
+                    break
+                elif 'teaser' in line:
+                    info['bet_type'] = 'Teaser'
+                    break
+
+            # Extract bet amount and payout
+            for line in lines:
+                # Look for bet amount patterns
+                bet_match = re.search(r'bet[:\s]*\$?(\d+(?:\.\d{2})?)', line)
+                if bet_match:
+                    info['bet_amount'] = float(bet_match.group(1))
+
+                # Look for payout patterns
+                payout_match = re.search(r'(?:payout|win|to win)[:\s]*\$?(\d+(?:\.\d{2})?)', line)
+                if payout_match:
+                    info['potential_payout'] = float(payout_match.group(1))
+
+                # Look for odds
+                odds_match = re.search(r'([+-]\d{3,4})', line)
+                if odds_match:
+                    info['odds'] = odds_match.group(1)
+
+            return info
+
+        except Exception as e:
+            logger.error(f"Error extracting slip info: {e}")
+            return {}
+
+    def _extract_teams(self, lines: List[str]) -> List[str]:
         """Extract team names from text."""
         try:
-            # Look for team patterns
+            teams_found = []
             team_patterns = [
-                r'([A-Za-z ]+) at ([A-Za-z ]+)',  # e.g., Arizona Diamondbacks at Colorado Rockies
-                r'([A-Za-z ]+) vs ([A-Za-z ]+)',
-                r'([A-Za-z ]+) @ ([A-Za-z ]+)',
+                r'(\w+(?:\s+\w+)*)\s+@\s+(\w+(?:\s+\w+)*)',  # Team @ Team
+                r'(\w+(?:\s+\w+)*)\s+vs\s+(\w+(?:\s+\w+)*)',  # Team vs Team
+                r'(\w+(?:\s+\w+)*)\s+-\s+(\w+(?:\s+\w+)*)'   # Team - Team
             ]
-            
-            for pattern in team_patterns:
-                match = re.search(pattern, text)
-                if match:
-                    team1_raw = match.group(1)
-                    team2_raw = match.group(2)
-                    team1 = self._resolve_team_name(team1_raw.strip() if isinstance(team1_raw, str) else "TBD")
-                    team2 = self._resolve_team_name(team2_raw.strip() if isinstance(team2_raw, str) else "TBD")
-                    logger.info(f"Extracted teams: {team1}, {team2}")
-                    return [team1, team2]
-            logger.warning("No teams matched in OCR text.")
-            return None
-            
+
+            for line in lines:
+                for pattern in team_patterns:
+                    matches = re.findall(pattern, line, re.IGNORECASE)
+                    if matches:
+                        for matchup_teams in matches:
+                            if len(matchup_teams) == 2:
+                                team1 = self._resolve_team_name(matchup_teams[0].strip())
+                                team2 = self._resolve_team_name(matchup_teams[1].strip())
+                                if team1 and team2:
+                                    teams_found = [team1, team2]
+                                    break
+
+                if teams_found:
+                    break
+
+            # If no pattern match, try direct team name matching
+            if not teams_found:
+                for line in lines:
+                    for team_key, team_name in self.team_mappings.items():
+                        if team_key in line.lower():
+                            if team_name not in teams_found:
+                                teams_found.append(team_name)
+                            if len(teams_found) == 2:
+                                break
+
+            return teams_found[:2]  # Return max 2 teams
+
         except Exception as e:
             logger.error(f"Error extracting teams: {e}")
-            return None
-    
-    def _extract_odds(self, text: str) -> Optional[str]:
-        """Extract odds from text."""
-        try:
-            # Look for odds patterns
-            odds_patterns = [
-                r'([+-]\d+)',
-                r'(\d+\.\d+)',
-                r'(\d+:\d+)'
-            ]
-            
-            for pattern in odds_patterns:
-                match = re.search(pattern, text)
-                if match:
-                    odds_val = match.group(1)
-                    if isinstance(odds_val, str):
-                        return odds_val
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error extracting odds: {e}")
-            return None
-    
-    def _extract_description(self, text: str) -> Optional[str]:
-        """Extract bet description from text."""
-        try:
-            # Try to find a line with 'Over' or 'Under' or similar
-            for line in text.splitlines():
-                if not isinstance(line, str) or not line:
-                    logger.debug(f"Skipping line in description extraction (not a string or empty): {repr(line)} type={type(line)}")
-                    continue
-                try:
-                    line_lower = line.lower()
-                except Exception as e:
-                    logger.error(f"Error calling lower() on line: {repr(line)} type={type(line)}: {e}")
-                    continue
-                if "over" in line_lower or "under" in line_lower:
-                    return line.strip()
-            # Fallback: return first non-empty line
-            lines = [l for l in text.splitlines() if isinstance(l, str) and l.strip()]
-            if lines:
-                return lines[0].strip()
-            return None
-        except Exception as e:
-            logger.error(f"Error extracting description: {e}")
-            return None
-    
-    def _resolve_team_name(self, name: str) -> str:
-        """Resolve team name from abbreviation or full name."""
-        try:
-            if not name or not isinstance(name, str):
-                return "TBD"
-            name_upper = name.upper().strip()
-            return self.team_abbreviations.get(name_upper, name.title().strip())
-        except Exception as e:
-            logger.error(f"Error resolving team name: {e}")
-            return "TBD"
-    
-    def _get_default_bet_data(self) -> Dict[str, Any]:
-        """Get default bet data when parsing fails."""
-        return {
-            'teams': ['TBD', 'TBD'],
-            'description': 'TBD',
-            'odds': 'TBD',
-            'units': '1',
-            'is_parlay': False
-        }
+            return []
 
-    def _is_valid_odds(self, odds: str) -> bool:
-        """Validate if a given string is a valid odds format."""
+    def _extract_bet_details(self, lines: List[str], teams: List[str]) -> Dict[str, Any]:
+        """Extract detailed bet information including legs for parlays."""
+
+        def leg_signature(leg):
+            """Create a unique signature for a bet leg."""
+            return f"{leg.get('team', '')}-{leg.get('type', '')}-{leg.get('value', '')}"
+
         try:
-            if not odds or not isinstance(odds, str):
-                return False
-            # Check if the string is a valid odds format
-            if len(odds) >= 3 and (odds.startswith('+') or odds.startswith('-')) and odds[1:].isdigit():
-                return True
-            return False
+            details = {'description': '', 'legs': []}
+            seen_legs = set()
+
+            for line in lines:
+                # Skip branding and metadata lines
+                if any(keyword in line for keyword in ['fanatics', 'bet id', 'gambling']):
+                    continue
+
+                # Look for over/under patterns
+                over_under_match = re.search(r'(\w+)\s+(over|under)\s+(\d+(?:\.\d)?)', line, re.IGNORECASE)
+                if over_under_match:
+                    team, direction, value = over_under_match.groups()
+                    team_name = self._resolve_team_name(team)
+                    if team_name:
+                        leg = {
+                            'team': team_name,
+                            'type': f'{direction.lower()}_total',
+                            'value': float(value),
+                            'description': f"{team_name} {direction.title()} {value}"
+                        }
+                        leg_sig = leg_signature(leg)
+                        if leg_sig not in seen_legs:
+                            details['legs'].append(leg)
+                            seen_legs.add(leg_sig)
+
+                # Look for moneyline patterns
+                moneyline_match = re.search(r'(\w+)\s+ml\s*([+-]\d{3,4})', line, re.IGNORECASE)
+                if moneyline_match:
+                    team, odds = moneyline_match.groups()
+                    team_name = self._resolve_team_name(team)
+                    if team_name:
+                        leg = {
+                            'team': team_name,
+                            'type': 'moneyline',
+                            'value': odds,
+                            'description': f"{team_name} ML {odds}"
+                        }
+                        leg_sig = leg_signature(leg)
+                        if leg_sig not in seen_legs:
+                            details['legs'].append(leg)
+                            seen_legs.add(leg_sig)
+
+                # Look for player props
+                player_match = re.search(r'(\w+\s+\w+)\s+(hits|runs|rbis|strikeouts)\s+(over|under)\s+(\d+(?:\.\d)?)', line, re.IGNORECASE)
+                if player_match:
+                    player, prop_type, direction, value = player_match.groups()
+                    leg = {
+                        'player': player.title(),
+                        'type': f'{prop_type.lower()}_{direction.lower()}',
+                        'value': float(value),
+                        'description': f"{player.title()} {prop_type.title()} {direction.title()} {value}"
+                    }
+                    leg_sig = leg_signature(leg)
+                    if leg_sig not in seen_legs:
+                        details['legs'].append(leg)
+                        seen_legs.add(leg_sig)
+
+            # Build description from legs
+            if details['legs']:
+                descriptions = [leg['description'] for leg in details['legs']]
+                details['description'] = ' | '.join(descriptions)
+            else:
+                # Fallback: try to extract any betting line
+                for line in lines:
+                    bet_keywords = [
+                        'over', 'under', 'money line', 'no', 'yes', 'parlay', 
+                        'inning', 'earned runs', 'alt', 'hits', 'runs', 'rbis', '+', '-'
+                    ]
+
+                    def is_team_line(line):
+                        """Check if line contains team betting info."""
+                        return any(keyword in line.lower() for keyword in bet_keywords)
+
+                    if is_team_line(line):
+                        # Clean up the line for description
+                        clean_line = re.sub(r'[^\w\s@\-+.]', ' ', line)
+                        clean_line = ' '.join(clean_line.split())
+                        if clean_line and len(clean_line) > 5:
+                            candidate = clean_line.strip()
+                            if candidate and candidate != line and not candidate.isdigit() and not candidate.startswith('-') and not candidate.startswith('+'):
+                                details['description'] = candidate
+                                break
+
+            return details
+
         except Exception as e:
-            logger.error(f"Error validating odds: {e}")
-            return False 
+            logger.error(f"Error extracting bet details: {e}")
+            return {'description': '', 'legs': []}
+
+    def _resolve_team_name(self, team_text: str) -> Optional[str]:
+        """Resolve team name from various formats."""
+        try:
+            if not team_text:
+                return None
+
+            # Clean the team text
+            team_text = team_text.strip().lower()
+            team_text = re.sub(r'[^\w\s]', '', team_text)
+
+            # Direct mapping lookup
+            if team_text in self.team_mappings:
+                return self.team_mappings[team_text]
+
+            # Partial matching
+            for key, value in self.team_mappings.items():
+                if key in team_text or team_text in key:
+                    return value
+
+            # Handle common variations
+            variations = {
+                'ny': 'New York Yankees',
+                'nyc': 'New York Yankees',
+                'la': 'Los Angeles Dodgers',
+                'sf': 'San Francisco Giants',
+                'sd': 'San Diego Padres',
+                'chicago': 'Chicago Cubs',
+                'cubs': 'Chicago Cubs',
+                'sox': 'Chicago White Sox',
+                'white sox': 'Chicago White Sox'
+            }
+
+            if team_text in variations:
+                return variations[team_text]
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error resolving team name '{team_text}': {e}")
+            return None
+
+    def _extract_description_from_lines(self, lines: List[str]) -> str:
+        """Extract betting description from lines."""
+        try:
+            description_parts = []
+            for line in lines:
+                if isinstance(line, str) and line.strip():
+                    # Skip metadata lines
+                    if any(keyword in line.lower() for keyword in ['fanatics', 'bet id', 'gambling', 'call']):
+                        continue
+
+                    # Clean up the line
+                    clean_line = re.sub(r'[^\w\s@\-+.]', ' ', line)
+                    clean_line = ' '.join(clean_line.split())
+                    
+                    if clean_line and len(clean_line) > 3:
+                        description_parts.append(clean_line)
+
+            return ' | '.join(description_parts[:3])  # Limit to 3 parts
+
+        except Exception as e:
+            logger.debug(f"Skipping line in description extraction (not a string or empty): {repr(line)} type={type(line)}")
+            return ""
+
+    def _is_valid_betting_line(self, line: str) -> bool:
+        """Check if a line contains valid betting information."""
+        try:
+            if not line or not isinstance(line, str):
+                return False
+
+            # Skip metadata lines
+            metadata_keywords = ['fanatics', 'bet id', 'gambling', 'call', '1-800']
+            if any(keyword in line.lower() for keyword in metadata_keywords):
+                return False
+
+            # Look for betting indicators
+            betting_indicators = ['over', 'under', 'ml', 'money', 'parlay', 'teaser', '+', '-']
+            return any(indicator in line.lower() for indicator in betting_indicators)
+
+        except Exception as e:
+            logger.error(f"Error checking betting line validity: {e}")
+            return False
+
+    def _get_default_bet_data(self) -> Dict[str, Any]:
+        """Return default bet data when parsing fails."""
+        return {
+            'teams': ['Unknown Team 1', 'Unknown Team 2'],
+            'bet_type': 'Unknown',
+            'bet_amount': None,
+            'potential_payout': None,
+            'odds': None,
+            'description': 'Unable to parse betting slip',
+            'legs': [],
+            'parlay_type': None,
+            'timestamp': datetime.now().isoformat(),
+            'raw_text': ''
+        } 

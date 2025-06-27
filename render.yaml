@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: gotlockz-mlb-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/bot/main.py
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ENABLE_WEATHER_ANALYSIS
+        value: true
+      - key: ENABLE_PLAYER_ANALYTICS
+        value: true
+      - key: ENABLE_REAL_TIME_UPDATES
+        value: true
+    healthCheckPath: /
+    autoDeploy: true 

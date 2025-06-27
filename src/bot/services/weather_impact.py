@@ -75,66 +75,65 @@ class WeatherImpactService:
             }
         }
     
-    def analyze_weather_impact(self, weather_data: Dict[str, Any], ballpark: str = None) -> Dict[str, Any]:
+    def analyze_weather_impact(self, weather_data: Dict[str, Any], ballpark: Optional[str] = None) -> Dict[str, Any]:
         """Analyze the impact of weather conditions on the game."""
         try:
             if not weather_data:
                 return self._get_default_analysis()
             
-            # Extract weather conditions
-            temp = weather_data.get('temperature')
-            wind_speed = weather_data.get('wind_speed')
-            humidity = weather_data.get('humidity')
-            pressure = weather_data.get('pressure')
-            conditions = weather_data.get('conditions', 'Unknown')
+            # Extract and analyze weather conditions
+            weather_conditions = self._extract_weather_conditions(weather_data)
+            impact_factors = self._calculate_impact_factors(weather_conditions, ballpark)
             
-            # Calculate impact factors
-            temp_impact = self._get_temperature_impact(temp)
-            wind_impact = self._get_wind_impact(wind_speed)
-            humidity_impact = self._get_humidity_impact(humidity)
-            pressure_impact = self._get_pressure_impact(pressure)
+            # Calculate overall impact and generate analysis
+            overall_impact = self._calculate_overall_impact(**impact_factors)
+            recommendations = self._generate_recommendations(**impact_factors, 
+                                                           conditions=weather_conditions['conditions'])
             
-            # Get ballpark factor
-            ballpark_impact = self._get_ballpark_impact(ballpark)
-            
-            # Calculate overall impact
-            overall_impact = self._calculate_overall_impact(
-                temp_impact, wind_impact, humidity_impact, 
-                pressure_impact, ballpark_impact
-            )
-            
-            # Generate recommendations
-            recommendations = self._generate_recommendations(
-                temp_impact, wind_impact, humidity_impact, 
-                pressure_impact, ballpark_impact, conditions
-            )
-            
-            return {
-                'weather_conditions': {
-                    'temperature': temp,
-                    'wind_speed': wind_speed,
-                    'humidity': humidity,
-                    'pressure': pressure,
-                    'conditions': conditions
-                },
-                'impact_factors': {
-                    'temperature': temp_impact,
-                    'wind': wind_impact,
-                    'humidity': humidity_impact,
-                    'pressure': pressure_impact,
-                    'ballpark': ballpark_impact
-                },
-                'overall_impact': overall_impact,
-                'recommendations': recommendations,
-                'risk_level': self._calculate_risk_level(overall_impact),
-                'betting_implications': self._get_betting_implications(overall_impact)
-            }
+            return self._build_analysis_response(weather_conditions, impact_factors, 
+                                               overall_impact, recommendations)
             
         except Exception as e:
             logger.error(f"Error analyzing weather impact: {e}")
             return self._get_default_analysis()
     
-    def _get_temperature_impact(self, temp: Optional[float]) -> Dict[str, Any]:
+    def _extract_weather_conditions(self, weather_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract weather conditions from the input data."""
+        return {
+            'temperature': weather_data.get('temperature'),
+            'wind_speed': weather_data.get('wind_speed'),
+            'wind_direction': weather_data.get('wind_direction'),
+            'humidity': weather_data.get('humidity'),
+            'pressure': weather_data.get('pressure'),
+            'conditions': weather_data.get('condition', '') or ''
+        }
+    
+    def _calculate_impact_factors(self, weather_conditions: Dict[str, Any], 
+                                 ballpark: Optional[str]) -> Dict[str, Any]:
+        """Calculate individual impact factors for each weather element."""
+        return {
+            'temp_impact': self._analyze_temperature_impact(weather_conditions['temperature']),
+            'wind_impact': self._analyze_wind_impact(weather_conditions['wind_speed'], 
+                                                   weather_conditions['wind_direction']),
+            'humidity_impact': self._analyze_humidity_impact(weather_conditions['humidity']),
+            'pressure_impact': self._analyze_pressure_impact(weather_conditions['pressure']),
+            'ballpark_impact': self._analyze_ballpark_impact(ballpark)
+        }
+    
+    def _build_analysis_response(self, weather_conditions: Dict[str, Any], 
+                                impact_factors: Dict[str, Any], overall_impact: Dict[str, Any],
+                                recommendations: List[str]) -> Dict[str, Any]:
+        """Build the complete analysis response."""
+        return {
+            'weather_conditions': weather_conditions,
+            'impact_factors': impact_factors,
+            'overall_impact': overall_impact,
+            'recommendations': recommendations,
+            'risk_level': self._calculate_risk_level(overall_impact),
+            'betting_implications': self._get_betting_implications(overall_impact)
+        }
+    
+    def _analyze_temperature_impact(self, temp: Optional[float]) -> Dict[str, Any]:
         """Get temperature impact factor."""
         if temp is None:
             return {'factor': 1.00, 'description': 'Temperature data unavailable', 'category': 'mild'}
@@ -150,23 +149,47 @@ class WeatherImpactService:
         else:
             return self.weather_factors['temperature']['hot']
     
-    def _get_wind_impact(self, wind_speed: Optional[float]) -> Dict[str, Any]:
-        """Get wind impact factor."""
-        if wind_speed is None:
-            return {'factor': 1.00, 'description': 'Wind data unavailable', 'category': 'calm'}
-        
-        if wind_speed < 5:
-            return self.weather_factors['wind']['calm']
-        elif wind_speed < 10:
-            return self.weather_factors['wind']['light']
-        elif wind_speed < 15:
-            return self.weather_factors['wind']['moderate']
-        elif wind_speed < 25:
-            return self.weather_factors['wind']['strong']
-        else:
-            return self.weather_factors['wind']['extreme']
+    def _analyze_wind_impact(self, wind_speed: Optional[float], 
+                            wind_direction: Optional[str]) -> Dict[str, Any]:
+        """Analyze wind impact on game outcomes."""
+        try:
+            if wind_speed is None:
+                return {'factor': 1.0, 'description': 'Wind data unavailable', 'confidence': 'low'}
+
+            if wind_speed < 5:
+                return {
+                    'factor': 1.0,
+                    'description': 'Light winds have minimal impact',
+                    'confidence': 'high',
+                    'effect': 'Neutral conditions'
+                }
+            elif wind_speed < 10:
+                return {
+                    'factor': 1.02,
+                    'description': 'Moderate winds can affect ball flight',
+                    'confidence': 'medium',
+                    'effect': 'Variable impact based on direction'
+                }
+            elif wind_speed < 15:
+                return {
+                    'factor': 1.05,
+                    'description': 'Strong winds significantly affect ball flight',
+                    'confidence': 'high',
+                    'effect': 'Major impact on home runs and fly balls'
+                }
+            else:
+                return {
+                    'factor': 1.08,
+                    'description': 'Very strong winds dramatically affect game',
+                    'confidence': 'high',
+                    'effect': 'Consider avoiding totals and player props'
+                }
+
+        except Exception as e:
+            logger.error(f"Error analyzing wind impact: {e}")
+            return {'factor': 1.0, 'description': 'Error analyzing wind', 'confidence': 'low'}
     
-    def _get_humidity_impact(self, humidity: Optional[float]) -> Dict[str, Any]:
+    def _analyze_humidity_impact(self, humidity: Optional[float]) -> Dict[str, Any]:
         """Get humidity impact factor."""
         if humidity is None:
             return {'factor': 1.00, 'description': 'Humidity data unavailable', 'category': 'normal'}
@@ -180,7 +203,7 @@ class WeatherImpactService:
         else:
             return self.weather_factors['humidity']['very_high']
     
-    def _get_pressure_impact(self, pressure: Optional[float]) -> Dict[str, Any]:
+    def _analyze_pressure_impact(self, pressure: Optional[float]) -> Dict[str, Any]:
         """Get pressure impact factor."""
         if pressure is None:
             return {'factor': 1.00, 'description': 'Pressure data unavailable', 'category': 'normal'}
@@ -192,21 +215,31 @@ class WeatherImpactService:
         else:
             return self.weather_factors['pressure']['high']
     
-    def _get_ballpark_impact(self, ballpark: Optional[str]) -> Dict[str, Any]:
-        """Get ballpark-specific impact factor."""
-        if not ballpark:
-            return {'factor': 1.00, 'description': 'Ballpark data unavailable', 'category': 'neutral'}
-        
-        ballpark_data = self.ballpark_factors.get(ballpark)
-        if ballpark_data:
-            return {
-                'factor': ballpark_data['altitude_factor'] * ballpark_data['wind_factor'],
-                'description': ballpark_data['description'],
-                'category': 'ballpark_specific',
-                'altitude': ballpark_data['altitude']
-            }
-        else:
-            return {'factor': 1.00, 'description': 'Standard ballpark conditions', 'category': 'neutral'}
+    def _analyze_ballpark_impact(self, ballpark: Optional[str]) -> Dict[str, Any]:
+        """Analyze ballpark-specific factors."""
+        try:
+            if not ballpark:
+                return {'factor': 1.0, 'description': 'Ballpark data unavailable', 'confidence': 'low'}
+
+            ballpark_data = self.ballpark_factors.get(ballpark)
+            if ballpark_data:
+                return {
+                    'factor': ballpark_data['factor'],
+                    'description': ballpark_data['description'],
+                    'confidence': 'high',
+                    'effect': 'Ballpark-specific advantage'
+                }
+            else:
+                return {
+                    'factor': 1.0,
+                    'description': f'Standard ballpark factors for {ballpark}',
+                    'confidence': 'medium',
+                    'effect': 'Neutral ballpark conditions'
+                }
+
+        except Exception as e:
+            logger.error(f"Error analyzing ballpark impact: {e}")
+            return {'factor': 1.0, 'description': 'Error analyzing ballpark', 'confidence': 'low'}
     
     def _calculate_overall_impact(self, temp_impact: Dict, wind_impact: Dict, 
                                  humidity_impact: Dict, pressure_impact: Dict, 
@@ -277,9 +310,11 @@ class WeatherImpactService:
         
         # Ballpark recommendations
         if ballpark_impact.get('factor', 1.0) > 1.05:
-            recommendations.append(f"🏟️ {ballpark_impact.get('description', 'Ballpark factor')} - adjust totals accordingly")
+            ballpark_desc = ballpark_impact.get('description', 'Ballpark factor') or 'Ballpark factor'
+            recommendations.append(f"🏟️ {ballpark_desc} - adjust totals accordingly")
         elif ballpark_impact.get('factor', 1.0) < 0.95:
-            recommendations.append(f"🏟️ {ballpark_impact.get('description', 'Ballpark factor')} - expect lower scoring")
+            ballpark_desc = ballpark_impact.get('description', 'Ballpark factor') or 'Ballpark factor'
+            recommendations.append(f"🏟️ {ballpark_desc} - expect lower scoring")
         
         # General recommendations
         if conditions.lower() in ['rain', 'storm', 'thunderstorm']:
@@ -361,7 +396,7 @@ class WeatherImpactService:
             }
         }
     
-    def get_weather_summary(self, weather_data: Dict[str, Any], ballpark: str = None) -> str:
+    def get_weather_summary(self, weather_data: Dict[str, Any], ballpark: Optional[str] = None) -> str:
         """Get a concise weather summary for display."""
         try:
             analysis = self.analyze_weather_impact(weather_data, ballpark)
