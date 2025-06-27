@@ -1,0 +1,16 @@
+{
+  "include": ["src"],
+  "exclude": [
+    "venv",
+    "tests",
+    "**/__pycache__",
+    ".github",
+    "node_modules"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["src"]
+    }
+  ]
+} 

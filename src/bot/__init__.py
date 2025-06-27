@@ -1,1 +1,1 @@
-# GotLockz Bot V2 - Bot Package 
+# GotLockz Bot V2 - Bot Package

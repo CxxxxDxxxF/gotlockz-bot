@@ -10,4 +10,4 @@ def kelly_fraction(prob: float, odds: float) -> float:
     edge = prob * (odds - 1) - (1 - prob)
     denom = odds - 1
     kelly = edge / denom
-    return max(0.0, kelly)  # Never bet negative fraction 
+    return max(0.0, kelly)  # Never bet negative fraction
