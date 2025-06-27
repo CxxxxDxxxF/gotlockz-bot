@@ -103,9 +103,11 @@ class PickCommands(app_commands.Group):
 
             # Add optional description if provided
             if description:
+                assert bet_data is not None, "Expected non-None data before calling .get()"
                 bet_data['description'] = f"{bet_data.get('description', 'TBD')} - {description}"
 
             # If OCR failed to extract teams or bet, notify user
+            assert bet_data is not None, "Expected non-None data before calling .get()"
             if bet_data.get('teams', ['TBD', 'TBD'])[0] == 'TBD' or bet_data.get('teams', ['TBD', 'TBD'])[1] == 'TBD':
                 await interaction.followup.send("❌ Could not extract teams from the bet slip. Please ensure the image is clear and the team names are visible.", ephemeral=True)
                 return

@@ -233,10 +233,14 @@ class MLBScraper:
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
+                    assert data is not None, "Expected non-None data before calling .get()"
                     # Traverse to find the team
                     for record in data.get('records', []):
+                        assert record is not None, "Expected non-None data before calling .get()"
                         for teamrec in record.get('teamRecords', []):
+                            assert teamrec is not None, "Expected non-None data before calling .get()"
                             team = teamrec.get('team', {})
+                            assert team is not None, "Expected non-None data before calling .get()"
                             if team.get('id') == team_id:
                                 return {
                                     'wins': teamrec.get('wins', 0),
@@ -271,14 +275,21 @@ class MLBScraper:
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
+                    assert data is not None, "Expected non-None data before calling .get()"
+                    main_data = data.get('main', {})
+                    wind_data = data.get('wind', {})
+                    weather_data = data.get('weather', [{}])
+                    assert main_data is not None, "Expected non-None data before calling .get()"
+                    assert wind_data is not None, "Expected non-None data before calling .get()"
+                    assert weather_data is not None and len(weather_data) > 0, "Expected non-None data before calling .get()"
                     return {
-                        'temperature': data.get('main', {}).get('temp'),
-                        'humidity': data.get('main', {}).get('humidity'),
-                        'pressure': data.get('main', {}).get('pressure'),
-                        'wind_speed': data.get('wind', {}).get('speed'),
+                        'temperature': main_data.get('temp'),
+                        'humidity': main_data.get('humidity'),
+                        'pressure': main_data.get('pressure'),
+                        'wind_speed': wind_data.get('speed'),
                         'wind_direction': self._get_wind_direction(
-                            data.get('wind', {}).get('deg', 0)),
-                        'condition': data.get('weather', [{}])[0].get('description', 'Unknown'),
+                            wind_data.get('deg', 0)),
+                        'condition': weather_data[0].get('description', 'Unknown'),
                         'source': 'OpenWeatherMap'
                     }
                 else:
@@ -334,16 +345,22 @@ class MLBScraper:
     def _parse_team_stats(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse team statistics from MLB API response."""
         try:
+            assert data is not None, "Expected non-None data before calling .get()"
             stats = data.get('stats', [])
             if not stats:
                 return {}
 
             # Look for hitting stats
             for stat_group in stats:
-                if stat_group.get('group', {}).get('displayName') == 'hitting':
+                assert stat_group is not None, "Expected non-None data before calling .get()"
+                group_data = stat_group.get('group', {})
+                assert group_data is not None, "Expected non-None data before calling .get()"
+                if group_data.get('displayName') == 'hitting':
                     splits = stat_group.get('splits', [])
                     if splits:
+                        assert splits[0] is not None, "Expected non-None data before calling .get()"
                         stat = splits[0].get('stat', {})
+                        assert stat is not None, "Expected non-None data before calling .get()"
                         return {
                             'games_played': stat.get('gamesPlayed', 0),
                             'runs': stat.get('runs', 0),

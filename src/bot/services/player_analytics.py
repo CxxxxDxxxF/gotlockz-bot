@@ -152,16 +152,20 @@ class PlayerAnalyticsService:
                     return None
 
                 data = await response.json()
+                assert data is not None, "Expected non-None data before calling .get()"
                 people = data.get('people', [])
 
                 for person in people:
+                    assert person is not None, "Expected non-None data before calling .get()"
                     if person.get('fullName', '').lower() == player_name.lower():
                         current_team = person.get('currentTeam', {})
+                        assert current_team is not None, "Expected non-None data before calling .get()"
                         if current_team.get('name', '').lower() == team_name.lower():
                             return person.get('id')
 
                 # If exact match not found, return first match
                 if people:
+                    assert people[0] is not None, "Expected non-None data before calling .get()"
                     return people[0].get('id')
 
                 return None
@@ -187,13 +191,16 @@ class PlayerAnalyticsService:
                     return {}
 
                 data = await response.json()
+                assert data is not None, "Expected non-None data before calling .get()"
                 stats = data.get('stats', [])
 
                 result = {}
                 for stat_group in stats:
+                    assert stat_group is not None, "Expected non-None data before calling .get()"
                     group = stat_group.get('group', {}).get('displayName', 'Unknown')
                     splits = stat_group.get('splits', [])
                     if splits:
+                        assert splits[0] is not None, "Expected non-None data before calling .get()"
                         result[group] = splits[0].get('stat', {})
 
                 return result
@@ -220,12 +227,15 @@ class PlayerAnalyticsService:
                     return {}
 
                 data = await response.json()
+                assert data is not None, "Expected non-None data before calling .get()"
                 stats = data.get('stats', [])
 
                 recent_games = []
                 for stat_group in stats:
+                    assert stat_group is not None, "Expected non-None data before calling .get()"
                     splits = stat_group.get('splits', [])
                     for split in splits:
+                        assert split is not None, "Expected non-None data before calling .get()"
                         recent_games.append({
                             'date': split.get('date'),
                             'stats': split.get('stat', {})
@@ -254,12 +264,16 @@ class PlayerAnalyticsService:
                     return {}
 
                 data = await response.json()
+                assert data is not None, "Expected non-None data before calling .get()"
                 stats = data.get('stats', [])
 
                 for stat_group in stats:
+                    assert stat_group is not None, "Expected non-None data before calling .get()"
                     splits = stat_group.get('splits', [])
                     for split in splits:
+                        assert split is not None, "Expected non-None data before calling .get()"
                         opponent = split.get('opponent', {})
+                        assert opponent is not None, "Expected non-None data before calling .get()"
                         if opponent.get('name', '').lower() == team_name.lower():
                             return split.get('stat', {})
 
@@ -284,9 +298,11 @@ class PlayerAnalyticsService:
                     return None
 
                 data = await response.json()
+                assert data is not None, "Expected non-None data before calling .get()"
                 teams = data.get('teams', [])
 
                 for team in teams:
+                    assert team is not None, "Expected non-None data before calling .get()"
                     if team.get('name', '').lower() == team_name.lower():
                         logger.info(f"Found MLB team '{team_name}' (matched '{team.get('name')}') with ID {team.get('id')}")
                         return team.get('id')
@@ -313,13 +329,16 @@ class PlayerAnalyticsService:
                     return {}
 
                 data = await response.json()
+                assert data is not None, "Expected non-None data before calling .get()"
                 stats = data.get('stats', [])
 
                 result = {}
                 for stat_group in stats:
+                    assert stat_group is not None, "Expected non-None data before calling .get()"
                     group = stat_group.get('group', {}).get('displayName', 'Unknown')
                     splits = stat_group.get('splits', [])
                     if splits:
+                        assert splits[0] is not None, "Expected non-None data before calling .get()"
                         result[group] = splits[0].get('stat', {})
 
                 return result

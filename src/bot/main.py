@@ -25,26 +25,37 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 @bot.event
 async def on_ready():
     """Bot startup event with logging"""
+    assert bot.user is not None, "Expected non-None user before accessing .name"
+    assert bot.user is not None, "Expected non-None user before accessing .id"
     logger.info(f'Bot logged in as {bot.user.name} (ID: {bot.user.id})')
     logger.info(f'Connected to {len(bot.guilds)} guilds')
     
     # Log guild information
     for guild in bot.guilds:
+        assert guild is not None, "Expected non-None user before accessing .name"
+        assert guild is not None, "Expected non-None user before accessing .id"
         logger.info(f'Guild: {guild.name} (ID: {guild.id}) - Members: {guild.member_count}')
 
 @bot.event
 async def on_command(ctx):
     """Log all command usage"""
+    assert ctx.command is not None, "Expected non-None user before accessing .name"
+    assert ctx.author is not None, "Expected non-None user before accessing .name"
+    assert ctx.guild is not None, "Expected non-None user before accessing .name"
     logger.info(f'Command executed: {ctx.command.name} by {ctx.author} in {ctx.guild.name}')
 
 @bot.event
 async def on_command_error(ctx, error):
     """Log command errors"""
     if isinstance(error, commands.CommandNotFound):
+        assert ctx.author is not None, "Expected non-None user before accessing .name"
         logger.warning(f'Command not found: {ctx.message.content} by {ctx.author}')
     elif isinstance(error, commands.MissingPermissions):
+        assert ctx.author is not None, "Expected non-None user before accessing .name"
+        assert ctx.command is not None, "Expected non-None user before accessing .name"
         logger.warning(f'Missing permissions: {ctx.author} tried to use {ctx.command.name}')
     else:
+        assert ctx.command is not None, "Expected non-None user before accessing .name"
         logger.error(f'Command error in {ctx.command.name}: {error}', exc_info=True)
 
 async def load_extensions():

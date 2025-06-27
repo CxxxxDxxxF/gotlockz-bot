@@ -8,14 +8,14 @@ import sys
 import os
 
 # Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 async def test_new_scraper():
     """Test the new MLB scraper"""
     print("=== Testing New MLB Scraper ===")
     
     try:
-        from bot.services.mlb_scraper import MLBScraper
+        from src.bot.services.mlb_scraper import MLBScraper
         
         start_time = time.time()
         scraper = MLBScraper()
