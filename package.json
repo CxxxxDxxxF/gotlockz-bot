@@ -2,7 +2,6 @@
   "name": "gotlockz-bot",
   "version": "3.0.0",
   "description": "A high-performance MLB Discord bot with advanced analytics, real-time updates, and built-in system protection",
-  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
