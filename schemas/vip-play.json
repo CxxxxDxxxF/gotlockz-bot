@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VIP Play Message Schema",
+  "description": "Schema for VIP Play betting messages",
+  "type": "object",
+  "required": ["type", "number", "sport", "teams", "pick", "odds", "units", "reasoning"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["VIP Play"],
+      "description": "Message type identifier"
+    },
+    "number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Sequential VIP Play number"
+    },
+    "sport": {
+      "type": "string",
+      "description": "Sport name (e.g., MLB, NBA, NFL)"
+    },
+    "teams": {
+      "type": "string",
+      "description": "Teams involved in the bet"
+    },
+    "pick": {
+      "type": "string",
+      "description": "The specific pick/selection"
+    },
+    "odds": {
+      "type": "string",
+      "description": "Betting odds (e.g., -110, +150)"
+    },
+    "units": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10,
+      "description": "Bet size in units"
+    },
+    "reasoning": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Analysis and reasoning for the pick"
+    },
+    "weather": {
+      "type": "object",
+      "description": "Weather conditions affecting the game",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "description": "Temperature in Fahrenheit"
+        },
+        "conditions": {
+          "type": "string",
+          "description": "Weather conditions (e.g., Clear, Rain, Windy)"
+        },
+        "windSpeed": {
+          "type": "number",
+          "description": "Wind speed in mph"
+        },
+        "humidity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Humidity percentage"
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of message creation"
+    }
+  },
+  "additionalProperties": false
+} 

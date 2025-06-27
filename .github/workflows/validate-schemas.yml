@@ -1,0 +1,44 @@
+name: Validate JSON Schemas
+
+on:
+  push:
+    paths:
+      - 'schemas/**'
+      - 'scripts/validate-schemas.js'
+      - '.github/workflows/validate-schemas.yml'
+  pull_request:
+    paths:
+      - 'schemas/**'
+      - 'scripts/validate-schemas.js'
+      - '.github/workflows/validate-schemas.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm install ajv ajv-formats
+        
+      - name: Validate schemas
+        run: node scripts/validate-schemas.js
+        
+      - name: Add validation badge
+        if: success()
+        run: |
+          echo "## Schema Validation Status" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All JSON schemas validated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Validated schemas:" >> $GITHUB_STEP_SUMMARY
+          echo "- VIP Play messages" >> $GITHUB_STEP_SUMMARY
+          echo "- Free Play messages" >> $GITHUB_STEP_SUMMARY
+          echo "- Lotto Ticket messages" >> $GITHUB_STEP_SUMMARY 

@@ -2,6 +2,8 @@
 
 A high-performance MLB Discord bot with advanced analytics, real-time updates, and AI-powered betting analysis supporting multiple message types.
 
+[![Schema Validation](https://github.com/your-username/gotlockz-bot/workflows/Validate%20JSON%20Schemas/badge.svg)](https://github.com/your-username/gotlockz-bot/actions/workflows/validate-schemas.yml)
+
 ## 🚀 Quick Start
 
 ### Environment Variables
@@ -97,9 +99,11 @@ The bot generates structured messages that conform to specific JSON schemas:
 
 Each message type follows a specific JSON schema for validation and consistency:
 
-- **VIP Play Schema**: Structured format with sequential numbering and unit tracking
-- **Free Play Schema**: Simplified format for community sharing
-- **Lotto Ticket Schema**: Complex format supporting multi-leg parlays
+- **[VIP Play Schema](schemas/vip-play.json)**: Structured format with sequential numbering and unit tracking
+- **[Free Play Schema](schemas/free-play.json)**: Simplified format for community sharing  
+- **[Lotto Ticket Schema](schemas/lotto-ticket.json)**: Complex format supporting multi-leg parlays
+
+All schemas are validated on every push and pull request to ensure message format consistency.
 
 ## 🛠️ Development
 

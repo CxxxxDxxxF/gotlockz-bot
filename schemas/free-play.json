@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Free Play Message Schema",
+  "description": "Schema for Free Play betting messages",
+  "type": "object",
+  "required": ["type", "sport", "teams", "pick", "odds", "reasoning"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["Free Play"],
+      "description": "Message type identifier"
+    },
+    "sport": {
+      "type": "string",
+      "description": "Sport name (e.g., MLB, NBA, NFL)"
+    },
+    "teams": {
+      "type": "string",
+      "description": "Teams involved in the bet"
+    },
+    "pick": {
+      "type": "string",
+      "description": "The specific pick/selection"
+    },
+    "odds": {
+      "type": "string",
+      "description": "Betting odds (e.g., -110, +150)"
+    },
+    "reasoning": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Analysis and reasoning for the pick"
+    },
+    "weather": {
+      "type": "object",
+      "description": "Weather conditions affecting the game",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "description": "Temperature in Fahrenheit"
+        },
+        "conditions": {
+          "type": "string",
+          "description": "Weather conditions (e.g., Clear, Rain, Windy)"
+        },
+        "windSpeed": {
+          "type": "number",
+          "description": "Wind speed in mph"
+        },
+        "humidity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Humidity percentage"
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional additional notes or context"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of message creation"
+    }
+  },
+  "additionalProperties": false
+} 
