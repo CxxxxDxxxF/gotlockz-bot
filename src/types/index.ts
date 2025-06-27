@@ -205,4 +205,59 @@ export interface VIPPlayCounter {
   date: string; // YYYY-MM-DD format
   count: number;
   lastReset: string; // ISO 8601 timestamp
-} 
+}
+
+/**
+ * Free Play Message Schema
+ * Structured format for free play betting analysis output
+ */
+export interface FreePlayMessage {
+  channel: 'free_plays';
+  timestamp: string; // ISO 8601 date-time
+  playType: 'FREE_PLAY';
+  game: {
+    away: string;
+    home: string;
+    startTime: string; // ISO 8601 date-time
+  };
+  bet: {
+    selection: string; // Player or team picked
+    market: string; // Bet description (e.g. "Under 1.5 ER")
+    odds: number; // Signed odds, e.g. -140 or +347
+  };
+  analysis: string; // Full multi-paragraph hype-driven analysis text
+  assets?: {
+    imageUrl?: string; // URL or attachment ID of the bet-slip image
+  };
+}
+
+/**
+ * Lotto Ticket Message Schema
+ * Structured format for parlay/lotto ticket betting analysis output
+ */
+export interface LottoTicketMessage {
+  channel: 'lotto_ticket';
+  timestamp: string; // ISO 8601 date-time
+  ticketType: 'LOTTO_TICKET';
+  games: Array<{
+    away: string;
+    home: string;
+    startTime: string; // ISO 8601 date-time
+  }>;
+  legs: Array<{
+    selection: string; // Player or team picked
+    market: string; // Bet description
+    odds: number; // Signed odds
+  }>;
+  parlayOdds: number; // Combined parlay odds
+  notes?: string; // Optional notes about the ticket
+  analysis: string; // Full multi-paragraph hype-driven analysis text
+  assets?: {
+    imageUrl?: string; // URL or attachment ID of the bet-slip image
+  };
+}
+
+/**
+ * Union type for all message types
+ */
+export type BettingMessage = VIPPlayMessage | FreePlayMessage | LottoTicketMessage; 

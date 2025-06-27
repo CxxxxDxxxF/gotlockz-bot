@@ -2,13 +2,39 @@
   "commands": [
     {
       "name": "pick",
-      "description": "Analyze a bet slip and provide VIP play analysis",
+      "description": "Analyze a bet slip and provide structured betting analysis",
       "options": [
+        {
+          "name": "channel_type",
+          "description": "Type of betting play to post",
+          "type": "STRING",
+          "required": true,
+          "choices": [
+            {
+              "name": "VIP Play",
+              "value": "vip_plays"
+            },
+            {
+              "name": "Free Play",
+              "value": "free_plays"
+            },
+            {
+              "name": "Lotto Ticket",
+              "value": "lotto_ticket"
+            }
+          ]
+        },
         {
           "name": "image",
           "description": "Bet slip image to analyze",
           "type": "ATTACHMENT",
           "required": true
+        },
+        {
+          "name": "notes",
+          "description": "Additional notes (optional, mainly for lotto tickets)",
+          "type": "STRING",
+          "required": false
         }
       ]
     },

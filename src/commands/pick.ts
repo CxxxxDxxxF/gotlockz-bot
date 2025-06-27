@@ -11,18 +11,41 @@ import { analyzeImage } from '../services/ocrService';
 import { getGameData } from '../services/mlbService';
 import { getForecast } from '../services/weatherService';
 import { allow } from '../utils/rateLimiter';
-import { createVIPPlayMessage, formatVIPPlayForDiscord, validateVIPPlayMessage } from '../services/vipPlayService';
+import { 
+  createVIPPlayMessage, 
+  createFreePlayMessage, 
+  createLottoTicketMessage,
+  validateBettingMessage,
+  formatBettingMessageForDiscord 
+} from '../services/bettingMessageService';
 import { parseBetSlip } from '../utils/parser';
 import { generateAnalysis } from '../services/analysisService';
 
 export const data = new SlashCommandBuilder()
   .setName('pick')
-  .setDescription('Analyze a bet slip and provide VIP play analysis')
+  .setDescription('Analyze a bet slip and provide structured betting analysis')
+  .addStringOption(option =>
+    option
+      .setName('channel_type')
+      .setDescription('Type of betting play to post')
+      .setRequired(true)
+      .addChoices(
+        { name: 'VIP Play', value: 'vip_plays' },
+        { name: 'Free Play', value: 'free_plays' },
+        { name: 'Lotto Ticket', value: 'lotto_ticket' }
+      )
+  )
   .addAttachmentOption(option =>
     option
       .setName('image')
       .setDescription('Bet slip image to analyze')
       .setRequired(true)
+  )
+  .addStringOption(option =>
+    option
+      .setName('notes')
+      .setDescription('Additional notes (optional, mainly for lotto tickets)')
+      .setRequired(false)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -34,7 +57,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       return await interaction.editReply('⏰ Rate limit exceeded. Please wait before making another pick.');
     }
     
+    const channelType = interaction.options.getString('channel_type', true);
     const image = interaction.options.getAttachment('image');
+    const notes = interaction.options.getString('notes');
+    
     if (!image) {
       return await interaction.editReply('❌ Please provide a bet slip image.');
     }
@@ -60,19 +86,40 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     const edge = 0.05; // Default edge calculation
     const analysis = await generateAnalysis(betSlip, gameData, edge, weather);
     
-    // Create structured VIP Play message
-    const vipMessage = await createVIPPlayMessage(betSlip, gameData, analysis, image.url);
+    // Create structured betting message based on channel type
+    let bettingMessage;
+    let content = '';
+    
+    switch (channelType) {
+      case 'vip_plays':
+        bettingMessage = await createVIPPlayMessage(betSlip, gameData, analysis, image.url);
+        content = `🎯 **VIP Play #${bettingMessage.playNumber}** - GotLockz Family, let's get this bread! 💰`;
+        break;
+        
+      case 'free_plays':
+        bettingMessage = await createFreePlayMessage(betSlip, gameData, analysis, image.url);
+        content = `🎁 **Free Play is Here!** - GotLockz Family, enjoy this one on us! 🎉`;
+        break;
+        
+      case 'lotto_ticket':
+        bettingMessage = await createLottoTicketMessage(betSlip, gameData, analysis, image.url, notes || undefined);
+        content = `🎰 **Lotto Ticket Alert!** - GotLockz Family, let's hit the jackpot! 🚀`;
+        break;
+        
+      default:
+        return await interaction.editReply('❌ Invalid channel type selected.');
+    }
     
     // Validate the message
-    if (!validateVIPPlayMessage(vipMessage)) {
-      return await interaction.editReply('❌ Failed to create valid VIP Play message.');
+    if (!validateBettingMessage(bettingMessage)) {
+      return await interaction.editReply('❌ Failed to create valid betting message.');
     }
     
     // Format for Discord
-    const embed = formatVIPPlayForDiscord(vipMessage);
+    const embed = formatBettingMessageForDiscord(bettingMessage);
     
     return await interaction.editReply({
-      content: `🎯 **VIP Play #${vipMessage.playNumber}** - GotLockz Family, let's get this bread! 💰`,
+      content,
       embeds: [embed]
     });
   } catch (err: any) {
