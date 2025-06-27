@@ -15,7 +15,7 @@ async def test_new_scraper():
     print("=== Testing New MLB Scraper ===")
     
     try:
-        from src.bot.services.mlb_scraper import MLBScraper
+        from bot.services.mlb_scraper import MLBScraper
         
         start_time = time.time()
         scraper = MLBScraper()

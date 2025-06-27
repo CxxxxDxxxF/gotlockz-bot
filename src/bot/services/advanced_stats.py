@@ -11,7 +11,7 @@ import os
 
 from bot.services.statcast import StatcastService
 from bot.services.weather import WeatherService
-from src.bot.utils import kelly_fraction
+from bot.utils import kelly_fraction
 
 logger = logging.getLogger(__name__)
 

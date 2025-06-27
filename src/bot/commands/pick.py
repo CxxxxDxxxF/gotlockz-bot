@@ -346,7 +346,7 @@ class PickCommand(commands.Cog):
             )
             message = await ctx.send(embed=embed)
             
-            player_stats = await self.player_service.get_player_stats(player_name)
+            player_stats = await self.player_service.analyze_player_stats(player_name)
             
             if not player_stats:
                 embed = discord.Embed(

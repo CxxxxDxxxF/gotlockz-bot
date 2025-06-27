@@ -6,9 +6,9 @@ import asyncio
 import logging
 from typing import Dict, Any
 
-from src.bot.services.mlb_scraper import MLBScraper
-from src.bot.services.weather_impact import WeatherImpactService
-from src.bot.services.player_analytics import PlayerAnalyticsService
+from bot.services.mlb_scraper import MLBScraper
+from bot.services.weather_impact import WeatherImpactService
+from bot.services.player_analytics import PlayerAnalyticsService
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

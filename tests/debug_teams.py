@@ -4,7 +4,7 @@ Debug script to test team data fetching
 """
 import asyncio
 import logging
-from src.bot.services.mlb_scraper import MLBScraper
+from bot.services.mlb_scraper import MLBScraper
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

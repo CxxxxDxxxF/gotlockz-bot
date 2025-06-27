@@ -9,8 +9,8 @@ from pathlib import Path
 # Add src to path
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from src.config.settings import settings
-from src.bot.main import GotLockzBot
+from config.settings import settings
+from bot.main import GotLockzBot
 
 # Configure logging
 logging.basicConfig(

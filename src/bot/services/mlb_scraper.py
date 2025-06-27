@@ -97,12 +97,15 @@ class MLBScraper:
             team2_stats = results[1] if not isinstance(results[1], Exception) else {}
             team1_weather = results[2] if not isinstance(results[2], Exception) else {}
             team2_weather = results[3] if not isinstance(results[3], Exception) else {}
-            live_scores = (results[4] if not isinstance(results[4], Exception)
-                           and isinstance(results[4], list) else [])
+            live_scores = (
+                results[4] if not isinstance(results[4], Exception)
+                and isinstance(results[4], list) else []
+            )
 
             # Check if teams are playing today
-            today_game = self._find_today_game(live_scores, team1_info['abbr'],
-                team2_info['abbr'])
+            today_game = self._find_today_game(
+                live_scores, team1_info['abbr'], team2_info['abbr']
+            )
 
             total_time = time.time() - start_time
 
@@ -132,26 +135,26 @@ class MLBScraper:
     async def _get_team_stats(self, team_id: int) -> Dict[str, Any]:
         """Get team statistics from MLB API, merging standings and stats endpoints."""
         cache_key = f"team_stats_{team_id}"
-        
+
         # Check cache first
         cached_data = self._get_cached_team_stats(cache_key)
         if cached_data:
             return cached_data
-            
+
         try:
             current_year = datetime.now().year
-            
+
             # Get standings and stats
             standings = await self._get_team_standings(team_id, current_year)
             stats = await self._fetch_team_stats_with_fallback(team_id, current_year)
-            
+
             # Merge and handle edge cases
             merged = self._merge_team_data(standings, stats, current_year)
-            
+
             # Cache the result
             self.cache[cache_key] = (time.time(), merged)
             return merged
-            
+
         except Exception as e:
             logger.error(f"Error getting team stats: {e}")
             return {'note': f'Error fetching stats: {e}'}
@@ -168,7 +171,7 @@ class MLBScraper:
         """Fetch team stats with fallback to previous year if needed."""
         # Try current year first
         stats = await self._fetch_team_stats(team_id, current_year)
-        
+
         # Fallback to previous year if no stats or offseason
         if self._should_fallback_to_previous_year(stats):
             stats = await self._fetch_team_stats(team_id, current_year - 1)
@@ -176,7 +179,7 @@ class MLBScraper:
                 stats['note'] = 'Using previous season data (offseason).'
             else:
                 stats = {'note': 'No stats found for current or previous season.'}
-        
+
         return stats
 
     async def _fetch_team_stats(self, team_id: int, season: int) -> Dict[str, Any]:
@@ -187,7 +190,7 @@ class MLBScraper:
             'group': 'hitting',
             'stats': 'season'
         }
-        
+
         async with self.session.get(url, params=params) as response:
             if response.status == 200:
                 data = await response.json()
@@ -198,24 +201,24 @@ class MLBScraper:
         """Determine if we should fallback to previous year data."""
         return not stats or stats.get('games_played', 0) == 0
 
-    def _merge_team_data(self, standings: Dict[str, Any], stats: Dict[str, Any], 
-                        current_year: int) -> Dict[str, Any]:
+    def _merge_team_data(self, standings: Dict[str, Any], stats: Dict[str, Any],
+                         current_year: int) -> Dict[str, Any]:
         """Merge standings and stats data, handling offseason cases."""
         merged = {**standings, **stats}
-        
+
         # Handle offseason case
         if self._is_offseason_data(merged):
             if current_year == datetime.now().year:
                 merged['note'] = 'Offseason - no current season data available.'
             else:
                 merged['note'] = 'No data available for this season.'
-        
+
         return merged
 
     def _is_offseason_data(self, data: Dict[str, Any]) -> bool:
         """Check if the data indicates offseason (no games played and no wins)."""
-        return (not data or 
-                (data.get('games_played', 0) == 0 and data.get('wins', 0) == 0))
+        return (not data
+                or (data.get('games_played', 0) == 0 and data.get('wins', 0) == 0))
 
     async def _get_team_standings(self, team_id: int, season: int) -> Dict[str, Any]:
         """Get win/loss records from MLB standings endpoint."""
@@ -225,10 +228,12 @@ class MLBScraper:
                 'leagueId': '103,104',  # AL and NL
                 'season': season,
                 'standingsTypes': 'regularSeason',
-                'fields': ('records,team,id,name,wins,losses,runDifferential,'
-                           'divisionRank,leagueRank,divisionGamesBack,'
-                           'leagueGamesBack,elimNumber,clinched,divisionRecord,'
-                           'leagueRecord,home,away')
+                'fields': (
+                    'records,team,id,name,wins,losses,runDifferential,'
+                    'divisionRank,leagueRank,divisionGamesBack,'
+                    'leagueGamesBack,elimNumber,clinched,divisionRecord,'
+                    'leagueRecord,home,away'
+                )
             }
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
@@ -281,7 +286,8 @@ class MLBScraper:
                     weather_data = data.get('weather', [{}])
                     assert main_data is not None, "Expected non-None data before calling .get()"
                     assert wind_data is not None, "Expected non-None data before calling .get()"
-                    assert weather_data is not None and len(weather_data) > 0, "Expected non-None data before calling .get()"
+                    assert (weather_data is not None
+                            and len(weather_data) > 0), "Expected non-None data before calling .get()"
                     return {
                         'temperature': main_data.get('temp'),
                         'humidity': main_data.get('humidity'),
