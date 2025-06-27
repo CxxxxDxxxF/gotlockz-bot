@@ -44,4 +44,28 @@ export async function generateAnalysis(
   const analysis = res.choices[0]?.message?.content?.trim() || '';
   cache.set(key, { timestamp: now, text: analysis });
   return analysis;
+}
+
+export function buildPrompt(
+  betSlip: any,
+  gameData: any,
+  edge: number,
+  weather: any
+): string {
+  return `
+  You are a hype-driven sports analyst. Given the following bet slip, game data, edge calculation, and weather, write a persuasive multi-paragraph analysis:
+  
+  Bet Slip:
+  ${JSON.stringify(betSlip, null, 2)}
+
+  Game Data:
+  ${JSON.stringify(gameData, null, 2)}
+
+  Calculated Edge: ${edge.toFixed(2)}%
+
+  Weather Data:
+  ${JSON.stringify(weather, null, 2)}
+
+  Use current date and maintain a confident, stat-backed, hype tone.
+  `;
 } 

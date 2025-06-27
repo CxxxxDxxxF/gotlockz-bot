@@ -4,6 +4,7 @@ import { data as pickData, execute as pickExecute } from './commands/pick';
 import { data as adminData, execute as adminExecute } from './commands/admin';
 import express from 'express';
 
+// Deployment test - verifying environment variables and health endpoint
 const { DISCORD_BOT_TOKEN } = getEnv();
 const CLIENT_ID = process.env['DISCORD_CLIENT_ID'] || '';
 const GUILD_ID = process.env['DISCORD_GUILD_ID'] || '';

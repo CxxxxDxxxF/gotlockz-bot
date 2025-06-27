@@ -6,102 +6,77 @@
  *   - image (attachment, required): Betting slip image
  *   - description (string, optional): Additional notes
  */
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { analyzeImage } from '../services/ocrService';
 import { getGameData } from '../services/mlbService';
-import { calculateEdge } from '../services/bettingService';
-import { generateAnalysis } from '../services/analysisService';
 import { getForecast } from '../services/weatherService';
 import { allow } from '../utils/rateLimiter';
+import { createVIPPlayMessage, formatVIPPlayForDiscord, validateVIPPlayMessage } from '../services/vipPlayService';
+import { parseBetSlip } from '../utils/parser';
+import { generateAnalysis } from '../services/analysisService';
 
 export const data = new SlashCommandBuilder()
   .setName('pick')
-  .setDescription('Post a betting pick with image analysis and AI')
-  .addStringOption(option =>
-    option.setName('channel_type')
-      .setDescription('Type of pick to post')
-      .setRequired(true)
-      .addChoices(
-        { name: 'Free Play', value: 'free_play' },
-        { name: 'VIP Pick', value: 'vip_pick' },
-        { name: 'Lotto Ticket', value: 'lotto_ticket' }
-      )
-  )
+  .setDescription('Analyze a bet slip and provide VIP play analysis')
   .addAttachmentOption(option =>
-    option.setName('image')
-      .setDescription('Betting slip image')
+    option
+      .setName('image')
+      .setDescription('Bet slip image to analyze')
       .setRequired(true)
-  )
-  .addStringOption(option =>
-    option.setName('description')
-      .setDescription('Additional notes (optional)')
-      .setRequired(false)
   );
-
-function mapOcrToBetSlip(ocr: any): any {
-  // TODO: Map OCRResult to BetSlip (stub)
-  return {
-    gameId: '123',
-    teams: ['Team A', 'Team B'],
-    bet_type: 'ML',
-    odds: '+120',
-    stake: '100',
-    potential_win: '220',
-    confidence: ocr.confidence || 0.8,
-    timestamp: new Date(),
-    bookmaker: 'StubBook',
-  };
-}
-
-function buildPickEmbed(betSlip: any, gameData: any, edge: number, weather: any) {
-  const color = edge > 5 ? '#00ff00' : edge > 2 ? '#ffff00' : '#ff0000'; // Green/Yellow/Red based on edge
-  
-  return new EmbedBuilder()
-    .setTitle('🏈 Betting Pick')
-    .setColor(color)
-    .setDescription(`**${betSlip.teams.join(' vs ')}**\nOdds: ${betSlip.odds} | Edge: ${edge.toFixed(2)}%`)
-    .addFields(
-      { name: '📊 Game', value: betSlip.gameId, inline: true },
-      { name: '💰 Stake', value: betSlip.stake, inline: true },
-      { name: '🎯 Potential Win', value: betSlip.potential_win, inline: true },
-      { name: '🏪 Bookmaker', value: betSlip.bookmaker, inline: true },
-      { name: '🌤️ Weather', value: `${weather?.description || 'N/A'}, ${weather?.temperature || 'N/A'}°F`, inline: true }
-    )
-    .setTimestamp();
-}
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   try {
+    await interaction.deferReply();
+    
     // Rate limiting check
     if (!allow(interaction.user.id)) {
-      return await interaction.reply({ 
-        content: '⏰ Please wait a bit before requesting another analysis.', 
-        ephemeral: true 
-      });
+      return await interaction.editReply('⏰ Rate limit exceeded. Please wait before making another pick.');
     }
-
+    
     const image = interaction.options.getAttachment('image');
-    if (!image) return await interaction.reply({ content: 'No image provided.', ephemeral: true });
+    if (!image) {
+      return await interaction.editReply('❌ Please provide a bet slip image.');
+    }
     
+    // Extract text from image
     const imageBuffer = await fetch(image.url).then(res => res.arrayBuffer()).then(buf => Buffer.from(buf));
-    const ocrResult = await analyzeImage(imageBuffer);
-    const betSlip = mapOcrToBetSlip(ocrResult);
-    const gameData = await getGameData(betSlip.gameId);
-    const weather = await getForecast('New York'); // Fallback location for now
-    const edge = calculateEdge(betSlip);
-    const analysisText = await generateAnalysis(betSlip, gameData, edge, weather);
+    const ocrLines = await analyzeImage(imageBuffer);
     
-    return await interaction.reply({
-      embeds: [
-        buildPickEmbed(betSlip, gameData, edge, weather),
-        new EmbedBuilder()
-          .setTitle('🤖 GPT Analysis')
-          .setDescription(analysisText)
-          .setColor('#0099ff')
-          .setTimestamp()
-      ]
+    // Parse bet slip
+    const betSlip = await parseBetSlip(ocrLines);
+    if (!betSlip) {
+      return await interaction.editReply('❌ Could not parse bet slip. Please check the image quality.');
+    }
+    
+    // Get game data
+    const gameData = await getGameData(betSlip.legs[0]?.gameId || '');
+    if (!gameData) {
+      return await interaction.editReply('❌ Could not fetch game data. Please try again.');
+    }
+    
+    // Get weather data
+    const weather = await getForecast('New York'); // Fallback location for now
+    const edge = 0.05; // Default edge calculation
+    const analysis = await generateAnalysis(betSlip, gameData, edge, weather);
+    
+    // Create structured VIP Play message
+    const vipMessage = await createVIPPlayMessage(betSlip, gameData, analysis, image.url);
+    
+    // Validate the message
+    if (!validateVIPPlayMessage(vipMessage)) {
+      return await interaction.editReply('❌ Failed to create valid VIP Play message.');
+    }
+    
+    // Format for Discord
+    const embed = formatVIPPlayForDiscord(vipMessage);
+    
+    return await interaction.editReply({
+      content: `🎯 **VIP Play #${vipMessage.playNumber}** - GotLockz Family, let's get this bread! 💰`,
+      embeds: [embed]
     });
   } catch (err: any) {
-    return await interaction.reply({ content: `Error: ${err.message || err}`, ephemeral: true });
+    console.error('Error in pick command:', err);
+    return await interaction.editReply(`❌ An error occurred: ${err.message}`);
   }
 } 

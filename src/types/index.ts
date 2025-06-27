@@ -171,4 +171,38 @@ export interface SystemStatus {
   warnings: string[];
   criticals: string[];
   metrics: SystemMetrics;
+}
+
+/**
+ * VIP Play Message Schema
+ * Structured format for betting analysis output
+ */
+export interface VIPPlayMessage {
+  channel: 'vip_plays';
+  timestamp: string; // ISO 8601 date-time
+  playNumber: number; // Sequential VIP play number for the day
+  game: {
+    away: string;
+    home: string;
+    startTime: string; // ISO 8601 date-time
+  };
+  bet: {
+    selection: string; // Player or team picked
+    market: string; // Bet description (e.g. "Under 1.5 ER")
+    odds: number; // Signed odds, e.g. -140 or +347
+    unitSize: number; // Units staked, e.g. 10.5
+  };
+  analysis: string; // Full multi-paragraph hype-driven analysis text
+  assets?: {
+    imageUrl?: string; // URL or attachment ID of the bet-slip image
+  };
+}
+
+/**
+ * VIP Play Counter for tracking daily play numbers
+ */
+export interface VIPPlayCounter {
+  date: string; // YYYY-MM-DD format
+  count: number;
+  lastReset: string; // ISO 8601 timestamp
 } 
