@@ -50,12 +50,46 @@ export async function parseBetSlip(textLines: string[]): Promise<BetSlip> {
       }
     }
   } else {
-    // Parse single bet
-    const singleMatch = text.match(/([^+]+)\s*\+\s*(\d+)/);
-    console.log('🎲 Single bet match:', singleMatch);
-    if (singleMatch) {
-      const leg = parseLeg(singleMatch[0]);
-      if (leg) legs.push(leg);
+    // Parse single bet - try multiple patterns
+    console.log('🎲 Trying single bet patterns...');
+    
+    // Pattern 1: "Team A vs Team B +150"
+    let singleMatch = text.match(/([A-Z\s]+)\s+VS\s+([A-Z\s]+)\s*\+\s*(\d+)/i);
+    if (singleMatch && singleMatch[1] && singleMatch[2] && singleMatch[3]) {
+      console.log('✅ Pattern 1 match:', singleMatch);
+      const leg = {
+        gameId: `${singleMatch[1].trim()}_${singleMatch[2].trim()}_${Date.now()}`,
+        teamA: singleMatch[1].trim(),
+        teamB: singleMatch[2].trim(),
+        odds: parseInt(singleMatch[3])
+      };
+      legs.push(leg);
+    } else {
+      // Pattern 2: "Team A @ Team B +150"
+      singleMatch = text.match(/([A-Z\s]+)\s+@\s+([A-Z\s]+)\s*\+\s*(\d+)/i);
+      if (singleMatch && singleMatch[1] && singleMatch[2] && singleMatch[3]) {
+        console.log('✅ Pattern 2 match:', singleMatch);
+        const leg = {
+          gameId: `${singleMatch[1].trim()}_${singleMatch[2].trim()}_${Date.now()}`,
+          teamA: singleMatch[1].trim(),
+          teamB: singleMatch[2].trim(),
+          odds: parseInt(singleMatch[3])
+        };
+        legs.push(leg);
+      } else {
+        // Pattern 3: "Team A +150" (just team and odds)
+        singleMatch = text.match(/([A-Z\s]+)\s*\+\s*(\d+)/i);
+        if (singleMatch && singleMatch[1] && singleMatch[2]) {
+          console.log('✅ Pattern 3 match:', singleMatch);
+          const leg = {
+            gameId: `${singleMatch[1].trim()}_TBD_${Date.now()}`,
+            teamA: singleMatch[1].trim(),
+            teamB: 'TBD',
+            odds: parseInt(singleMatch[2])
+          };
+          legs.push(leg);
+        }
+      }
     }
   }
   
@@ -73,7 +107,7 @@ export async function parseBetSlip(textLines: string[]): Promise<BetSlip> {
     }
   }
   
-  const result = {
+  const result: BetSlip = {
     legs,
     units,
     type: legs.length > 1 ? 'PARLAY' : 'SINGLE'
@@ -87,9 +121,14 @@ export async function parseBetSlip(textLines: string[]): Promise<BetSlip> {
  * Parse a single leg from text
  */
 function parseLeg(legText: string): BetLeg | null {
+  console.log('🔍 Parsing leg text:', legText);
+  
   // Match pattern: "Team A + Team B +150" or "Team A vs Team B +150"
   const match = legText.match(/([^+]+?)\s*(?:\+|\svs\s)\s*([^+]+?)\s*\+\s*(\d+)/);
-  if (!match || !match[1] || !match[2] || !match[3]) return null;
+  if (!match || !match[1] || !match[2] || !match[3]) {
+    console.log('❌ No match found for leg pattern');
+    return null;
+  }
   
   const teamA = match[1].trim();
   const teamB = match[2].trim();
@@ -98,12 +137,15 @@ function parseLeg(legText: string): BetLeg | null {
   // Generate a game ID based on team names (will be looked up later)
   const gameId = `${teamA}_${teamB}_${Date.now()}`;
   
-  return {
+  const leg = {
     gameId,
     teamA,
     teamB,
     odds
   };
+  
+  console.log('✅ Leg parsed:', leg);
+  return leg;
 }
 
 /**
