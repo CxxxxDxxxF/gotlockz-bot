@@ -8,15 +8,14 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import discord
-from discord import app_commands
-from discord.ext import commands
-
 from bot.services.analysis import AnalysisService
 from bot.services.mlb_integrated_service import MLBIntegratedService
 from bot.services.ocr import OCRService
 from bot.services.player_analytics import PlayerAnalyticsService
 from bot.services.templates import TemplateService
 from bot.services.weather_impact import WeatherImpactService
+from discord import app_commands
+from discord.ext import commands
 
 logger = logging.getLogger(__name__)
 
@@ -115,13 +114,15 @@ class PickCommands(app_commands.Group):
             assert bet_data is not None, "Expected non-None data before calling .get()"
             if bet_data.get("teams", ["TBD", "TBD"])[0] == "TBD" or bet_data.get("teams", ["TBD", "TBD"])[1] == "TBD":
                 await interaction.followup.send(
-                    "❌ Could not extract teams from the bet slip. Please ensure the image is clear and the team names are visible.",
+                    "❌ Could not extract teams from the bet slip. "
+                    "Please ensure the image is clear and the team names are visible.",
                     ephemeral=True,
                 )
                 return
             if bet_data.get("description", "TBD") == "TBD":
                 await interaction.followup.send(
-                    "❌ Could not extract bet description from the slip. Please ensure the bet type (e.g., Over/Under) is visible.",
+                    "❌ Could not extract bet description from the slip. "
+                    "Please ensure the bet type (e.g., Over/Under) is visible.",
                     ephemeral=True,
                 )
                 return
@@ -592,7 +593,11 @@ class PickCommand(commands.Cog):
         if betting_implications:
             bet_text = ""
             for bet_type, data in betting_implications.items():
-                bet_text += f"• **{bet_type.replace('_', ' ').title()}**: {data.get('adjustment', '0%')} - {data.get('recommendation', 'Neutral')}\n"
+                bet_text += (
+                    f"• **{bet_type.replace('_', ' ').title()}**: "
+                    f"{data.get('adjustment', '0%')} - "
+                    f"{data.get('recommendation', 'Neutral')}\n"
+                )
 
             embed.add_field(name="💰 Betting Implications", value=bet_text, inline=False)
 

@@ -6,10 +6,11 @@ import asyncio
 import logging
 import os
 import platform
-import psutil
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SystemMetrics:
     """System performance metrics."""
+
     cpu_percent: float
     memory_percent: float
     memory_used_gb: float
@@ -103,7 +105,7 @@ class SystemMonitor:
             memory_total_gb = memory.total / (1024**3)
 
             # Disk usage
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
             disk_usage_percent = disk.percent
 
             # Network usage
@@ -122,7 +124,7 @@ class SystemMonitor:
                 disk_usage_percent=disk_usage_percent,
                 network_sent_mb=network_sent_mb,
                 network_recv_mb=network_recv_mb,
-                temperature_celsius=temperature
+                temperature_celsius=temperature,
             )
 
         except Exception as e:
@@ -135,7 +137,7 @@ class SystemMonitor:
                 memory_total_gb=0.0,
                 disk_usage_percent=0.0,
                 network_sent_mb=0.0,
-                network_recv_mb=0.0
+                network_recv_mb=0.0,
             )
 
     async def _get_temperature(self) -> Optional[float]:
@@ -158,9 +160,7 @@ class SystemMonitor:
         try:
             # Use iStats if available, otherwise return None
             result = await asyncio.create_subprocess_exec(
-                "istats", "cpu", "temp",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                "istats", "cpu", "temp", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await result.communicate()
 
@@ -181,12 +181,12 @@ class SystemMonitor:
             temp_files = [
                 "/sys/class/thermal/thermal_zone0/temp",
                 "/sys/class/hwmon/hwmon0/temp1_input",
-                "/proc/acpi/thermal_zone/THM0/temperature"
+                "/proc/acpi/thermal_zone/THM0/temperature",
             ]
 
             for temp_file in temp_files:
                 if os.path.exists(temp_file):
-                    with open(temp_file, 'r') as f:
+                    with open(temp_file, "r") as f:
                         temp_raw = f.read().strip()
                         # Convert from millidegrees to degrees
                         return float(temp_raw) / 1000.0
@@ -276,13 +276,10 @@ class SystemMonitor:
                 "memory_total_gb": metrics.memory_total_gb,
                 "disk_usage_percent": metrics.disk_usage_percent,
                 "temperature_celsius": metrics.temperature_celsius,
-                "timestamp": metrics.timestamp.isoformat()
+                "timestamp": metrics.timestamp.isoformat(),
             },
-            "averages": {
-                "cpu_percent": avg_cpu,
-                "memory_percent": avg_memory
-            },
-            "status": "healthy" if metrics.cpu_percent < 80 and metrics.memory_percent < 85 else "warning"
+            "averages": {"cpu_percent": avg_cpu, "memory_percent": avg_memory},
+            "status": "healthy" if metrics.cpu_percent < 80 and metrics.memory_percent < 85 else "warning",
         }
 
     def is_system_healthy(self) -> bool:
@@ -293,11 +290,15 @@ class SystemMonitor:
         metrics = self.last_metrics
 
         # Check if any critical thresholds are exceeded
-        if (metrics.cpu_percent >= self.critical_thresholds["cpu_percent"] or
-                metrics.memory_percent >= self.critical_thresholds["memory_percent"] or
-                metrics.disk_usage_percent >= self.critical_thresholds["disk_usage_percent"] or
-                (metrics.temperature_celsius and
-                 metrics.temperature_celsius >= self.critical_thresholds["temperature_celsius"])):
+        if (
+            metrics.cpu_percent >= self.critical_thresholds["cpu_percent"]
+            or metrics.memory_percent >= self.critical_thresholds["memory_percent"]
+            or metrics.disk_usage_percent >= self.critical_thresholds["disk_usage_percent"]
+            or (
+                metrics.temperature_celsius
+                and metrics.temperature_celsius >= self.critical_thresholds["temperature_celsius"]
+            )
+        ):
             return False
 
         return True

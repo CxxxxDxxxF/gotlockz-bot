@@ -8,7 +8,6 @@ import random
 from typing import Any, Dict, Optional
 
 import openai
-
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -73,19 +72,25 @@ class AnalysisService:
             - Record: {team1_stats.get('wins', 0)}-{team1_stats.get('losses', 0)} ({team1_stats.get('win_pct', 0):.3f})
             - Runs: {team1_stats.get('runs_scored', 0)} scored, {team1_stats.get('runs_allowed', 0)} allowed
             - Run Differential: {team1_stats.get('run_diff', 0)}
-            - Batting: .{team1_stats.get('avg', 0):.3f} AVG, .{team1_stats.get('obp', 0):.3f} OBP, .{team1_stats.get('slg', 0):.3f} SLG
+            - Batting: .{team1_stats.get('avg', 0):.3f} AVG, .{team1_stats.get('obp', 0):.3f} OBP, \
+              .{team1_stats.get('slg', 0):.3f} SLG
             - Pitching: {team1_stats.get('era', 0):.2f} ERA, {team1_stats.get('whip', 0):.2f} WHIP
-            - Recent: {team1_stats.get('recent_wins', 0)}-{team1_stats.get('recent_losses', 0)} last {team1_stats.get('recent_games', 0)} games
-            - Recent Avg: {team1_stats.get('avg_runs_scored', 0)} scored, {team1_stats.get('avg_runs_allowed', 0)} allowed
+            - Recent: {team1_stats.get('recent_wins', 0)}-{team1_stats.get('recent_losses', 0)} last \
+              {team1_stats.get('recent_games', 0)} games
+            - Recent Avg: {team1_stats.get('avg_runs_scored', 0)} scored, \
+              {team1_stats.get('avg_runs_allowed', 0)} allowed
             
             {teams[1]}:
             - Record: {team2_stats.get('wins', 0)}-{team2_stats.get('losses', 0)} ({team2_stats.get('win_pct', 0):.3f})
             - Runs: {team2_stats.get('runs_scored', 0)} scored, {team2_stats.get('runs_allowed', 0)} allowed
             - Run Differential: {team2_stats.get('run_diff', 0)}
-            - Batting: .{team2_stats.get('avg', 0):.3f} AVG, .{team2_stats.get('obp', 0):.3f} OBP, .{team2_stats.get('slg', 0):.3f} SLG
+            - Batting: .{team2_stats.get('avg', 0):.3f} AVG, .{team2_stats.get('obp', 0):.3f} OBP, \
+              .{team2_stats.get('slg', 0):.3f} SLG
             - Pitching: {team2_stats.get('era', 0):.2f} ERA, {team2_stats.get('whip', 0):.2f} WHIP
-            - Recent: {team2_stats.get('recent_wins', 0)}-{team2_stats.get('recent_losses', 0)} last {team2_stats.get('recent_games', 0)} games
-            - Recent Avg: {team2_stats.get('avg_runs_scored', 0)} scored, {team2_stats.get('avg_runs_allowed', 0)} allowed
+            - Recent: {team2_stats.get('recent_wins', 0)}-{team2_stats.get('recent_losses', 0)} last \
+              {team2_stats.get('recent_games', 0)} games
+            - Recent Avg: {team2_stats.get('avg_runs_scored', 0)} scored, \
+              {team2_stats.get('avg_runs_allowed', 0)} allowed
             """
 
                 # Add Statcast data if available
@@ -99,12 +104,16 @@ class AnalysisService:
             Statcast Data (Last 30 Days):
             
             {teams[0]}:
-            - Batting: {team1_statcast.get('batting', {}).get('avg_exit_velocity', 0)} mph exit velo, {team1_statcast.get('batting', {}).get('barrel_pct', 0)}% barrel rate
-            - Pitching: {team1_statcast.get('pitching', {}).get('avg_velocity', 0)} mph avg velo, {team1_statcast.get('pitching', {}).get('whiff_pct', 0)}% whiff rate
+            - Batting: {team1_statcast.get('batting', {}).get('avg_exit_velocity', 0)} mph exit velo, \
+              {team1_statcast.get('batting', {}).get('barrel_pct', 0)}% barrel rate
+            - Pitching: {team1_statcast.get('pitching', {}).get('avg_velocity', 0)} mph avg velo, \
+              {team1_statcast.get('pitching', {}).get('whiff_pct', 0)}% whiff rate
             
             {teams[1]}:
-            - Batting: {team2_statcast.get('batting', {}).get('avg_exit_velocity', 0)} mph exit velo, {team2_statcast.get('batting', {}).get('barrel_pct', 0)}% barrel rate
-            - Pitching: {team2_statcast.get('pitching', {}).get('avg_velocity', 0)} mph avg velo, {team2_statcast.get('pitching', {}).get('whiff_pct', 0)}% whiff rate
+            - Batting: {team2_statcast.get('batting', {}).get('avg_exit_velocity', 0)} mph exit velo, \
+              {team2_statcast.get('batting', {}).get('barrel_pct', 0)}% barrel rate
+            - Pitching: {team2_statcast.get('pitching', {}).get('avg_velocity', 0)} mph avg velo, \
+              {team2_statcast.get('pitching', {}).get('whiff_pct', 0)}% whiff rate
             """
 
                 if park_factors:
@@ -275,7 +284,7 @@ Context:
                 elif abs(team1_recent - team2_recent) < 0.1:
                     reasoning.append("Teams performing similarly recently")
 
-            return f"Risk Assessment: {risk_level}\nReasoning: {'; '.join(reasoning) if reasoning else 'Standard MLB betting risk'}"
+            return f"Risk Assessment: {risk_level}\nReasoning: {' ; '.join(reasoning) if reasoning else 'Standard MLB betting risk'}"
 
         except Exception as e:
             logger.error(f"Error generating risk assessment: {e}")

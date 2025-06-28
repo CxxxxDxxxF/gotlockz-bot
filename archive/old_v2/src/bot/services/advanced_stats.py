@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 import pandas as pd
-
 from bot.services.statcast import StatcastService
 from bot.services.weather import WeatherService
 from bot.utils import kelly_fraction

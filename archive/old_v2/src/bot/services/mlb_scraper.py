@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-
 from bot.utils.performance_limiter import rate_limit, safe_operation
 
 logger = logging.getLogger(__name__)

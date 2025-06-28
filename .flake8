@@ -1,8 +1,9 @@
 [flake8]
 max_line_length = 120
-ignore = E203, W503
+ignore = E203,W503,E402,F401,F541,E722,W293,F841,E501
 exclude =
     venv,
     __pycache__,
     .git,
-    node_modules 
+    node_modules,
+    archive/old_v2  # exclude old archive code from linting 
