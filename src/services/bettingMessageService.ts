@@ -52,7 +52,7 @@ export async function createVIPPlayMessage(
   // SAFETY CHECK: If no bet legs, return a friendly message
   if (!betSlip.legs || betSlip.legs.length === 0) {
     console.warn('No bet legs found in slip:', betSlip);
-    return '❌ **Couldn't find any valid bet legs on this slip.**\nPlease double-check the image or upload a clearer version.';
+    return "❌ Couldn't find any valid bet legs on this slip.\nPlease double-check the image or upload a clearer version.";
   }
   
   // Extract bet details from the first leg
@@ -447,10 +447,14 @@ export function getVIPPlayCounterStats(): VIPPlayCounter {
   return { ...vipPlayCounter };
 }
 
+/**
+ * Fallback generic betting message builder
+ */
 export function createBettingMessage(betLegs: any[], slipData: any): string {
-  // Safe fallback for empty bet legs
+  // ✅ Safe fallback if no bet legs found
   if (!betLegs || betLegs.length === 0) {
-    return "❌ Couldn't find any valid bet legs on this slip. Please upload a clearer version.";
+    console.warn('No bet legs found in slip:', slipData);
+    return "❌ Couldn't find any valid bet legs on this slip.\nPlease double-check the image or upload a clearer version.";
   }
 
   let message = "✅ **GotLockz Betting Play**\n\n";
