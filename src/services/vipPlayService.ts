@@ -1,9 +1,10 @@
 /**
  * VIP Play Service - Structured betting analysis output
  */
-import { VIPPlayMessage, VIPPlayCounter } from '../types';
-import { BetSlip } from '../utils/parser';
-import { GameStats } from './mlbService';
+import {
+  VIPPlayMessage,
+  VIPPlayCounter
+} from '../types';
 
 // In-memory counter (in production, use Redis or database)
 let playCounter: VIPPlayCounter = {
@@ -11,25 +12,6 @@ let playCounter: VIPPlayCounter = {
   count: 0,
   lastReset: new Date().toISOString()
 };
-
-/**
- * Get the next VIP play number for today
- */
-function getNextPlayNumber(): number {
-  const today = new Date().toISOString().split('T')[0] ?? '';
-  
-  // Reset counter if it's a new day
-  if (playCounter.date !== today) {
-    playCounter = {
-      date: today,
-      count: 0,
-      lastReset: new Date().toISOString()
-    };
-  }
-  
-  playCounter.count++;
-  return playCounter.count;
-}
 
 /**
  * Create a VIP Play message from bet slip and analysis data
