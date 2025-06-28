@@ -21,14 +21,20 @@ export interface BetSlip {
  * @returns Promise<BetSlip> - Parsed betting slip data
  */
 export async function parseBetSlip(textLines: string[]): Promise<BetSlip> {
+  console.log('🔍 Starting bet slip parsing...');
+  console.log('📄 Input text lines:', textLines);
+  
   const text = textLines.join('\n').toUpperCase();
+  console.log('📝 Combined text:', text);
   
   // Detect if this is a parlay
   const isParlay = text.includes('PARLAY') || text.includes('MULTIPLE') || text.includes('LEG');
+  console.log('🎯 Is parlay:', isParlay);
   
   // Extract units (bet amount)
   const unitsMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:UNIT|U|DOLLAR|USD|\$)/i);
   const units = unitsMatch && unitsMatch[1] ? parseFloat(unitsMatch[1]) : 1;
+  console.log('💰 Units found:', units);
   
   // Extract legs
   const legs: BetLeg[] = [];
@@ -36,6 +42,7 @@ export async function parseBetSlip(textLines: string[]): Promise<BetSlip> {
   if (isParlay) {
     // Parse parlay legs
     const legMatches = text.match(/(\d+\)|LEG\s*\d+)[:\s]*([^+]+)\s*\+\s*(\d+)/g);
+    console.log('🎲 Parlay leg matches:', legMatches);
     if (legMatches) {
       for (const match of legMatches) {
         const leg = parseLeg(match);
@@ -45,23 +52,35 @@ export async function parseBetSlip(textLines: string[]): Promise<BetSlip> {
   } else {
     // Parse single bet
     const singleMatch = text.match(/([^+]+)\s*\+\s*(\d+)/);
+    console.log('🎲 Single bet match:', singleMatch);
     if (singleMatch) {
       const leg = parseLeg(singleMatch[0]);
       if (leg) legs.push(leg);
     }
   }
   
+  console.log('🎯 Legs found:', legs.length);
+  
   // If no legs found, try alternative parsing
   if (legs.length === 0) {
+    console.log('🔄 No legs found, trying fallback parsing...');
     const fallbackLeg = parseFallbackLeg(textLines);
-    if (fallbackLeg) legs.push(fallbackLeg);
+    if (fallbackLeg) {
+      legs.push(fallbackLeg);
+      console.log('✅ Fallback leg found:', fallbackLeg);
+    } else {
+      console.log('❌ No fallback leg found');
+    }
   }
   
-  return {
+  const result = {
     legs,
     units,
     type: legs.length > 1 ? 'PARLAY' : 'SINGLE'
   };
+  
+  console.log('📊 Final parsed result:', result);
+  return result;
 }
 
 /**
@@ -91,10 +110,17 @@ function parseLeg(legText: string): BetLeg | null {
  * Fallback parsing for different text formats
  */
 function parseFallbackLeg(textLines: string[]): BetLeg | null {
+  console.log('🔄 Starting fallback parsing...');
+  
   for (const line of textLines) {
+    console.log('📄 Processing line:', line);
+    
     // Look for team names and odds in various formats
     const teamMatch = line.match(/([A-Z\s]+)\s*(?:VS|@|\+)\s*([A-Z\s]+)/i);
     const oddsMatch = line.match(/\+(\d+)/);
+    
+    console.log('🏟️ Team match:', teamMatch);
+    console.log('💰 Odds match:', oddsMatch);
     
     if (teamMatch && teamMatch[1] && teamMatch[2] && oddsMatch && oddsMatch[1]) {
       const teamA = teamMatch[1].trim();
@@ -102,14 +128,38 @@ function parseFallbackLeg(textLines: string[]): BetLeg | null {
       const odds = parseInt(oddsMatch[1]);
       const gameId = `${teamA}_${teamB}_${Date.now()}`;
       
-      return {
+      const leg = {
         gameId,
         teamA,
         teamB,
         odds
       };
+      
+      console.log('✅ Fallback leg created:', leg);
+      return leg;
+    }
+    
+    // Try alternative patterns
+    // Pattern: "TEAM A +150" or "TEAM A -150"
+    const altMatch = line.match(/([A-Z\s]+)\s*([+-]\d+)/i);
+    if (altMatch && altMatch[1] && altMatch[2]) {
+      const teamA = altMatch[1].trim();
+      const odds = parseInt(altMatch[2]);
+      const teamB = 'TBD'; // We'll need to look this up later
+      const gameId = `${teamA}_${teamB}_${Date.now()}`;
+      
+      const leg = {
+        gameId,
+        teamA,
+        teamB,
+        odds
+      };
+      
+      console.log('✅ Alternative fallback leg created:', leg);
+      return leg;
     }
   }
   
+  console.log('❌ No fallback leg patterns found');
   return null;
 } 
