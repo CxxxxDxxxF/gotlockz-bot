@@ -35,42 +35,32 @@ function getNextPlayNumber(): number {
  * Create a VIP Play message from bet slip and analysis data
  */
 export async function createVIPPlayMessage(
-  betSlip: BetSlip,
-  gameData: GameStats,
+  betSlip: any,
+  gameData: any,
   analysis: string,
   imageUrl?: string
-): Promise<VIPPlayMessage | string> {
-  const now = new Date().toISOString();
-  const playNumber = getNextPlayNumber();
-  
-  // SAFETY CHECK: If no bet legs, return a friendly message
+): Promise<any | string> {
+  // Safe fallback for empty bet legs
   if (!betSlip.legs || betSlip.legs.length === 0) {
-    console.warn('No bet legs found in slip:', betSlip);
-    return '❌ **Couldn't find any valid bet legs on this slip.**\nPlease double-check the image or upload a clearer version.';
+    return "❌ Couldn't find any valid bet legs on this slip. Please upload a clearer version.";
   }
-  
-  // Extract bet details from the first leg
+
+  // Your normal VIPPlayMessage creation logic here
+  const now = new Date().toISOString();
+  const playNumber = 1; // Replace with your play number logic
   const firstLeg = betSlip.legs[0];
-  if (!firstLeg) {
-    throw new Error('No bet legs found in slip');
-  }
-  
-  // Determine bet selection and market
-  const selection = firstLeg.teamA; // Default to first team
+  const selection = firstLeg.teamA;
   const market = `${firstLeg.teamA} vs ${firstLeg.teamB}`;
-  
-  // Format odds with sign
   const odds = firstLeg.odds > 0 ? firstLeg.odds : -Math.abs(firstLeg.odds);
-  
-  // Create VIP Play message
-  const vipMessage: VIPPlayMessage = {
+
+  const vipMessage = {
     channel: 'vip_plays',
     timestamp: now,
     playNumber,
     game: {
       away: gameData.teams[0],
       home: gameData.teams[1],
-      startTime: gameData.date + 'T19:00:00Z' // Default game time
+      startTime: gameData.date + 'T19:00:00Z'
     },
     bet: {
       selection,
@@ -81,7 +71,7 @@ export async function createVIPPlayMessage(
     analysis,
     ...(imageUrl ? { assets: { imageUrl } } : {})
   };
-  
+
   return vipMessage;
 }
 

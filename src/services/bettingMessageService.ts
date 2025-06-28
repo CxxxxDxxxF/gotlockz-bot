@@ -445,4 +445,23 @@ function formatLottoTicketForDiscord(message: LottoTicketMessage) {
  */
 export function getVIPPlayCounterStats(): VIPPlayCounter {
   return { ...vipPlayCounter };
+}
+
+export function createBettingMessage(betLegs: any[], slipData: any): string {
+  // Safe fallback for empty bet legs
+  if (!betLegs || betLegs.length === 0) {
+    return "❌ Couldn't find any valid bet legs on this slip. Please upload a clearer version.";
+  }
+
+  let message = "✅ **GotLockz Betting Play**\n\n";
+
+  betLegs.forEach((leg, idx) => {
+    message += `**Leg ${idx + 1}:** ${leg.description}\nOdds: ${leg.odds}\n\n`;
+  });
+
+  if (slipData) {
+    message += `📌 Slip Info: ${JSON.stringify(slipData)}`;
+  }
+
+  return message;
 } 
