@@ -93,6 +93,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     switch (channelType) {
       case 'vip_plays':
         bettingMessage = await createVIPPlayMessage(betSlip, gameData, analysis, image.url);
+        if (typeof bettingMessage === 'string') {
+          return await interaction.editReply(bettingMessage);
+        }
         content = `🎯 **VIP Play #${bettingMessage.playNumber}** - GotLockz Family, let's get this bread! 💰`;
         break;
         

@@ -39,9 +39,15 @@ export async function createVIPPlayMessage(
   gameData: GameStats,
   analysis: string,
   imageUrl?: string
-): Promise<VIPPlayMessage> {
+): Promise<VIPPlayMessage | string> {
   const now = new Date().toISOString();
   const playNumber = getNextPlayNumber();
+  
+  // SAFETY CHECK: If no bet legs, return a friendly message
+  if (!betSlip.legs || betSlip.legs.length === 0) {
+    console.warn('No bet legs found in slip:', betSlip);
+    return '❌ **Couldn't find any valid bet legs on this slip.**\nPlease double-check the image or upload a clearer version.';
+  }
   
   // Extract bet details from the first leg
   const firstLeg = betSlip.legs[0];
