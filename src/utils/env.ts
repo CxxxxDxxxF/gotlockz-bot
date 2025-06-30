@@ -1,7 +1,7 @@
 export function getEnv() {
   // Allow either DISCORD_BOT_TOKEN or DISCORD_TOKEN for backwards compatibility
   const DISCORD_BOT_TOKEN = process.env['DISCORD_BOT_TOKEN'] ?? process.env['DISCORD_TOKEN'];
-  const { DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPENAI_API_KEY, OCR_SPACE_API_KEY, GOOGLE_APPLICATION_CREDENTIALS, PORT } = process.env;
+  const { DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPENAI_API_KEY, OCR_SPACE_API_KEY, GOOGLE_APPLICATION_CREDENTIALS, PORT, OPENWEATHERMAP_KEY } = process.env;
   
   if (!DISCORD_BOT_TOKEN) {
     throw new Error('Missing DISCORD_BOT_TOKEN');
@@ -20,6 +20,7 @@ export function getEnv() {
     OPENAI_API_KEY,
     OCR_SPACE_API_KEY,
     GOOGLE_APPLICATION_CREDENTIALS,
+    OPENWEATHERMAP_KEY,
     PORT: PORT ? Number(PORT) : undefined,
   };
 } 

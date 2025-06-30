@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes, Collection, Interaction } from
 import { getEnv } from './utils/env';
 import { data as pickData, execute as pickExecute } from './commands/pick';
 import { data as adminData, execute as adminExecute } from './commands/admin';
+import { getForecast } from './services/weatherService';
 import express from 'express';
 
 // Deployment test - verifying environment variables and health endpoint
@@ -25,8 +26,43 @@ app.get('/health', (_req: express.Request, res: express.Response) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
+// Weather endpoint to test OpenWeatherMap integration
+app.get('/weather', async (req: express.Request, res: express.Response) => {
+  try {
+    const location = req.query.location as string || 'New York';
+    console.log(`🔍 Fetching weather for ${location}`);
+    
+    const weather = await getForecast(location);
+    
+    if (weather) {
+      console.log(`✅ Weather fetched successfully for ${location}`);
+      res.json({
+        location,
+        temperature: weather.temp,
+        wind_speed: weather.wind,
+        units: 'imperial',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      console.log(`❌ Failed to fetch weather for ${location}`);
+      res.status(500).json({
+        error: 'Failed to fetch weather data',
+        location,
+        message: 'Check if OPENWEATHERMAP_KEY is set correctly'
+      });
+    }
+  } catch (error) {
+    console.error('Weather endpoint error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Health endpoint listening on port ${PORT}`);
+  console.log(`Weather endpoint available at /weather?location=CityName`);
 });
 
 async function registerCommands() {
