@@ -64,27 +64,49 @@ export async function preprocess(buffer: Buffer, debugMode = false): Promise<{ b
       console.log('📸 Saved raw image to debug/raw.png');
     }
 
-    // 2. Try to crop to the bet area (common bet slip layout)
-    let cropRegion: { x: number; y: number; w: number; h: number } | undefined = { 
-      x: 50, 
-      y: 200, 
-      w: originalWidth - 100, 
-      h: originalHeight - 400 
-    };
+    // 2. Smart ROI Detection using horizontal projection analysis
+    const smartCropRegion = await detectTextRegion(image);
+    let cropRegion: { x: number; y: number; w: number; h: number } | undefined;
     
-    // Ensure crop region is valid
-    cropRegion.x = Math.max(0, cropRegion.x);
-    cropRegion.y = Math.max(0, cropRegion.y);
-    cropRegion.w = Math.min(originalWidth - cropRegion.x, cropRegion.w);
-    cropRegion.h = Math.min(originalHeight - cropRegion.y, cropRegion.h);
-    
-    // Apply crop if region is reasonable
-    if (cropRegion.w > 100 && cropRegion.h > 100) {
-      image = image.crop(cropRegion.x, cropRegion.y, cropRegion.w, cropRegion.h);
-      console.log(`✂️ Cropped image to region: ${cropRegion.x},${cropRegion.y} ${cropRegion.w}x${cropRegion.h}`);
+    if (smartCropRegion && smartCropRegion.h > 100) {
+      // Apply smart crop
+      image = image.crop(smartCropRegion.x, smartCropRegion.y, smartCropRegion.w, smartCropRegion.h);
+      cropRegion = smartCropRegion;
+      console.log(`🎯 Smart crop applied: ${cropRegion.x},${cropRegion.y} ${cropRegion.w}x${cropRegion.h}`);
+      
+      // Save debug visualization
+      if (debugMode) {
+        await saveCropDebugVisualization(buffer, cropRegion);
+        
+        // Save the cropped region itself
+        const croppedBuffer = await image.getBufferAsync('image/png');
+        writeFileSync(path.resolve(__dirname, '../../debug/cropped.png'), croppedBuffer);
+        console.log('📸 Saved cropped region to debug/cropped.png');
+      }
     } else {
-      cropRegion = undefined;
-      console.log('⚠️ Skipping crop - region too small');
+      // Fallback to basic crop if smart detection fails
+      let basicCropRegion: { x: number; y: number; w: number; h: number } | undefined = { 
+        x: 50, 
+        y: 200, 
+        w: originalWidth - 100, 
+        h: originalHeight - 400 
+      };
+      
+      // Ensure crop region is valid
+      basicCropRegion.x = Math.max(0, basicCropRegion.x);
+      basicCropRegion.y = Math.max(0, basicCropRegion.y);
+      basicCropRegion.w = Math.min(originalWidth - basicCropRegion.x, basicCropRegion.w);
+      basicCropRegion.h = Math.min(originalHeight - basicCropRegion.y, basicCropRegion.h);
+      
+      // Apply basic crop if region is reasonable
+      if (basicCropRegion.w > 100 && basicCropRegion.h > 100) {
+        image = image.crop(basicCropRegion.x, basicCropRegion.y, basicCropRegion.w, basicCropRegion.h);
+        cropRegion = basicCropRegion;
+        console.log(`✂️ Basic crop applied: ${cropRegion.x},${cropRegion.y} ${cropRegion.w}x${cropRegion.h}`);
+      } else {
+        cropRegion = undefined;
+        console.log('⚠️ Skipping crop - region too small');
+      }
     }
 
     // 3. Apply preprocessing pipeline
@@ -124,6 +146,119 @@ export async function preprocess(buffer: Buffer, debugMode = false): Promise<{ b
   } catch (error) {
     console.error('❌ Image preprocessing failed:', error);
     throw new Error(`Image preprocessing failed: ${error}`);
+  }
+}
+
+/**
+ * Detect text region using horizontal projection analysis
+ * @param image - Jimp image object
+ * @returns Promise<{ x: number; y: number; w: number; h: number } | null> - Detected text region or null
+ */
+async function detectTextRegion(image: any): Promise<{ x: number; y: number; w: number; h: number } | null> {
+  try {
+    // Create a binary version for analysis
+    const bin = image.clone().greyscale().threshold({ max: 200 });
+    const rows = bin.bitmap.height;
+    const width = bin.bitmap.width;
+    
+    // Compute horizontal projection (sum of black pixels per row)
+    const sums = new Array(rows).fill(0);
+    
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = bin.getPixelIndex(x, y);
+        if (bin.bitmap.data[idx] === 0) { // Black pixel
+          sums[y]++;
+        }
+      }
+    }
+    
+    // Find text density threshold (10% of row width)
+    const threshold = width * 0.1;
+    
+    // Find first row with significant text density
+    let top = -1;
+    for (let y = 0; y < rows; y++) {
+      if (sums[y] > threshold) {
+        top = y;
+        break;
+      }
+    }
+    
+    // Find last row with significant text density
+    let bottom = -1;
+    for (let y = rows - 1; y >= 0; y--) {
+      if (sums[y] > threshold) {
+        bottom = y;
+        break;
+      }
+    }
+    
+    // Validate detected region
+    if (top === -1 || bottom === -1 || top >= bottom) {
+      console.log('⚠️ Could not detect valid text region');
+      return null;
+    }
+    
+    const regionHeight = bottom - top + 1;
+    const minHeight = 50; // Minimum reasonable text region height
+    
+    if (regionHeight < minHeight) {
+      console.log(`⚠️ Detected region too small: ${regionHeight}px (min: ${minHeight}px)`);
+      return null;
+    }
+    
+    // Add margins for better OCR
+    const margin = 10;
+    const x = Math.max(0, margin);
+    const y = Math.max(0, top - margin);
+    const w = Math.min(width - x, width - 2 * margin);
+    const h = Math.min(rows - y, regionHeight + 2 * margin);
+    
+    console.log(`🔍 Text region detected: ${x},${y} ${w}x${h} (density: ${(sums[top] / width * 100).toFixed(1)}% - ${(sums[bottom] / width * 100).toFixed(1)}%)`);
+    
+    return { x, y, w, h };
+    
+  } catch (error) {
+    console.error('❌ Text region detection failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Save debug visualization of crop region
+ * @param originalBuffer - Original image buffer
+ * @param cropRegion - Detected crop region
+ */
+async function saveCropDebugVisualization(originalBuffer: Buffer, cropRegion: { x: number; y: number; w: number; h: number }): Promise<void> {
+  try {
+    const Jimp = (await import('jimp')).default;
+    const raw = await (Jimp as any).read(originalBuffer);
+    
+    // Draw red rectangle around crop region
+    const red = Jimp.rgbaToInt(255, 0, 0, 255);
+    
+    // Draw top and bottom borders
+    for (let x = cropRegion.x; x < cropRegion.x + cropRegion.w; x++) {
+      raw.setPixelColor(red, x, cropRegion.y);
+      raw.setPixelColor(red, x, cropRegion.y + cropRegion.h - 1);
+    }
+    
+    // Draw left and right borders
+    for (let y = cropRegion.y; y < cropRegion.y + cropRegion.h; y++) {
+      raw.setPixelColor(red, cropRegion.x, y);
+      raw.setPixelColor(red, cropRegion.x + cropRegion.w - 1, y);
+    }
+    
+    // Save debug visualization
+    writeFileSync(
+      path.resolve(__dirname, '../../debug/crop-overlay.png'),
+      await raw.getBufferAsync('image/png')
+    );
+    console.log('📸 Saved crop overlay to debug/crop-overlay.png');
+    
+  } catch (error) {
+    console.error('❌ Failed to save crop debug visualization:', error);
   }
 }
 
