@@ -46,6 +46,12 @@ export const data = new SlashCommandBuilder()
       .setName('notes')
       .setDescription('Additional notes (optional, mainly for lotto tickets)')
       .setRequired(false)
+  )
+  .addBooleanOption(option =>
+    option
+      .setName('debug')
+      .setDescription('Enable debug mode for OCR analysis (saves debug images)')
+      .setRequired(false)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -60,6 +66,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     const channelType = interaction.options.getString('channel_type', true);
     const image = interaction.options.getAttachment('image');
     const notes = interaction.options.getString('notes');
+    const debug = interaction.options.getBoolean('debug');
     
     if (!image) {
       return await interaction.editReply('❌ Please provide a bet slip image.');
@@ -67,7 +74,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     
     // Extract text from image
     const imageBuffer = await fetch(image.url).then(res => res.arrayBuffer()).then(buf => Buffer.from(buf));
-    const ocrLines = await analyzeImage(imageBuffer);
+    const ocrLines = await analyzeImage(imageBuffer, debug);
     
     // Parse bet slip
     const betSlip = await parseBetSlip(ocrLines);

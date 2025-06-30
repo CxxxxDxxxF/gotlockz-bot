@@ -1,69 +1,68 @@
 /**
- * Debug OCR Script - Test OCR functionality locally
+ * Standalone OCR Debug Script
+ * Run this to test OCR on a known-good bet slip image
  */
-const fs = require('fs');
-const path = require('path');
 
-// Mock the environment for testing
-process.env.DISCORD_BOT_TOKEN = 'test';
-process.env.DISCORD_CLIENT_ID = 'test';
-process.env.OPENAI_API_KEY = 'test';
-process.env.OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY || '';
+import fs from 'fs';
+import path from 'path';
+import { parseImage } from './src/services/ocrParser.js';
 
-async function testOCR() {
-  console.log('🔍 Testing OCR functionality...\n');
-  
+async function debugOCR() {
   try {
-    // Test 1: Mock OCR with sample text
-    console.log('📝 Test 1: Mock OCR with sample betting slip text');
-    const sampleText = [
-      'BET SLIP',
-      'YANKEES VS RED SOX',
-      'YANKEES +150',
-      '1 UNIT'
-    ];
+    console.log('🔍 Starting OCR Debug Test...\n');
     
-    console.log('Sample text:', sampleText);
-    
-    // Import the parser
-    const { parseBetSlip } = require('./dist/utils/parser');
-    const result = await parseBetSlip(sampleText);
-    
-    console.log('✅ Parser result:', JSON.stringify(result, null, 2));
-    console.log('');
-    
-    // Test 2: Test with different text formats
-    console.log('📝 Test 2: Alternative text formats');
-    const altTexts = [
-      ['YANKEES @ RED SOX +150'],
-      ['YANKEES +150'],
-      ['PARLAY BET', '1) YANKEES VS RED SOX', 'YANKEES +150', '2) DODGERS VS GIANTS', 'DODGERS +120'],
-      ['INVALID TEXT', 'NO TEAMS OR ODDS']
-    ];
-    
-    for (let i = 0; i < altTexts.length; i++) {
-      console.log(`Format ${i + 1}:`, altTexts[i]);
-      const altResult = await parseBetSlip(altTexts[i]);
-      console.log(`Result ${i + 1}:`, JSON.stringify(altResult, null, 2));
-      console.log('');
+    // Check if test image exists
+    const testImagePath = 'tests/fixtures/clean-slip.png';
+    if (!fs.existsSync(testImagePath)) {
+      console.log('❌ Test image not found. Please place a bet slip image at: tests/fixtures/clean-slip.png');
+      console.log('   Or update the path in this script to point to your test image.\n');
+      return;
     }
     
+    // Read the test image
+    console.log(`📸 Loading test image: ${testImagePath}`);
+    const imageBuffer = fs.readFileSync(testImagePath);
+    console.log(`📏 Image size: ${imageBuffer.length} bytes\n`);
+    
+    // Run OCR with debug mode enabled
+    console.log('🚀 Running OCR with debug mode...');
+    const result = await parseImage(imageBuffer, true);
+    
+    // Display results
+    console.log('\n📊 OCR Results:');
+    console.log(`✅ Confidence: ${result.confidence.toFixed(1)}%`);
+    console.log(`📝 Lines found: ${result.lines.length}`);
+    console.log(`🔧 Used fallback: ${result.usedFallback ? 'Yes' : 'No'}`);
+    
+    if (result.debug) {
+      console.log('\n📁 Debug files saved:');
+      console.log(`   Raw image: ${result.debug.rawImagePath}`);
+      console.log(`   Preprocessed: ${result.debug.preprocessedImagePath}`);
+      console.log(`   Tesseract output: ${result.debug.tesseractOutputPath}`);
+      if (result.debug.cropRegion) {
+        console.log(`   Crop region: ${result.debug.cropRegion.x},${result.debug.cropRegion.y} ${result.debug.cropRegion.w}x${result.debug.cropRegion.h}`);
+      }
+    }
+    
+    console.log('\n📝 Extracted text:');
+    if (result.lines.length > 0) {
+      result.lines.forEach((line, index) => {
+        console.log(`   ${index + 1}. ${line}`);
+      });
+    } else {
+      console.log('   ❌ No text extracted');
+    }
+    
+    console.log('\n📄 Raw Tesseract text:');
+    console.log(result.rawText || '   ❌ No raw text');
+    
+    console.log('\n✅ Debug test completed!');
+    console.log('📁 Check the debug/ directory for saved images and data.');
+    
   } catch (error) {
-    console.error('❌ Error testing OCR:', error);
+    console.error('❌ Debug test failed:', error);
   }
 }
 
-// Check if TypeScript is compiled
-if (!fs.existsSync('./dist')) {
-  console.log('⚠️ TypeScript not compiled. Running npx tsc...');
-  const { execSync } = require('child_process');
-  try {
-    execSync('npx tsc', { stdio: 'inherit' });
-    console.log('✅ TypeScript compiled successfully');
-  } catch (error) {
-    console.error('❌ TypeScript compilation failed:', error.message);
-    process.exit(1);
-  }
-}
-
-testOCR().catch(console.error); 
+// Run the debug test
+debugOCR().catch(console.error); 

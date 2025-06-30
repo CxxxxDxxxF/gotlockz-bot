@@ -7,6 +7,8 @@ import { createWorker } from 'tesseract.js';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { getEnv } from '../utils/env';
 import { TesseractData, TesseractWord } from '../types';
+import { writeFileSync, mkdirSync } from 'fs';
+import path from 'path';
 
 export type Word = TesseractWord;
 export { TesseractData };
@@ -22,14 +24,22 @@ export interface OCRParserResult {
   averageConfidence: number;
   imageDimensions: { width: number; height: number };
   usedFallback: boolean;
+  rawText: string;
+  debug?: {
+    rawImagePath?: string;
+    preprocessedImagePath?: string;
+    tesseractOutputPath?: string;
+    cropRegion?: { x: number; y: number; w: number; h: number };
+  };
 }
 
 /**
  * Preprocess image for better OCR accuracy
  * @param buffer - Raw image buffer
- * @returns Promise<Buffer> - Preprocessed image buffer
+ * @param debugMode - Whether to save debug images and data
+ * @returns Promise<{ buffer: Buffer; cropRegion?: { x: number; y: number; w: number; h: number } }> - Preprocessed image buffer and crop region
  */
-export async function preprocess(buffer: Buffer): Promise<Buffer> {
+export async function preprocess(buffer: Buffer, debugMode = false): Promise<{ buffer: Buffer; cropRegion?: { x: number; y: number; w: number; h: number } }> {
   console.log('🔄 Starting image preprocessing...');
   
   try {
@@ -39,39 +49,101 @@ export async function preprocess(buffer: Buffer): Promise<Buffer> {
     
     console.log(`📏 Original dimensions: ${originalWidth}x${originalHeight}`);
     
-    // Resize to ~1000px height while maintaining aspect ratio
-    const targetHeight = 1000;
-    const scale = targetHeight / originalHeight;
-    const newWidth = Math.round(originalWidth * scale);
-    
-    image.resize({ w: newWidth, h: targetHeight });
-    console.log(`📏 Resized to: ${newWidth}x${targetHeight}`);
-    
-    // Convert to grayscale
-    image.greyscale();
-    
-    // Boost contrast
-    image.contrast(0.3);
-    
-    // Normalize brightness
-    image.normalize();
-    
-    // Apply slight gaussian blur to reduce noise (only if image is large enough)
-    if (image.width > 1 && image.height > 1) {
-      image.gaussian(1);
+    // Create debug directory if needed
+    if (debugMode) {
+      try {
+        mkdirSync(path.resolve(__dirname, '../../debug'), { recursive: true });
+      } catch (err) {
+        // Directory might already exist
+      }
     }
+
+    // 1. Save the raw upload
+    if (debugMode) {
+      writeFileSync(path.resolve(__dirname, '../../debug/raw.png'), buffer);
+      console.log('📸 Saved raw image to debug/raw.png');
+    }
+
+    // 2. Try to crop to the bet area (common bet slip layout)
+    let cropRegion = { x: 50, y: 200, w: originalWidth - 100, h: originalHeight - 400 };
     
-    // Apply threshold to create binary image
-    image.threshold({ max: 128 });
+    // Ensure crop region is valid
+    cropRegion.x = Math.max(0, cropRegion.x);
+    cropRegion.y = Math.max(0, cropRegion.y);
+    cropRegion.w = Math.min(originalWidth - cropRegion.x, cropRegion.w);
+    cropRegion.h = Math.min(originalHeight - cropRegion.y, cropRegion.h);
     
+    // Apply crop if region is reasonable
+    if (cropRegion.w > 100 && cropRegion.h > 100) {
+      image.crop(cropRegion.x, cropRegion.y, cropRegion.w, cropRegion.h);
+      console.log(`✂️ Cropped image to region: ${cropRegion.x},${cropRegion.y} ${cropRegion.w}x${cropRegion.h}`);
+    } else {
+      cropRegion = undefined;
+      console.log('⚠️ Skipping crop - region too small');
+    }
+
+    // 3. Apply preprocessing pipeline
+    image.greyscale()
+      .contrast(0.7)
+      .normalize()
+      .resize({ w: Jimp.AUTO, h: 1000 })
+      .gaussian(image.width > 1 && image.height > 1 ? 1 : 0)
+      .threshold({ max: 200 });
+
+    // 4. Apply noise filtering (remove small isolated blobs)
+    image = removeNoise(image);
+
+    // 5. Save after preprocessing
     const processedBuffer = await image.getBuffer('image/png');
-    console.log('✅ Image preprocessing completed');
-    
-    return processedBuffer;
+    if (debugMode) {
+      writeFileSync(path.resolve(__dirname, '../../debug/preprocessed.png'), processedBuffer);
+      console.log('📸 Saved preprocessed image to debug/preprocessed.png');
+    }
+
+    return { buffer: processedBuffer, cropRegion };
   } catch (error) {
     console.error('❌ Image preprocessing failed:', error);
     throw new Error(`Image preprocessing failed: ${error}`);
   }
+}
+
+/**
+ * Remove noise (small isolated blobs) from the image
+ */
+function removeNoise(img: Jimp): Jimp {
+  const width = img.bitmap.width;
+  const height = img.bitmap.height;
+  const minBlobSize = 5; // Minimum size for a blob to be considered text
+  
+  // Create a copy for processing
+  const processed = img.clone();
+  
+  // Simple noise removal: if a pixel is isolated (surrounded by white), make it white
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = (y * width + x) * 4;
+      const current = processed.bitmap.data[idx];
+      
+      if (current === 0) { // Black pixel
+        // Check surrounding pixels
+        const neighbors = [
+          processed.bitmap.data[((y-1) * width + x) * 4],     // top
+          processed.bitmap.data[((y+1) * width + x) * 4],     // bottom
+          processed.bitmap.data[(y * width + (x-1)) * 4],     // left
+          processed.bitmap.data[(y * width + (x+1)) * 4],     // right
+        ];
+        
+        // If all neighbors are white, this is likely noise
+        if (neighbors.every(n => n === 255)) {
+          processed.bitmap.data[idx] = 255;
+          processed.bitmap.data[idx + 1] = 255;
+          processed.bitmap.data[idx + 2] = 255;
+        }
+      }
+    }
+  }
+  
+  return processed;
 }
 
 /**
@@ -232,23 +304,47 @@ export async function analyzeWithGoogleVision(imageBuffer: Buffer): Promise<Clus
 /**
  * Main OCR parsing function with preprocessing and fallback logic
  * @param imageBuffer - Raw image buffer
+ * @param debugMode - Whether to save debug images and data
  * @returns Promise<OCRParserResult> - Structured OCR result with confidence metrics
  */
-export async function parseImage(imageBuffer: Buffer): Promise<OCRParserResult> {
+export async function parseImage(imageBuffer: Buffer, debugMode = false): Promise<OCRParserResult> {
   console.log('🚀 Starting advanced OCR parsing...');
   
   try {
     // Step 1: Preprocess image
-    const processedBuffer = await preprocess(imageBuffer);
+    const { buffer: processedBuffer, cropRegion } = await preprocess(imageBuffer, debugMode);
     
     // Step 2: Analyze with Tesseract
     console.log('🔍 Running Tesseract analysis...');
     const worker = await createWorker();
     await worker.reinitialize('eng');
+    
+    // Set parameters for better text recognition
+    await worker.setParameters({
+      tessedit_pageseg_mode: '6', // Uniform block of text
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-/.()$%',
+      preserve_interword_spaces: '1'
+    });
+    
     const tesseractResult = await worker.recognize(processedBuffer);
     await worker.terminate();
     
-    // Step 3: Parse Tesseract words and filter low confidence
+    // Step 3: Save full Tesseract output for debugging
+    if (debugMode) {
+      const debugData = {
+        words: tesseractResult.data.words,
+        text: tesseractResult.data.text,
+        confidence: tesseractResult.data.confidence,
+        timestamp: new Date().toISOString()
+      };
+      writeFileSync(
+        path.resolve(__dirname, '../../debug/tesseract.json'),
+        JSON.stringify(debugData, null, 2)
+      );
+      console.log('📄 Saved Tesseract output to debug/tesseract.json');
+    }
+    
+    // Step 4: Parse Tesseract words and filter low confidence
     const words = parseTesseractWords(tesseractResult.data, 60);
     
     if (words.length === 0) {
@@ -258,20 +354,27 @@ export async function parseImage(imageBuffer: Buffer): Promise<OCRParserResult> 
         lines: visionLines,
         averageConfidence: 0,
         imageDimensions: { width: 0, height: 0 },
-        usedFallback: true
+        usedFallback: true,
+        rawText: tesseractResult.data.text,
+        debug: debugMode ? {
+          rawImagePath: 'debug/raw.png',
+          preprocessedImagePath: 'debug/preprocessed.png',
+          tesseractOutputPath: 'debug/tesseract.json',
+          cropRegion
+        } : undefined
       };
     }
     
-    // Step 4: Cluster words into lines
+    // Step 5: Cluster words into lines
     const clusters = clusterByY(words, 10);
     
-    // Step 5: Calculate average confidence
+    // Step 6: Calculate average confidence
     const totalConfidence = words.reduce((sum, w) => sum + w.confidence, 0);
     const averageConfidence = totalConfidence / words.length;
     
     console.log(`📊 Average confidence: ${averageConfidence.toFixed(1)}%`);
     
-    // Step 6: Check if confidence is too low and use Google Vision fallback
+    // Step 7: Check if confidence is too low and use Google Vision fallback
     if (averageConfidence < 55) {
       console.log('⚠️ Low confidence detected, using Google Vision fallback');
       try {
@@ -280,14 +383,21 @@ export async function parseImage(imageBuffer: Buffer): Promise<OCRParserResult> 
           lines: visionLines,
           averageConfidence,
           imageDimensions: { width: 0, height: 0 }, // Tesseract doesn't provide dimensions
-          usedFallback: true
+          usedFallback: true,
+          rawText: tesseractResult.data.text,
+          debug: debugMode ? {
+            rawImagePath: 'debug/raw.png',
+            preprocessedImagePath: 'debug/preprocessed.png',
+            tesseractOutputPath: 'debug/tesseract.json',
+            cropRegion
+          } : undefined
         };
       } catch (visionError) {
         console.log('⚠️ Google Vision fallback failed, using Tesseract results');
       }
     }
     
-    // Step 7: Log low-confidence clusters for debugging
+    // Step 8: Log low-confidence clusters for debugging
     const lowConfidenceClusters = clusters.filter(c => c.confidence < 50);
     if (lowConfidenceClusters.length > 0) {
       console.log('⚠️ Low-confidence clusters detected:');
@@ -300,11 +410,18 @@ export async function parseImage(imageBuffer: Buffer): Promise<OCRParserResult> 
       lines: clusters,
       averageConfidence,
       imageDimensions: { width: 0, height: 0 }, // Tesseract doesn't provide dimensions
-      usedFallback: false
+      usedFallback: false,
+      rawText: tesseractResult.data.text,
+      debug: debugMode ? {
+        rawImagePath: 'debug/raw.png',
+        preprocessedImagePath: 'debug/preprocessed.png',
+        tesseractOutputPath: 'debug/tesseract.json',
+        cropRegion
+      } : undefined
     };
     
   } catch (error) {
     console.error('❌ OCR parsing failed:', error);
-    throw new Error(`OCR parsing failed: ${error}`);
+    throw new Error(`OCR parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 } 

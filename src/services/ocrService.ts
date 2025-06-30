@@ -19,21 +19,32 @@ export interface OCRResult {
 /**
  * Analyze an image to extract text using advanced OCR with preprocessing and fallback
  * @param image - Buffer containing the image data
+ * @param debug - Whether to enable debug mode (saves debug images and data)
  * @returns Promise<string[]> - Array of text lines extracted from the image
  */
-export async function analyzeImage(image: Buffer): Promise<string[]> {
+export async function analyzeImage(image: Buffer, debug = false): Promise<string[]> {
   console.log('🔍 Starting advanced OCR analysis...');
   console.log('📏 Image buffer size:', image.length, 'bytes');
+  if (debug) {
+    console.log('🐛 Debug mode enabled - will save debug images and data');
+  }
   
   try {
     // Use the new advanced OCR parser
-    const result: OCRParserResult = await parseImage(image);
+    const result: OCRParserResult = await parseImage(image, debug);
     
     console.log(`📊 OCR Analysis Results:`);
     console.log(`  - Lines extracted: ${result.lines.length}`);
     console.log(`  - Average confidence: ${result.averageConfidence.toFixed(1)}%`);
     console.log(`  - Image dimensions: ${result.imageDimensions.width}x${result.imageDimensions.height}`);
     console.log(`  - Used fallback: ${result.usedFallback ? 'Yes (Google Vision)' : 'No (Tesseract)'}`);
+    
+    if (debug && result.debug) {
+      console.log('🐛 Debug info:');
+      console.log(`  - Raw image: ${result.debug.rawImagePath}`);
+      console.log(`  - Preprocessed: ${result.debug.preprocessedImagePath}`);
+      console.log(`  - Tesseract output: ${result.debug.tesseractOutputPath}`);
+    }
     
     // Extract text lines from clustered results
     const textLines = result.lines.map(line => line.text).filter(text => text.trim().length > 0);
