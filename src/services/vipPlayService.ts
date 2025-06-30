@@ -3,8 +3,11 @@
  */
 import {
   VIPPlayMessage,
-  VIPPlayCounter
+  VIPPlayCounter,
+  BetSlip,
+  GameData
 } from '../types';
+import { EmbedBuilder } from 'discord.js';
 
 // In-memory counter (in production, use Redis or database)
 let playCounter: VIPPlayCounter = {
@@ -17,14 +20,23 @@ let playCounter: VIPPlayCounter = {
  * Create a VIP Play message from bet slip and analysis data
  */
 export async function createVIPPlayMessage(
-  betSlip: any,
-  gameData: any,
+  betSlip: BetSlip,
+  gameData: GameData,
   analysis: string,
   imageUrl?: string
-): Promise<any | string> {
+): Promise<VIPPlayMessage | string> {
   // Safe fallback for empty bet legs
   if (!betSlip.legs || betSlip.legs.length === 0) {
     return "❌ Couldn't find any valid bet legs on this slip. Please upload a clearer version.";
+  }
+
+  const firstLeg = betSlip.legs[0];
+  if (!firstLeg) {
+    return "❌ Invalid bet slip structure.";
+  }
+
+  if (!gameData.teams || gameData.teams.length < 2) {
+    return "❌ Invalid game data - missing team information.";
   }
 
   // Increment play counter
@@ -33,18 +45,17 @@ export async function createVIPPlayMessage(
   // Your normal VIPPlayMessage creation logic here
   const now = new Date().toISOString();
   const playNumber = playCounter.count;
-  const firstLeg = betSlip.legs[0];
   const selection = firstLeg.teamA;
   const market = `${firstLeg.teamA} vs ${firstLeg.teamB}`;
   const odds = firstLeg.odds > 0 ? firstLeg.odds : -Math.abs(firstLeg.odds);
 
-  const vipMessage = {
+  const vipMessage: VIPPlayMessage = {
     channel: 'vip_plays',
     timestamp: now,
     playNumber,
     game: {
-      away: gameData.teams[0],
-      home: gameData.teams[1],
+      away: gameData.teams[0] || 'TBD',
+      home: gameData.teams[1] || 'TBD',
       startTime: gameData.date + 'T19:00:00Z'
     },
     bet: {
@@ -87,12 +98,12 @@ export function validateVIPPlayMessage(message: VIPPlayMessage): boolean {
 /**
  * Format VIP Play message for Discord embed
  */
-export function formatVIPPlayForDiscord(message: VIPPlayMessage) {
-  const embed: any = {
-    title: `🎯 VIP Play #${message.playNumber}`,
-    description: message.analysis,
-    color: 0x00ff00, // Green for VIP plays
-    fields: [
+export function formatVIPPlayForDiscord(message: VIPPlayMessage): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle(`🎯 VIP Play #${message.playNumber}`)
+    .setDescription(message.analysis)
+    .setColor(0x00ff00) // Green for VIP plays
+    .addFields([
       {
         name: '🏟️ Game',
         value: `${message.game.away} @ ${message.game.home}`,
@@ -118,15 +129,12 @@ export function formatVIPPlayForDiscord(message: VIPPlayMessage) {
         value: message.bet.unitSize.toString(),
         inline: true
       }
-    ],
-    timestamp: message.timestamp,
-    footer: {
-      text: `GotLockz Family • VIP Play #${message.playNumber}`
-    }
-  };
+    ])
+    .setTimestamp(new Date(message.timestamp))
+    .setFooter({ text: `GotLockz Family • VIP Play #${message.playNumber}` });
   
   if (message.assets?.imageUrl) {
-    embed.image = { url: message.assets.imageUrl };
+    embed.setImage(message.assets.imageUrl);
   }
   
   return embed;

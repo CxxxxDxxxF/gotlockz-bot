@@ -11,30 +11,30 @@ import {
 import { BetSlip } from '../utils/parser';
 import { GameStats } from './mlbService';
 
-// In-memory counter for VIP plays (in production, use Redis or database)
-let vipPlayCounter: VIPPlayCounter = {
-  date: new Date().toISOString().split('T')[0] ?? '',
-  count: 0,
-  lastReset: new Date().toISOString()
-};
+// In-memory counters (in production, use Redis or database)
+let vipPlayCounter = 1;
+let freePlayCounter = 1;
+let lottoTicketCounter = 1;
 
 /**
- * Get the next VIP play number for today
+ * Get next VIP play number
  */
 function getNextVIPPlayNumber(): number {
-  const today = new Date().toISOString().split('T')[0] ?? '';
-  
-  // Reset counter if it's a new day
-  if (vipPlayCounter.date !== today) {
-    vipPlayCounter = {
-      date: today,
-      count: 0,
-      lastReset: new Date().toISOString()
-    };
-  }
-  
-  vipPlayCounter.count++;
-  return vipPlayCounter.count;
+  return vipPlayCounter++;
+}
+
+/**
+ * Get next Free play number
+ */
+function getNextFreePlayNumber(): number {
+  return freePlayCounter++;
+}
+
+/**
+ * Get next Lotto ticket number
+ */
+function getNextLottoTicketNumber(): number {
+  return lottoTicketCounter++;
 }
 
 /**
@@ -119,7 +119,7 @@ export async function createFreePlayMessage(
   const freePlayMessage: FreePlayMessage = {
     channel: 'free_plays',
     timestamp: now,
-    playType: 'FREE_PLAY',
+    playNumber: getNextFreePlayNumber(),
     game: {
       away: gameData.teams[0],
       home: gameData.teams[1],
@@ -128,7 +128,8 @@ export async function createFreePlayMessage(
     bet: {
       selection,
       market,
-      odds
+      odds,
+      unitSize: betSlip.units
     },
     analysis,
     ...(imageUrl && { assets: { imageUrl } })
@@ -177,10 +178,18 @@ export async function createLottoTicketMessage(
   const lottoMessage: LottoTicketMessage = {
     channel: 'lotto_ticket',
     timestamp: now,
-    ticketType: 'LOTTO_TICKET',
-    games,
-    legs,
-    parlayOdds,
+    ticketNumber: getNextLottoTicketNumber(),
+    game: {
+      away: betSlip.legs[0].teamA,
+      home: betSlip.legs[0].teamB,
+      startTime: gameData.date + 'T19:00:00Z'
+    },
+    bet: {
+      selection: betSlip.legs[0].teamA,
+      market: `${betSlip.legs[0].teamA} vs ${betSlip.legs[0].teamB}`,
+      odds: parlayOdds,
+      unitSize: betSlip.units
+    },
     analysis,
     ...(notes && { notes }),
     ...(imageUrl && { assets: { imageUrl } })

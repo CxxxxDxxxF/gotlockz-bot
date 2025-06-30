@@ -1,0 +1,72 @@
+{
+  "@types/jest": {
+    "current": "29.5.14",
+    "wanted": "29.5.14",
+    "latest": "30.0.0",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/@types/jest"
+  },
+  "@types/node": {
+    "current": "20.19.1",
+    "wanted": "20.19.2",
+    "latest": "24.0.7",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/@types/node"
+  },
+  "@typescript-eslint/eslint-plugin": {
+    "current": "6.21.0",
+    "wanted": "6.21.0",
+    "latest": "8.35.1",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/@typescript-eslint/eslint-plugin"
+  },
+  "@typescript-eslint/parser": {
+    "current": "6.21.0",
+    "wanted": "6.21.0",
+    "latest": "8.35.1",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/@typescript-eslint/parser"
+  },
+  "ajv-formats": {
+    "current": "2.1.1",
+    "wanted": "2.1.1",
+    "latest": "3.0.1",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/ajv-formats"
+  },
+  "dotenv": {
+    "current": "16.6.1",
+    "wanted": "16.6.1",
+    "latest": "17.0.0",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/dotenv"
+  },
+  "eslint": {
+    "current": "8.57.1",
+    "wanted": "8.57.1",
+    "latest": "9.30.0",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/eslint"
+  },
+  "jest": {
+    "current": "29.7.0",
+    "wanted": "29.7.0",
+    "latest": "30.0.3",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/jest"
+  },
+  "node-cron": {
+    "current": "3.0.3",
+    "wanted": "3.0.3",
+    "latest": "4.1.1",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/node-cron"
+  },
+  "tesseract.js": {
+    "current": "5.1.1",
+    "wanted": "5.1.1",
+    "latest": "6.0.1",
+    "dependent": "gotlockz-bot",
+    "location": "/Users/cjruiz/gotlockz-bot/node_modules/tesseract.js"
+  }
+}

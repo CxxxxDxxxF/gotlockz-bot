@@ -1,71 +1,64 @@
 import OpenAI from 'openai';
 import { getEnv } from '../utils/env';
+import { BetSlip, GameData } from '../types';
 
-const cache = new Map<string, { timestamp: number; text: string }>();
-
+/**
+ * Generate AI analysis for a bet slip
+ */
 export async function generateAnalysis(
-  betSlip: any,
-  gameData: any,
-  edge: number,
-  weather: any
+  betSlip: BetSlip,
+  gameData: GameData,
+  weather?: any
 ): Promise<string> {
-  const key = JSON.stringify({ betSlip, gameData, edge, weather });
-  const now = Date.now();
-  const entry = cache.get(key);
-  if (entry && now - entry.timestamp < 1000 * 60) {
-    return entry.text;
-  }
   const { OPENAI_API_KEY } = getEnv();
-  const client = new OpenAI({ apiKey: OPENAI_API_KEY });
-  const prompt = `
-  You are a hype-driven sports analyst. Given the following bet slip, game data, edge calculation, and weather, write a persuasive multi-paragraph analysis:
   
-  Bet Slip:
-  ${JSON.stringify(betSlip, null, 2)}
+  if (!OPENAI_API_KEY) {
+    return "⚠️ AI analysis unavailable - OpenAI API key not configured.";
+  }
 
-  Game Data:
-  ${JSON.stringify(gameData, null, 2)}
+  try {
+    const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+    const prompt = buildPrompt(betSlip, gameData, weather);
+    
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 500,
+      temperature: 0.7,
+    });
 
-  Calculated Edge: ${edge.toFixed(2)}%
-
-  Weather Data:
-  ${JSON.stringify(weather, null, 2)}
-
-  Use current date and maintain a confident, stat-backed, hype tone.
-  `;
-
-  const res = await client.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{ role: 'system', content: 'You are a sports betting analyst.' },
-               { role: 'user', content: prompt }],
-    max_tokens: 600,
-  });
-
-  const analysis = res.choices[0]?.message?.content?.trim() || '';
-  cache.set(key, { timestamp: now, text: analysis });
-  return analysis;
+    return completion.choices[0]?.message?.content || "❌ Failed to generate analysis.";
+  } catch (error) {
+    console.error('OpenAI API error:', error);
+    return "❌ AI analysis failed. Please try again later.";
+  }
 }
 
+/**
+ * Build analysis prompt for OpenAI
+ */
 export function buildPrompt(
-  betSlip: any,
-  gameData: any,
-  edge: number,
-  weather: any
+  betSlip: BetSlip,
+  gameData: GameData,
+  weather?: any
 ): string {
-  return `
-  You are a hype-driven sports analyst. Given the following bet slip, game data, edge calculation, and weather, write a persuasive multi-paragraph analysis:
+  const firstLeg = betSlip.legs[0];
+  if (!firstLeg) {
+    return "❌ No bet legs found in slip.";
+  }
   
-  Bet Slip:
-  ${JSON.stringify(betSlip, null, 2)}
+  const weatherInfo = weather ? `\nWeather: ${weather.temperature}°F, ${weather.condition}` : '';
+  
+  return `Analyze this MLB betting pick:
 
-  Game Data:
-  ${JSON.stringify(gameData, null, 2)}
+Game: ${gameData.teams[0]} vs ${gameData.teams[1]}
+Bet: ${firstLeg.teamA} ${firstLeg.odds > 0 ? '+' : ''}${firstLeg.odds}
+Units: ${betSlip.units}${weatherInfo}
 
-  Calculated Edge: ${edge.toFixed(2)}%
+Provide a concise, professional analysis focusing on:
+1. Key factors supporting this pick
+2. Potential risks
+3. Confidence level
 
-  Weather Data:
-  ${JSON.stringify(weather, null, 2)}
-
-  Use current date and maintain a confident, stat-backed, hype tone.
-  `;
+Keep it under 200 words and use a confident but measured tone.`;
 } 

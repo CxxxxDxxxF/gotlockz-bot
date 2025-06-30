@@ -16,5 +16,5 @@ services:
         fromService: DISCORD_GUILD_ID
       - key: OPENAI_API_KEY
         fromService: OPENAI_API_KEY
-    healthCheckPath: /
+    healthCheckPath: /health
     autoDeploy: true 

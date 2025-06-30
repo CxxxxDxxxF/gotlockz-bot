@@ -8,7 +8,7 @@
  */
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { analyzeImage } from '../services/ocrService';
-import { getGameData } from '../services/mlbService';
+import { getGameData, GameStats } from '../services/mlbService';
 import { getForecast } from '../services/weatherService';
 import { allow } from '../utils/rateLimiter';
 import { 
@@ -20,6 +20,17 @@ import {
 } from '../services/bettingMessageService';
 import { parseBetSlip } from '../utils/parser';
 import { generateAnalysis } from '../services/analysisService';
+import { GameData } from '../types';
+
+// Convert GameStats to GameData for compatibility
+function convertGameStatsToGameData(gameStats: GameStats): GameData {
+  return {
+    teams: gameStats.teams,
+    date: gameStats.date,
+    startTime: gameStats.date + 'T19:00:00Z',
+    venue: 'TBD'
+  };
+}
 
 export const data = new SlashCommandBuilder()
   .setName('pick')
@@ -76,15 +87,17 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     }
     
     // Get game data
-    const gameData = await getGameData(betSlip.legs[0]?.gameId || '');
-    if (!gameData) {
+    const gameStats = await getGameData(betSlip.legs[0]?.gameId || '');
+    if (!gameStats) {
       return await interaction.editReply('❌ Could not fetch game data. Please try again.');
     }
     
+    // Convert to GameData format
+    const gameData = convertGameStatsToGameData(gameStats);
+    
     // Get weather data
     const weather = await getForecast('New York'); // Fallback location for now
-    const edge = 0.05; // Default edge calculation
-    const analysis = await generateAnalysis(betSlip, gameData, edge, weather);
+    const analysis = await generateAnalysis(betSlip, gameData, weather);
     
     // Create structured betting message based on channel type
     let bettingMessage;

@@ -6,6 +6,7 @@ import { Jimp } from 'jimp';
 import Tesseract from 'tesseract.js';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { getEnv } from '../utils/env';
+import { TesseractData } from '../types';
 
 export interface Word {
   text: string;
@@ -153,7 +154,7 @@ function createClusteredLine(words: Word[]): ClusteredLine {
  * @param minConfidence - Minimum confidence threshold (default: 60)
  * @returns Word[] - Filtered array of word objects
  */
-export function parseTesseractWords(data: any, minConfidence: number = 60): Word[] {
+export function parseTesseractWords(data: TesseractData, minConfidence: number = 60): Word[] {
   console.log('🔍 Parsing Tesseract JSON output...');
   
   if (!data.words || !Array.isArray(data.words)) {
