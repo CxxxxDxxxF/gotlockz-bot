@@ -4,7 +4,6 @@
 import { analyzeImage } from '../../src/services/ocrService';
 import { parseBetSlip } from '../../src/utils/parser';
 import { 
-  preprocess, 
   clusterByY, 
   parseTesseractWords,
   type Word
@@ -51,22 +50,30 @@ jest.mock('@google-cloud/vision', () => ({
   }))
 }));
 
-// Mock Jimp
-jest.mock('jimp', () => ({
-  Jimp: {
-    read: jest.fn().mockResolvedValue({
-      width: 100,
-      height: 100,
-      resize: jest.fn().mockReturnThis(),
-      greyscale: jest.fn().mockReturnThis(),
-      contrast: jest.fn().mockReturnThis(),
-      normalize: jest.fn().mockReturnThis(),
-      gaussian: jest.fn().mockReturnThis(),
-      threshold: jest.fn().mockReturnThis(),
-      getBuffer: jest.fn().mockResolvedValue(Buffer.from('mock-image-data'))
+beforeAll(async () => {
+  const mockJimpImage = {
+    bitmap: { width: 100, height: 100, data: new Uint8Array(400) },
+    crop: jest.fn().mockReturnThis(),
+    greyscale: jest.fn().mockReturnThis(),
+    contrast: jest.fn().mockReturnThis(),
+    normalize: jest.fn().mockReturnThis(),
+    scaleToFit: jest.fn().mockReturnThis(),
+    gaussian: jest.fn().mockReturnThis(),
+    threshold: jest.fn().mockReturnThis(),
+    clone: jest.fn().mockReturnThis(),
+    getBuffer: jest.fn().mockImplementation((format, callback) => {
+      callback(null, Buffer.from('mock-image-data'));
     })
-  }
-}));
+  };
+  const mockJimp = function () {};
+  mockJimp.read = jest.fn().mockResolvedValue(mockJimpImage);
+  
+  // Mock the dynamic import
+  jest.doMock('jimp', () => ({
+    __esModule: true,
+    default: mockJimp
+  }));
+});
 
 // Minimal valid PNG buffer (1x1 pixel, white)
 const createValidPNGBuffer = (): Buffer => {
@@ -83,32 +90,34 @@ describe('OCR Parser Integration', () => {
   describe('preprocess', () => {
     it('should preprocess image successfully', async () => {
       const buffer = createValidPNGBuffer();
+      const { preprocess } = await import('../../src/services/ocrParser');
       const result = await preprocess(buffer);
-      
-      expect(result).toBeInstanceOf(Buffer);
-      expect(result.length).toBeGreaterThan(0);
+      expect(result).toHaveProperty('buffer');
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
     });
 
     it('should handle tiny images without gaussian blur', async () => {
       const tinyBuffer = Buffer.from('tiny-image-data');
-      const { Jimp } = require('jimp');
-      const mockImage = {
-        width: 1,
-        height: 1,
-        resize: jest.fn().mockReturnThis(),
+      const jimp = require('jimp');
+      const mockTinyImage = {
+        bitmap: { width: 1, height: 1, data: new Uint8Array(4) },
+        crop: jest.fn().mockReturnThis(),
         greyscale: jest.fn().mockReturnThis(),
         contrast: jest.fn().mockReturnThis(),
         normalize: jest.fn().mockReturnThis(),
+        scaleToFit: jest.fn().mockReturnThis(),
         gaussian: jest.fn().mockReturnThis(),
         threshold: jest.fn().mockReturnThis(),
-        getBuffer: jest.fn().mockResolvedValue(Buffer.from('processed'))
+        clone: jest.fn().mockReturnThis(),
+        getBuffer: jest.fn().mockImplementation((format, callback) => {
+          callback(null, Buffer.from('processed'));
+        })
       };
-      Jimp.read.mockResolvedValue(mockImage);
-      
+      jimp.default.read.mockResolvedValue(mockTinyImage);
+      const { preprocess } = await import('../../src/services/ocrParser');
       await preprocess(tinyBuffer);
-      
-      // Should not call gaussian blur for tiny images
-      expect(mockImage.gaussian).not.toHaveBeenCalled();
+      expect(mockTinyImage.gaussian).not.toHaveBeenCalled();
     });
   });
 

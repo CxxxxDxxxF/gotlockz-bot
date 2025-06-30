@@ -29,7 +29,7 @@ app.get('/health', (_req: express.Request, res: express.Response) => {
 // Weather endpoint to test OpenWeatherMap integration
 app.get('/weather', async (req: express.Request, res: express.Response) => {
   try {
-    const location = req.query.location as string || 'New York';
+    const location = req.query['location'] as string || 'New York';
     console.log(`🔍 Fetching weather for ${location}`);
     
     const weather = await getForecast(location);

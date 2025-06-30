@@ -35,6 +35,12 @@
           "description": "Additional notes (optional, mainly for lotto tickets)",
           "type": "STRING",
           "required": false
+        },
+        {
+          "name": "debug",
+          "description": "Enable debug mode for OCR analysis (saves debug images)",
+          "type": "BOOLEAN",
+          "required": false
         }
       ]
     },

@@ -66,7 +66,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     const channelType = interaction.options.getString('channel_type', true);
     const image = interaction.options.getAttachment('image');
     const notes = interaction.options.getString('notes');
-    const debug = interaction.options.getBoolean('debug');
+    const debug = interaction.options.getBoolean('debug') ?? false;
     
     if (!image) {
       return await interaction.editReply('❌ Please provide a bet slip image.');
