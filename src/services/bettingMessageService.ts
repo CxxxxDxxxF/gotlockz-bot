@@ -1,15 +1,16 @@
 /**
- * Betting Message Service - Unified service for all betting message types
+ * Betting Message Service - Create structured betting messages
  */
+import { EmbedBuilder } from 'discord.js';
 import { 
   VIPPlayMessage, 
   FreePlayMessage, 
   LottoTicketMessage, 
+  BetSlip, 
+  GameData,
   BettingMessage,
   VIPPlayCounter 
 } from '../types';
-import { BetSlip } from '../utils/parser';
-import { GameStats } from './mlbService';
 
 // In-memory counters (in production, use Redis or database)
 let vipPlayCounter = 1;
@@ -42,41 +43,41 @@ function getNextLottoTicketNumber(): number {
  */
 export async function createVIPPlayMessage(
   betSlip: BetSlip,
-  gameData: GameStats,
+  gameData: GameData,
   analysis: string,
   imageUrl?: string
 ): Promise<VIPPlayMessage | string> {
-  const now = new Date().toISOString();
-  const playNumber = getNextVIPPlayNumber();
-  
-  // SAFETY CHECK: If no bet legs, return a friendly message
+  // Safe fallback for empty bet legs
   if (!betSlip.legs || betSlip.legs.length === 0) {
-    console.warn('No bet legs found in slip:', betSlip);
-    return "❌ Couldn't find any valid bet legs on this slip.\nPlease double-check the image or upload a clearer version.";
+    return "❌ Couldn't find any valid bet legs on this slip. Please upload a clearer version.";
   }
-  
-  // Extract bet details from the first leg
+
   const firstLeg = betSlip.legs[0];
   if (!firstLeg) {
-    throw new Error('No bet legs found in slip');
+    return "❌ Invalid bet slip structure.";
   }
-  
-  // Determine bet selection and market
-  const selection = firstLeg.teamA; // Default to first team
-  const market = `${firstLeg.teamA} vs ${firstLeg.teamB}`;
-  
-  // Format odds with sign
-  const odds = firstLeg.odds > 0 ? firstLeg.odds : -Math.abs(firstLeg.odds);
+
+  if (!gameData.teams || gameData.teams.length < 2) {
+    return "❌ Invalid game data - missing team information.";
+  }
+
+  // Increment play counter
+  const playNumber = getNextVIPPlayNumber();
   
   // Create VIP Play message
+  const now = new Date().toISOString();
+  const selection = firstLeg.teamA;
+  const market = `${firstLeg.teamA} vs ${firstLeg.teamB}`;
+  const odds = firstLeg.odds > 0 ? firstLeg.odds : -Math.abs(firstLeg.odds);
+
   const vipMessage: VIPPlayMessage = {
     channel: 'vip_plays',
     timestamp: now,
     playNumber,
     game: {
-      away: gameData.teams[0],
-      home: gameData.teams[1],
-      startTime: gameData.date + 'T19:00:00Z' // Default game time
+      away: gameData.teams[0] || 'TBD',
+      home: gameData.teams[1] || 'TBD',
+      startTime: gameData.startTime || gameData.date + 'T19:00:00Z'
     },
     bet: {
       selection,
@@ -85,9 +86,9 @@ export async function createVIPPlayMessage(
       unitSize: betSlip.units
     },
     analysis,
-    ...(imageUrl && { assets: { imageUrl } })
+    ...(imageUrl ? { assets: { imageUrl } } : {})
   };
-  
+
   return vipMessage;
 }
 
@@ -96,13 +97,16 @@ export async function createVIPPlayMessage(
  */
 export async function createFreePlayMessage(
   betSlip: BetSlip,
-  gameData: GameStats,
+  gameData: GameData,
   analysis: string,
   imageUrl?: string
 ): Promise<FreePlayMessage> {
   const now = new Date().toISOString();
   
-  // Extract bet details from the first leg
+  if (betSlip.legs.length === 0) {
+    throw new Error('Free play must have at least 1 leg');
+  }
+  
   const firstLeg = betSlip.legs[0];
   if (!firstLeg) {
     throw new Error('No bet legs found in slip');
@@ -123,7 +127,7 @@ export async function createFreePlayMessage(
     game: {
       away: gameData.teams[0],
       home: gameData.teams[1],
-      startTime: gameData.date + 'T19:00:00Z' // Default game time
+      startTime: gameData.startTime || gameData.date + 'T19:00:00Z'
     },
     bet: {
       selection,
@@ -143,7 +147,7 @@ export async function createFreePlayMessage(
  */
 export async function createLottoTicketMessage(
   betSlip: BetSlip,
-  gameData: GameStats,
+  gameData: GameData,
   analysis: string,
   imageUrl?: string,
   notes?: string
@@ -154,25 +158,16 @@ export async function createLottoTicketMessage(
     throw new Error('Lotto ticket must have at least 2 legs');
   }
   
-  // Create games array from legs
-  const games = betSlip.legs.map(leg => ({
-    away: leg.teamA,
-    home: leg.teamB,
-    startTime: gameData.date + 'T19:00:00Z' // Default game time
-  }));
-  
-  // Create legs array
-  const legs = betSlip.legs.map(leg => ({
-    selection: leg.teamA,
-    market: `${leg.teamA} vs ${leg.teamB}`,
-    odds: leg.odds > 0 ? leg.odds : -Math.abs(leg.odds)
-  }));
-  
   // Calculate parlay odds (simplified calculation)
   const parlayOdds = betSlip.legs.reduce((total, leg) => {
     const odds = leg.odds > 0 ? leg.odds : -Math.abs(leg.odds);
     return total + odds;
   }, 0);
+  
+  const firstLeg = betSlip.legs[0];
+  if (!firstLeg) {
+    throw new Error('Invalid bet slip structure');
+  }
   
   // Create Lotto Ticket message
   const lottoMessage: LottoTicketMessage = {
@@ -180,13 +175,13 @@ export async function createLottoTicketMessage(
     timestamp: now,
     ticketNumber: getNextLottoTicketNumber(),
     game: {
-      away: betSlip.legs[0].teamA,
-      home: betSlip.legs[0].teamB,
-      startTime: gameData.date + 'T19:00:00Z'
+      away: firstLeg.teamA,
+      home: firstLeg.teamB,
+      startTime: gameData.startTime || gameData.date + 'T19:00:00Z'
     },
     bet: {
-      selection: betSlip.legs[0].teamA,
-      market: `${betSlip.legs[0].teamA} vs ${betSlip.legs[0].teamB}`,
+      selection: firstLeg.teamA,
+      market: `${firstLeg.teamA} vs ${firstLeg.teamB}`,
       odds: parlayOdds,
       unitSize: betSlip.units
     },
@@ -251,10 +246,11 @@ function validateVIPPlayMessage(message: VIPPlayMessage): boolean {
  */
 function validateFreePlayMessage(message: FreePlayMessage): boolean {
   if (message.channel !== 'free_plays') return false;
-  if (message.playType !== 'FREE_PLAY') return false;
+  if (message.playNumber < 1) return false;
   if (!message.game.away || !message.game.home) return false;
   if (!message.bet.selection || !message.bet.market) return false;
   if (typeof message.bet.odds !== 'number') return false;
+  if (typeof message.bet.unitSize !== 'number' || message.bet.unitSize <= 0) return false;
   if (!message.analysis || message.analysis.trim().length === 0) return false;
   
   try {
@@ -271,26 +267,17 @@ function validateFreePlayMessage(message: FreePlayMessage): boolean {
  */
 function validateLottoTicketMessage(message: LottoTicketMessage): boolean {
   if (message.channel !== 'lotto_ticket') return false;
-  if (message.ticketType !== 'LOTTO_TICKET') return false;
-  if (!Array.isArray(message.games) || message.games.length < 2) return false;
-  if (!Array.isArray(message.legs) || message.legs.length < 2) return false;
-  if (typeof message.parlayOdds !== 'number') return false;
+  if (message.ticketNumber < 1) return false;
+  if (!message.game.away || !message.game.home) return false;
+  if (!message.bet.selection || !message.bet.market) return false;
+  if (typeof message.bet.odds !== 'number') return false;
+  if (typeof message.bet.unitSize !== 'number' || message.bet.unitSize <= 0) return false;
   if (!message.analysis || message.analysis.trim().length === 0) return false;
   
-  // Validate games
-  for (const game of message.games) {
-    if (!game.away || !game.home) return false;
-    try {
-      new Date(game.startTime);
-    } catch {
-      return false;
-    }
-  }
-  
-  // Validate legs
-  for (const leg of message.legs) {
-    if (!leg.selection || !leg.market) return false;
-    if (typeof leg.odds !== 'number') return false;
+  try {
+    new Date(message.game.startTime);
+  } catch {
+    return false;
   }
   
   return true;
@@ -315,12 +302,12 @@ export function formatBettingMessageForDiscord(message: BettingMessage) {
 /**
  * Format VIP Play message for Discord embed
  */
-function formatVIPPlayForDiscord(message: VIPPlayMessage) {
-  const embed: any = {
-    title: `🎯 VIP Play #${message.playNumber}`,
-    description: message.analysis,
-    color: 0x00ff00, // Green for VIP plays
-    fields: [
+function formatVIPPlayForDiscord(message: VIPPlayMessage): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle(`🎯 VIP Play #${message.playNumber}`)
+    .setDescription(message.analysis)
+    .setColor(0x00ff00) // Green for VIP plays
+    .addFields([
       {
         name: '🏟️ Game',
         value: `${message.game.away} @ ${message.game.home}`,
@@ -346,15 +333,12 @@ function formatVIPPlayForDiscord(message: VIPPlayMessage) {
         value: message.bet.unitSize.toString(),
         inline: true
       }
-    ],
-    timestamp: message.timestamp,
-    footer: {
-      text: `GotLockz Family • VIP Play #${message.playNumber}`
-    }
-  };
+    ])
+    .setTimestamp(new Date(message.timestamp))
+    .setFooter({ text: `GotLockz Family • VIP Play #${message.playNumber}` });
   
   if (message.assets?.imageUrl) {
-    embed.image = { url: message.assets.imageUrl };
+    embed.setImage(message.assets.imageUrl);
   }
   
   return embed;
@@ -363,12 +347,12 @@ function formatVIPPlayForDiscord(message: VIPPlayMessage) {
 /**
  * Format Free Play message for Discord embed
  */
-function formatFreePlayForDiscord(message: FreePlayMessage) {
-  const embed: any = {
-    title: '🎁 Free Play is Here!',
-    description: message.analysis,
-    color: 0x0099ff, // Blue for free plays
-    fields: [
+function formatFreePlayForDiscord(message: FreePlayMessage): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle('🎁 Free Play is Here!')
+    .setDescription(message.analysis)
+    .setColor(0x0099ff) // Blue for free plays
+    .addFields([
       {
         name: '🏟️ Game',
         value: `${message.game.away} @ ${message.game.home}`,
@@ -389,15 +373,12 @@ function formatFreePlayForDiscord(message: FreePlayMessage) {
         value: message.bet.odds > 0 ? `+${message.bet.odds}` : message.bet.odds.toString(),
         inline: true
       }
-    ],
-    timestamp: message.timestamp,
-    footer: {
-      text: 'GotLockz Family • Free Play'
-    }
-  };
+    ])
+    .setTimestamp(new Date(message.timestamp))
+    .setFooter({ text: 'GotLockz Family • Free Play' });
   
   if (message.assets?.imageUrl) {
-    embed.image = { url: message.assets.imageUrl };
+    embed.setImage(message.assets.imageUrl);
   }
   
   return embed;
@@ -406,36 +387,43 @@ function formatFreePlayForDiscord(message: FreePlayMessage) {
 /**
  * Format Lotto Ticket message for Discord embed
  */
-function formatLottoTicketForDiscord(message: LottoTicketMessage) {
-  const embed: any = {
-    title: '🎰 Lotto Ticket Alert!',
-    description: message.analysis,
-    color: 0xff6600, // Orange for lotto tickets
-    fields: [
+function formatLottoTicketForDiscord(message: LottoTicketMessage): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle('🎰 Lotto Ticket Alert!')
+    .setDescription(message.analysis)
+    .setColor(0xff6600) // Orange for lotto tickets
+    .addFields([
       {
-        name: '🎮 Games',
-        value: message.games.map(game => `${game.away} @ ${game.home}`).join('\n'),
-        inline: false
+        name: '🏟️ Game',
+        value: `${message.game.away} @ ${message.game.home}`,
+        inline: true
       },
       {
-        name: '🎲 Legs',
-        value: message.legs.map(leg => `${leg.selection} - ${leg.market} (${leg.odds > 0 ? '+' : ''}${leg.odds})`).join('\n'),
-        inline: false
+        name: '⏰ Start Time',
+        value: new Date(message.game.startTime).toLocaleString(),
+        inline: true
       },
       {
-        name: '💰 Parlay Odds',
-        value: message.parlayOdds > 0 ? `+${message.parlayOdds}` : message.parlayOdds.toString(),
+        name: '🎲 Bet',
+        value: `${message.bet.selection} - ${message.bet.market}`,
+        inline: true
+      },
+      {
+        name: '💰 Odds',
+        value: message.bet.odds > 0 ? `+${message.bet.odds}` : message.bet.odds.toString(),
+        inline: true
+      },
+      {
+        name: '📊 Units',
+        value: message.bet.unitSize.toString(),
         inline: true
       }
-    ],
-    timestamp: message.timestamp,
-    footer: {
-      text: 'GotLockz Family • Lotto Ticket'
-    }
-  };
+    ])
+    .setTimestamp(new Date(message.timestamp))
+    .setFooter({ text: 'GotLockz Family • Lotto Ticket' });
   
   if (message.notes) {
-    embed.fields.push({
+    embed.addFields({
       name: '📝 Notes',
       value: message.notes,
       inline: false
@@ -443,7 +431,7 @@ function formatLottoTicketForDiscord(message: LottoTicketMessage) {
   }
   
   if (message.assets?.imageUrl) {
-    embed.image = { url: message.assets.imageUrl };
+    embed.setImage(message.assets.imageUrl);
   }
   
   return embed;
@@ -453,7 +441,11 @@ function formatLottoTicketForDiscord(message: LottoTicketMessage) {
  * Get current VIP play counter stats
  */
 export function getVIPPlayCounterStats(): VIPPlayCounter {
-  return { ...vipPlayCounter };
+  return {
+    date: new Date().toISOString().split('T')[0] || '',
+    count: vipPlayCounter - 1,
+    lastReset: new Date().toISOString()
+  };
 }
 
 /**

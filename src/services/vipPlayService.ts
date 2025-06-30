@@ -39,6 +39,11 @@ export async function createVIPPlayMessage(
     return "❌ Invalid game data - missing team information.";
   }
 
+  // Validate that both teams are properly defined
+  if (!gameData.teams[0] || !gameData.teams[1] || gameData.teams[0] === 'TBD' || gameData.teams[1] === 'TBD') {
+    return "❌ Invalid game data - teams not properly defined.";
+  }
+
   // Increment play counter
   playCounter.count += 1;
   

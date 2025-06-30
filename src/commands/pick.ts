@@ -8,7 +8,7 @@
  */
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { analyzeImage } from '../services/ocrService';
-import { getGameData, GameStats } from '../services/mlbService';
+import { getGameData, convertGameStatsToGameData } from '../services/mlbService';
 import { getForecast } from '../services/weatherService';
 import { allow } from '../utils/rateLimiter';
 import { 
@@ -20,17 +20,6 @@ import {
 } from '../services/bettingMessageService';
 import { parseBetSlip } from '../utils/parser';
 import { generateAnalysis } from '../services/analysisService';
-import { GameData } from '../types';
-
-// Convert GameStats to GameData for compatibility
-function convertGameStatsToGameData(gameStats: GameStats): GameData {
-  return {
-    teams: gameStats.teams,
-    date: gameStats.date,
-    startTime: gameStats.date + 'T19:00:00Z',
-    venue: 'TBD'
-  };
-}
 
 export const data = new SlashCommandBuilder()
   .setName('pick')

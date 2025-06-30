@@ -2,6 +2,7 @@
  * MLB Service - Game statistics and data
  */
 import axios from 'axios';
+import { GameData } from '../types';
 
 export interface GameStats {
   gameId: string;
@@ -34,6 +35,22 @@ export interface GameStats {
       saves: string;
       strikeouts: string;
     };
+  };
+}
+
+/**
+ * Convert GameStats to GameData for compatibility
+ */
+export function convertGameStatsToGameData(gameStats: GameStats): GameData {
+  return {
+    gameId: gameStats.gameId,
+    date: gameStats.date,
+    teams: gameStats.teams,
+    score: gameStats.score,
+    status: gameStats.status,
+    startTime: gameStats.date + 'T19:00:00Z',
+    venue: 'TBD',
+    keyStats: gameStats.keyStats
   };
 }
 

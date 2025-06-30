@@ -3,21 +3,13 @@
  * Handles image preprocessing, Tesseract JSON parsing, word clustering, and Google Vision fallback
  */
 import { Jimp } from 'jimp';
-import Tesseract from 'tesseract.js';
+import { createWorker } from 'tesseract.js';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { getEnv } from '../utils/env';
-import { TesseractData } from '../types';
+import { TesseractData, TesseractWord } from '../types';
 
-export interface Word {
-  text: string;
-  confidence: number;
-  bbox: {
-    x0: number;
-    y0: number;
-    x1: number;
-    y1: number;
-  };
-}
+export type Word = TesseractWord;
+export { TesseractData };
 
 export interface ClusteredLine {
   text: string;
@@ -251,13 +243,10 @@ export async function parseImage(imageBuffer: Buffer): Promise<OCRParserResult> 
     
     // Step 2: Analyze with Tesseract
     console.log('🔍 Running Tesseract analysis...');
-    const tesseractResult = await Tesseract.recognize(processedBuffer, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          console.log(`🔄 Tesseract progress: ${Math.round(m.progress * 100)}%`);
-        }
-      }
-    });
+    const worker = await createWorker();
+    await worker.reinitialize('eng');
+    const tesseractResult = await worker.recognize(processedBuffer);
+    await worker.terminate();
     
     // Step 3: Parse Tesseract words and filter low confidence
     const words = parseTesseractWords(tesseractResult.data, 60);
