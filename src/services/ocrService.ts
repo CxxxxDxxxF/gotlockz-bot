@@ -4,6 +4,7 @@
 import axios from 'axios';
 import Tesseract from 'tesseract.js';
 import { getEnv } from '../utils/env';
+import { parseImage, OCRParserResult } from './ocrParser';
 
 export interface OCRResult {
   text: string;
@@ -16,19 +17,48 @@ export interface OCRResult {
 }
 
 /**
- * Analyze an image to extract text using OCR
+ * Analyze an image to extract text using advanced OCR with preprocessing and fallback
  * @param image - Buffer containing the image data
  * @returns Promise<string[]> - Array of text lines extracted from the image
  */
 export async function analyzeImage(image: Buffer): Promise<string[]> {
-  console.log('🔍 Starting OCR analysis...');
+  console.log('🔍 Starting advanced OCR analysis...');
   console.log('📏 Image buffer size:', image.length, 'bytes');
   
+  try {
+    // Use the new advanced OCR parser
+    const result: OCRParserResult = await parseImage(image);
+    
+    console.log(`📊 OCR Analysis Results:`);
+    console.log(`  - Lines extracted: ${result.lines.length}`);
+    console.log(`  - Average confidence: ${result.averageConfidence.toFixed(1)}%`);
+    console.log(`  - Image dimensions: ${result.imageDimensions.width}x${result.imageDimensions.height}`);
+    console.log(`  - Used fallback: ${result.usedFallback ? 'Yes (Google Vision)' : 'No (Tesseract)'}`);
+    
+    // Extract text lines from clustered results
+    const textLines = result.lines.map(line => line.text).filter(text => text.trim().length > 0);
+    
+    console.log('✅ Advanced OCR successful, extracted lines:', textLines.length);
+    return textLines;
+    
+  } catch (error) {
+    console.error('❌ Advanced OCR failed:', error);
+    
+    // Fallback to legacy OCR methods
+    console.log('🔄 Falling back to legacy OCR methods...');
+    return await fallbackToLegacyOCR(image);
+  }
+}
+
+/**
+ * Legacy OCR fallback methods
+ */
+async function fallbackToLegacyOCR(image: Buffer): Promise<string[]> {
   try {
     // Try OCR.space API first if API key is available
     const { OCR_SPACE_API_KEY } = getEnv();
     if (OCR_SPACE_API_KEY) {
-      console.log('🔑 Using OCR.space API...');
+      console.log('🔑 Using OCR.space API fallback...');
       try {
         const result = await analyzeWithOCRSpace(image, OCR_SPACE_API_KEY);
         console.log('✅ OCR.space API successful, extracted lines:', result.length);
@@ -43,8 +73,8 @@ export async function analyzeImage(image: Buffer): Promise<string[]> {
     console.log('❌ Error checking OCR.space API:', error);
   }
 
-  // Fallback to Tesseract.js
-  console.log('🔄 Falling back to Tesseract.js...');
+  // Fallback to basic Tesseract.js
+  console.log('🔄 Falling back to basic Tesseract.js...');
   try {
     const result = await analyzeWithTesseract(image);
     console.log('✅ Tesseract.js successful, extracted lines:', result.length);
@@ -89,7 +119,7 @@ async function analyzeWithOCRSpace(image: Buffer, apiKey: string): Promise<strin
  * Use Tesseract.js as fallback
  */
 async function analyzeWithTesseract(image: Buffer): Promise<string[]> {
-  console.log('🔄 Starting Tesseract.js processing...');
+  console.log('🔄 Starting basic Tesseract.js processing...');
   
   const result = await Tesseract.recognize(image, 'eng', {
     logger: m => {

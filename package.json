@@ -34,10 +34,12 @@
   },
   "homepage": "https://github.com/CxxxxDxxxF/gotlockz-bot#readme",
   "dependencies": {
+    "@google-cloud/vision": "^5.2.0",
     "axios": "^1.10.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
+    "jimp": "^1.6.0",
     "mlb-stats-api": "^2.0.0",
     "node-cron": "^3.0.3",
     "openai": "^5.8.2",
@@ -47,6 +49,7 @@
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/jest": "^29.5.8",
+    "@types/jimp": "^0.2.1",
     "@types/node": "^20.8.10",
     "@typescript-eslint/eslint-plugin": "^6.9.1",
     "@typescript-eslint/parser": "^6.9.1",

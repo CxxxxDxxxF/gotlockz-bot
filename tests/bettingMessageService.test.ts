@@ -114,6 +114,10 @@ describe('Betting Message Service', () => {
         analysis: mockAnalysis
       });
 
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
+
       expect(vipMessage.playNumber).toBeGreaterThan(0);
       expect(new Date(vipMessage.timestamp)).toBeInstanceOf(Date);
     });
@@ -122,12 +126,21 @@ describe('Betting Message Service', () => {
       const message1 = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
       const message2 = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
 
+      // Check that both messages are valid objects (not error strings)
+      if (typeof message1 === 'string' || typeof message2 === 'string') {
+        throw new Error('Expected VIP Play messages to be objects, not error strings');
+      }
+
       expect(message2.playNumber).toBe(message1.playNumber + 1);
     });
 
     it('includes image URL when provided', async () => {
       const imageUrl = 'https://example.com/betslip.png';
       const vipMessage = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis, imageUrl);
+
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
 
       expect(vipMessage.assets).toEqual({ imageUrl });
     });
@@ -227,6 +240,11 @@ describe('Betting Message Service', () => {
   describe('validateBettingMessage', () => {
     it('validates a correct VIP Play message', async () => {
       const vipMessage = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
+      
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
+      
       expect(validateBettingMessage(vipMessage)).toBe(true);
     });
 
@@ -242,12 +260,22 @@ describe('Betting Message Service', () => {
 
     it('rejects message with invalid channel', async () => {
       const vipMessage = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
+      
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
+      
       (vipMessage as any).channel = 'wrong_channel';
       expect(validateBettingMessage(vipMessage as any)).toBe(false);
     });
 
     it('rejects message with empty analysis', async () => {
       const vipMessage = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
+      
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
+      
       vipMessage.analysis = '';
       expect(validateBettingMessage(vipMessage)).toBe(false);
     });
@@ -256,6 +284,11 @@ describe('Betting Message Service', () => {
   describe('formatBettingMessageForDiscord', () => {
     it('formats VIP Play message as Discord embed', async () => {
       const vipMessage = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
+      
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
+      
       const embed = formatBettingMessageForDiscord(vipMessage);
 
       expect(embed).toMatchObject({

@@ -1,7 +1,7 @@
 /**
  * VIP Play Service Tests
  */
-import { createVIPPlayMessage, validateVIPPlayMessage, formatVIPPlayForDiscord, getPlayCounterStats } from '../src/services/vipPlayService';
+import { createVIPPlayMessage, validateVIPPlayMessage, formatVIPPlayForDiscord, getPlayCounterStats, resetPlayCounter } from '../src/services/vipPlayService';
 import { BetSlip } from '../src/utils/parser';
 import { GameStats } from '../src/services/mlbService';
 
@@ -59,6 +59,7 @@ describe('VIP Play Service', () => {
   beforeEach(() => {
     // Reset play counter for each test
     jest.clearAllMocks();
+    resetPlayCounter();
   });
 
   describe('createVIPPlayMessage', () => {
@@ -90,6 +91,11 @@ describe('VIP Play Service', () => {
       const message1 = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
       const message2 = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis);
 
+      // Check that both messages are valid objects (not error strings)
+      if (typeof message1 === 'string' || typeof message2 === 'string') {
+        throw new Error('Expected VIP Play messages to be objects, not error strings');
+      }
+
       expect(message2.playNumber).toBe(message1.playNumber + 1);
     });
 
@@ -97,18 +103,23 @@ describe('VIP Play Service', () => {
       const imageUrl = 'https://example.com/betslip.png';
       const vipMessage = await createVIPPlayMessage(mockBetSlip, mockGameData, mockAnalysis, imageUrl);
 
+      if (typeof vipMessage === 'string') {
+        throw new Error('Expected VIP Play message to be object, not error string');
+      }
+
       expect(vipMessage.assets).toEqual({ imageUrl });
     });
 
-    it('throws error when no bet legs found', async () => {
+    it('returns error message when no bet legs found', async () => {
       const emptyBetSlip: BetSlip = {
         type: 'SINGLE',
         units: 1,
         legs: []
       };
 
-      await expect(createVIPPlayMessage(emptyBetSlip, mockGameData, mockAnalysis))
-        .rejects.toThrow('No bet legs found in slip');
+      const result = await createVIPPlayMessage(emptyBetSlip, mockGameData, mockAnalysis);
+      expect(typeof result).toBe('string');
+      expect(result).toContain("Couldn't find any valid bet legs");
     });
   });
 

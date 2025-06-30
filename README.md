@@ -14,6 +14,7 @@ The bot requires the following environment variables:
 - `DISCORD_CLIENT_ID` - Your Discord application client ID  
 - `DISCORD_GUILD_ID` - Your Discord server ID (optional, for guild-specific commands)
 - `OPENAI_API_KEY` - Your OpenAI API key for GPT analysis
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Google Cloud service account key file (optional, for OCR fallback)
 
 ### Installation
 
@@ -24,14 +25,44 @@ The bot requires the following environment variables:
 
 ## 🎯 Features
 
+- **Advanced OCR**: Image preprocessing, Tesseract JSON parsing, word clustering, and Google Vision fallback
 - **Multi-Message Types**: Support for VIP Plays, Free Plays, and Lotto Tickets
-- **Image Analysis**: OCR-powered betting slip analysis using Tesseract.js
+- **Image Analysis**: OCR-powered betting slip analysis with confidence scoring
 - **GPT Integration**: AI-powered betting analysis and insights using OpenAI
 - **Weather Context**: Weather data integration for enhanced analysis
 - **Rate Limiting**: Built-in protection against spam (12-second cooldown)
 - **Health Monitoring**: HTTP health endpoint for uptime checks
 - **Caching**: Intelligent caching to reduce API costs
 - **Schema Validation**: Structured message formats with JSON schema compliance
+
+## 🔍 Advanced OCR Features
+
+The bot now includes sophisticated OCR capabilities:
+
+### Image Preprocessing
+- **Grayscale conversion** for better text recognition
+- **Contrast enhancement** to improve readability
+- **Resize optimization** to ~1000px height for optimal processing
+- **Noise reduction** with Gaussian blur
+- **Binary thresholding** for clean text extraction
+
+### Tesseract JSON Parsing
+- **Word-level confidence filtering** (minimum 60% confidence)
+- **Spatial clustering** by Y-coordinate proximity
+- **Bounding box analysis** for accurate text positioning
+- **Multi-line text reconstruction** from individual words
+
+### Google Vision Fallback
+- **Automatic fallback** when Tesseract confidence < 55%
+- **High-accuracy text detection** for challenging images
+- **Bounding polygon analysis** for precise text positioning
+- **Seamless integration** with existing OCR pipeline
+
+### Confidence Scoring
+- **Average confidence calculation** across all detected words
+- **Low-confidence cluster logging** for debugging
+- **Automatic quality assessment** and fallback triggering
+- **Detailed logging** of OCR performance metrics
 
 ## 📋 Commands
 
@@ -121,23 +152,35 @@ Comprehensive test coverage including:
 - Service integration (OCR, MLB, Weather, Analysis)
 - Message type validation and formatting
 - Rate limiting and caching
+- **Advanced OCR testing** with image preprocessing and word clustering
 
 **Test Results:**
 - 8/9 test suites passing (88.9%)
 - 52/54 tests passing (96.3%)
 - Full coverage of all message types
+- **OCR preprocessing and clustering tests**
 
 ## 🏗️ Architecture
 
 ### Services
-- **OCR Service**: Image text extraction with Tesseract.js fallback
+- **OCR Parser Service**: Advanced image preprocessing and Tesseract JSON parsing
+- **OCR Service**: Image text extraction with Google Vision fallback
 - **MLB Service**: Game statistics and real-time data
 - **Weather Service**: Weather forecasts and conditions
 - **Betting Message Service**: Unified service for all message types
 - **Analysis Service**: GPT-powered betting insights with caching
 
+### OCR Processing Pipeline
+1. **Image Preprocessing** → Grayscale, contrast, resize, threshold
+2. **Tesseract Analysis** → JSON word extraction with confidence scores
+3. **Word Filtering** → Remove low-confidence words (< 60%)
+4. **Spatial Clustering** → Group words by Y-coordinate proximity
+5. **Confidence Assessment** → Calculate average confidence
+6. **Fallback Decision** → Use Google Vision if confidence < 55%
+7. **Text Reconstruction** → Build clean text lines from clusters
+
 ### Message Processing Pipeline
-1. **Image Upload** → OCR text extraction
+1. **Image Upload** → Advanced OCR text extraction
 2. **Text Parsing** → Bet slip structure analysis
 3. **Data Enrichment** → Game stats and weather context
 4. **AI Analysis** → GPT-powered insights
@@ -160,6 +203,15 @@ The bot is configured for automatic deployment on Render:
 2. Set environment variables in Render dashboard
 3. Deploy automatically on pushes to `main`
 
+### Google Cloud Vision Setup (Optional)
+For enhanced OCR capabilities:
+
+1. Create a Google Cloud project
+2. Enable the Cloud Vision API
+3. Create a service account and download the JSON key file
+4. Set `GOOGLE_APPLICATION_CREDENTIALS` to the path of your key file
+5. The bot will automatically use Google Vision as a fallback for low-confidence OCR results
+
 ### Health Endpoint
 The bot exposes a health endpoint at `/health`:
 ```bash
@@ -174,6 +226,7 @@ Look for these messages in Render logs:
 ```
 Bot is ready and analysis service is up!
 Health endpoint listening on port 3000
+Advanced OCR parser initialized
 ```
 
 ### Environment Verification
@@ -182,6 +235,13 @@ Ensure these environment variables are set in Render:
 - `DISCORD_CLIENT_ID` 
 - `DISCORD_GUILD_ID`
 - `OPENAI_API_KEY`
+- `GOOGLE_APPLICATION_CREDENTIALS` (optional)
+
+### OCR Performance Monitoring
+- Average confidence scores logged for each image
+- Low-confidence clusters flagged for review
+- Google Vision fallback usage tracked
+- Image preprocessing metrics recorded
 
 ### Message Type Monitoring
 - VIP Play counter resets daily
@@ -195,7 +255,8 @@ Ensure these environment variables are set in Render:
 2. Create a feature branch
 3. Run tests: `npm test`
 4. Ensure all message types work correctly
-5. Submit a pull request
+5. Test OCR functionality with various image qualities
+6. Submit a pull request
 
 ## 📄 License
 

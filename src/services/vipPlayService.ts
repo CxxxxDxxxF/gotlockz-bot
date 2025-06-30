@@ -27,9 +27,12 @@ export async function createVIPPlayMessage(
     return "❌ Couldn't find any valid bet legs on this slip. Please upload a clearer version.";
   }
 
+  // Increment play counter
+  playCounter.count += 1;
+  
   // Your normal VIPPlayMessage creation logic here
   const now = new Date().toISOString();
-  const playNumber = 1; // Replace with your play number logic
+  const playNumber = playCounter.count;
   const firstLeg = betSlip.legs[0];
   const selection = firstLeg.teamA;
   const market = `${firstLeg.teamA} vs ${firstLeg.teamB}`;
@@ -134,4 +137,15 @@ export function formatVIPPlayForDiscord(message: VIPPlayMessage) {
  */
 export function getPlayCounterStats(): VIPPlayCounter {
   return { ...playCounter };
+}
+
+/**
+ * Reset play counter (for testing purposes)
+ */
+export function resetPlayCounter(): void {
+  playCounter = {
+    date: new Date().toISOString().split('T')[0] ?? '',
+    count: 0,
+    lastReset: new Date().toISOString()
+  };
 } 
