@@ -66,7 +66,7 @@ export async function analyzeImage(image: Buffer, debug = false): Promise<string
  */
 async function fallbackToLegacyOCR(image: Buffer): Promise<string[]> {
   try {
-    // Try OCR.space API first if API key is available
+    // Try OCR.space API first if API key is available (no retries)
     const { OCR_SPACE_API_KEY } = getEnv();
     if (OCR_SPACE_API_KEY) {
       console.log('🔑 Using OCR.space API fallback...');
@@ -75,7 +75,8 @@ async function fallbackToLegacyOCR(image: Buffer): Promise<string[]> {
         console.log('✅ OCR.space API successful, extracted lines:', result.length);
         return result;
       } catch (error) {
-        console.log('❌ OCR.space API failed:', error);
+        console.log('❌ OCR.space API failed, skipping retry:', error instanceof Error ? error.message : 'Unknown error');
+        // Continue to Tesseract.js fallback - no retry
       }
     } else {
       console.log('⚠️ No OCR_SPACE_API_KEY found, using Tesseract.js fallback');
@@ -98,7 +99,7 @@ async function fallbackToLegacyOCR(image: Buffer): Promise<string[]> {
 }
 
 /**
- * Use OCR.space API for higher accuracy
+ * Use OCR.space API for higher accuracy with configurable timeout
  */
 async function analyzeWithOCRSpace(image: Buffer, apiKey: string): Promise<string[]> {
   const base64Image = image.toString('base64');
@@ -110,20 +111,36 @@ async function analyzeWithOCRSpace(image: Buffer, apiKey: string): Promise<strin
   formData.append('isOverlayRequired', 'false');
   formData.append('filetype', 'png');
 
-  const response = await axios.post('https://api.ocr.space/parse/image', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  try {
+    const response = await axios.post('https://api.ocr.space/parse/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 10000, // 10 second timeout
+    });
 
-  if (response.data.ParsedResults && response.data.ParsedResults.length > 0) {
-    const parsedText = response.data.ParsedResults[0].ParsedText;
-    const lines = parsedText.split('\r\n').filter((line: string) => line.trim().length > 0);
-    console.log('📄 OCR.space extracted text:', parsedText.substring(0, 200) + '...');
-    return lines;
+    if (response.data.ParsedResults && response.data.ParsedResults.length > 0) {
+      const parsedText = response.data.ParsedResults[0].ParsedText;
+      const lines = parsedText.split('\r\n').filter((line: string) => line.trim().length > 0);
+      console.log('📄 OCR.space extracted text:', parsedText.substring(0, 200) + '...');
+      return lines;
+    }
+
+    throw new Error('OCR.space API returned no results');
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        console.log('⏰ OCR.space API timeout - falling back to Tesseract.js');
+        throw new Error('OCR.space API timeout');
+      }
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        console.log('🌐 OCR.space API connection error - falling back to Tesseract.js');
+        throw new Error('OCR.space API connection error');
+      }
+    }
+    console.log('❌ OCR.space API error - falling back to Tesseract.js:', error instanceof Error ? error.message : 'Unknown error');
+    throw error;
   }
-
-  throw new Error('OCR.space API returned no results');
 }
 
 /**
