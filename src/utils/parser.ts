@@ -120,11 +120,15 @@ function parseSingleBet(text: string): BetLeg | null {
   // Split lines and look for ML pattern
   const lines = text.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
   for (let i = 0; i < lines.length; i++) {
-    const mlMatch = lines[i].match(/^ML\s*([+-]?\d+)$/i);
-    if (mlMatch && i > 0) {
+    const line = lines[i];
+    if (!line) continue;
+    
+    const mlMatch = line.match(/^ML\s*([+-]?\d+)$/i);
+    if (mlMatch && i > 0 && lines[i-1] && mlMatch[1]) {
+      const teamA = lines[i-1] ?? 'TBD';
       return {
-        gameId: `${lines[i-1]}_TBD_${Date.now()}`,
-        teamA: lines[i-1],
+        gameId: `${teamA}_TBD_${Date.now()}`,
+        teamA,
         teamB: 'TBD',
         odds: parseInt(mlMatch[1])
       };
