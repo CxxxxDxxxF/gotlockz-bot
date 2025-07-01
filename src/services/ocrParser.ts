@@ -8,7 +8,7 @@ import { getEnv } from '../utils/env';
 import { TesseractData, TesseractWord } from '../types';
 import { writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
-import { clusterByY } from '../utils/parser';
+// clusterByY function will be defined in this file
 
 // Constants for ROI detection
 const MIN_CROP_HEIGHT = 30;
@@ -53,8 +53,9 @@ export async function preprocess(buffer: Buffer, debugMode = false): Promise<{ b
   console.log('🔄 Starting image preprocessing...');
   
   try {
-    const Jimp = (await import('jimp')).default;
-    let image = await (Jimp as any).read(buffer);
+    const JimpModule = await import('jimp');
+    const Jimp = (JimpModule.default ?? JimpModule) as any;
+    let image = await Jimp.read(buffer);
     const originalWidth = image.bitmap.width;
     const originalHeight = image.bitmap.height;
     
@@ -241,8 +242,9 @@ async function detectTextRegion(image: any): Promise<{ x: number; y: number; w: 
  */
 async function saveCropDebugVisualization(originalBuffer: Buffer, cropRegion: { x: number; y: number; w: number; h: number }): Promise<void> {
   try {
-    const Jimp = (await import('jimp')).default;
-    const raw = await (Jimp as any).read(originalBuffer);
+    const JimpModule = await import('jimp');
+    const Jimp = (JimpModule.default ?? JimpModule) as any;
+    const raw = await Jimp.read(originalBuffer);
     
     // Draw red rectangle around crop region
     const red = Jimp.rgbaToInt(255, 0, 0, 255);
@@ -499,10 +501,10 @@ export async function parseImage(buffer: Buffer, debugMode = false): Promise<OCR
     }
     
     // Step 8: Log low-confidence clusters for debugging
-    const lowConfidenceClusters = clusters.filter(c => c.confidence < 50);
+    const lowConfidenceClusters = clusters.filter((c: ClusteredLine) => c.confidence < 50);
     if (lowConfidenceClusters.length > 0) {
       console.log('⚠️ Low-confidence clusters detected:');
-      lowConfidenceClusters.forEach((cluster, index) => {
+      lowConfidenceClusters.forEach((cluster: ClusteredLine, index: number) => {
         console.log(`  ${index + 1}. "${cluster.text}" (${cluster.confidence.toFixed(1)}%)`);
       });
     }
@@ -525,10 +527,11 @@ export async function parseImage(buffer: Buffer, debugMode = false): Promise<OCR
   }
 }
 
-export async function parseImage(buffer: Buffer): Promise<string[]> {
+export async function parseImageLegacy(buffer: Buffer): Promise<string[]> {
   // 1) Preprocess as before (dynamic Jimp import inside to keep tests happy)
   const { preprocessedBuffer } = await (async () => {
-    const Jimp = (await import('jimp')).default;
+    const JimpModule = await import('jimp');
+    const Jimp = (JimpModule.default ?? JimpModule) as any;
     let image = await Jimp.read(buffer);
     image = image
       .greyscale()
@@ -543,13 +546,11 @@ export async function parseImage(buffer: Buffer): Promise<string[]> {
   })();
 
   // 2) OCR with Tesseract
-  const worker = createWorker();
-  await worker.load();
-  await worker.loadLanguage('eng');
+  const worker = await createWorker();
   await worker.reinitialize('eng');
   await worker.setParameters({
     tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/',
-    tessedit_pageseg_mode: '6',
+    tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
     tessedit_ocr_engine_mode: '3'
   });
 
@@ -561,19 +562,19 @@ export async function parseImage(buffer: Buffer): Promise<string[]> {
   // 3) Determine header + disclaimer Y-bounds
   const headerMaxY =
     words
-      .filter(w => HEADER_REGEX.test(w.text))
-      .map(w => w.bbox.y1)
-      .reduce((max, y) => Math.max(max, y), -Infinity) || -Infinity;
+      .filter((w: any) => HEADER_REGEX.test(w.text))
+      .map((w: any) => w.bbox.y1)
+      .reduce((max: number, y: number) => Math.max(max, y), -Infinity) || -Infinity;
 
   const disclaimerMinY =
     words
-      .filter(w => DISCLAIMER_REGEX.test(w.text))
-      .map(w => w.bbox.y0)
-      .reduce((min, y) => Math.min(min, y), Infinity) || Infinity;
+      .filter((w: any) => DISCLAIMER_REGEX.test(w.text))
+      .map((w: any) => w.bbox.y0)
+      .reduce((min: number, y: number) => Math.min(min, y), Infinity) || Infinity;
 
   // 4) Filter to bet-details region + confidence
   const betWords = words.filter(
-    w =>
+    (w: any) =>
       w.bbox.y0 > headerMaxY + Y_MARGIN &&
       w.bbox.y1 < disclaimerMinY - Y_MARGIN &&
       w.confidence > CONFIDENCE_THRESHOLD
@@ -583,7 +584,7 @@ export async function parseImage(buffer: Buffer): Promise<string[]> {
   writeFileSync(
     path.resolve(__dirname, '../../debug/filtered-words.json'),
     JSON.stringify(
-      betWords.map(w => ({
+      betWords.map((w: any) => ({
         text: w.text,
         bbox: w.bbox,
         confidence: w.confidence
@@ -595,8 +596,8 @@ export async function parseImage(buffer: Buffer): Promise<string[]> {
 
   // 6) Cluster by Y and rebuild lines
   const clusters = clusterByY(betWords, 10);
-  const filteredLines = clusters.map(cluster =>
-    cluster.map(w => w.text).join(' ')
+  const filteredLines = clusters.map((cluster: ClusteredLine) =>
+    cluster.words.map((w: Word) => w.text).join(' ')
   );
 
   writeFileSync(
@@ -606,4 +607,65 @@ export async function parseImage(buffer: Buffer): Promise<string[]> {
 
   // 7) Return lines for downstream parsing (or call your parser here)
   return filteredLines;
+}
+
+/**
+ * Cluster words by Y-coordinate to group them into lines
+ * @param words - Array of word objects with bounding boxes
+ * @param thresholdPx - Y-coordinate threshold for clustering (default: 10)
+ * @returns ClusteredLine[] - Array of clustered text lines
+ */
+export function clusterByY(words: Word[], thresholdPx: number = 10): ClusteredLine[] {
+  if (words.length === 0) {
+    return [];
+  }
+
+  // Sort words by Y-coordinate
+  const sortedWords = [...words].sort((a, b) => a.bbox.y0 - b.bbox.y0);
+  if (!sortedWords[0]) return [];
+
+  const clusters: Word[][] = [];
+  let currentCluster: Word[] = [sortedWords[0]];
+  
+  for (let i = 1; i < sortedWords.length; i++) {
+    const word = sortedWords[i];
+    if (!word) continue;
+    
+    const lastWord = currentCluster[currentCluster.length - 1];
+    if (!lastWord) continue;
+    
+    // Check if this word is close enough to the last word in the cluster
+    const yDistance = Math.abs(word.bbox.y0 - lastWord.bbox.y0);
+    
+    if (yDistance <= thresholdPx) {
+      // Add to current cluster
+      currentCluster.push(word);
+    } else {
+      // Start a new cluster
+      clusters.push(currentCluster);
+      currentCluster = [word];
+    }
+  }
+  
+  // Add the last cluster
+  clusters.push(currentCluster);
+  
+  // Convert clusters to ClusteredLine objects
+  return clusters.map(cluster => {
+    // Sort words within cluster by X-coordinate
+    const sortedCluster = cluster.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+    
+    // Calculate average confidence
+    const totalConfidence = cluster.reduce((sum, w) => sum + w.confidence, 0);
+    const averageConfidence = totalConfidence / cluster.length;
+    
+    // Join words to form text
+    const text = sortedCluster.map(w => w.text).join(' ');
+    
+    return {
+      text,
+      confidence: averageConfidence,
+      words: sortedCluster
+    };
+  });
 } 
