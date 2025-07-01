@@ -8,6 +8,17 @@ import { getEnv } from '../utils/env';
 import { TesseractData, TesseractWord } from '../types';
 import { writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
+import { clusterByY } from '../utils/parser';
+
+// Constants for ROI detection
+const MIN_CROP_HEIGHT = 30;
+const TEXT_DENSITY_THRESHOLD = 0.1; // 10% of row width
+
+// Tunable constants
+const HEADER_REGEX = /Fanatics/i;
+const DISCLAIMER_REGEX = /MUST BE\s+\d+\+/i;
+const Y_MARGIN = 5;
+const CONFIDENCE_THRESHOLD = 60;
 
 export type Word = TesseractWord;
 export { TesseractData };
@@ -80,8 +91,8 @@ export async function preprocess(buffer: Buffer, debugMode = false): Promise<{ b
         
         // Save the cropped region itself
         const croppedBuffer = await image.getBufferAsync('image/png');
-        writeFileSync(path.resolve(__dirname, '../../debug/cropped.png'), croppedBuffer);
-        console.log('📸 Saved cropped region to debug/cropped.png');
+        writeFileSync(path.resolve(__dirname, '../../debug/crop.png'), croppedBuffer);
+        console.log('📸 Saved cropped region to debug/crop.png');
       }
     } else {
       // Fallback to basic crop if smart detection fails
@@ -162,24 +173,24 @@ async function detectTextRegion(image: any): Promise<{ x: number; y: number; w: 
     const width = bin.bitmap.width;
     
     // Compute horizontal projection (sum of black pixels per row)
-    const sums = new Array(rows).fill(0);
+    const rowSums = new Array(rows).fill(0);
     
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < width; x++) {
-        const idx = bin.getPixelIndex(x, y);
+        const idx = (y * width + x) * 4;
         if (bin.bitmap.data[idx] === 0) { // Black pixel
-          sums[y]++;
+          rowSums[y]++;
         }
       }
     }
     
     // Find text density threshold (10% of row width)
-    const threshold = width * 0.1;
+    const threshold = width * TEXT_DENSITY_THRESHOLD;
     
     // Find first row with significant text density
     let top = -1;
     for (let y = 0; y < rows; y++) {
-      if (sums[y] > threshold) {
+      if (rowSums[y] > threshold) {
         top = y;
         break;
       }
@@ -188,7 +199,7 @@ async function detectTextRegion(image: any): Promise<{ x: number; y: number; w: 
     // Find last row with significant text density
     let bottom = -1;
     for (let y = rows - 1; y >= 0; y--) {
-      if (sums[y] > threshold) {
+      if (rowSums[y] > threshold) {
         bottom = y;
         break;
       }
@@ -201,21 +212,19 @@ async function detectTextRegion(image: any): Promise<{ x: number; y: number; w: 
     }
     
     const regionHeight = bottom - top + 1;
-    const minHeight = 50; // Minimum reasonable text region height
     
-    if (regionHeight < minHeight) {
-      console.log(`⚠️ Detected region too small: ${regionHeight}px (min: ${minHeight}px)`);
+    if (regionHeight < MIN_CROP_HEIGHT) {
+      console.log(`⚠️ Skipping crop: detected region too small (${regionHeight}px < ${MIN_CROP_HEIGHT}px)`);
       return null;
     }
     
-    // Add margins for better OCR
-    const margin = 10;
-    const x = Math.max(0, margin);
-    const y = Math.max(0, top - margin);
-    const w = Math.min(width - x, width - 2 * margin);
-    const h = Math.min(rows - y, regionHeight + 2 * margin);
+    // Crop bounds: [0, top - 5] to [width, bottom - top + 10]
+    const x = 0;
+    const y = Math.max(0, top - 5);
+    const w = width;
+    const h = Math.min(rows - y, bottom - top + 10);
     
-    console.log(`🔍 Text region detected: ${x},${y} ${w}x${h} (density: ${(sums[top] / width * 100).toFixed(1)}% - ${(sums[bottom] / width * 100).toFixed(1)}%)`);
+    console.log(`🔍 Text region detected: ${x},${y} ${w}x${h} (density: ${(rowSums[top] / width * 100).toFixed(1)}% - ${(rowSums[bottom] / width * 100).toFixed(1)}%)`);
     
     return { x, y, w, h };
     
@@ -298,72 +307,6 @@ function removeNoise(img: any): any {
   }
   
   return processed;
-}
-
-/**
- * Cluster words into lines based on Y-coordinate proximity
- * @param words - Array of Tesseract word objects
- * @param thresholdPx - Y-coordinate threshold for clustering (default: 10px)
- * @returns ClusteredLine[] - Array of clustered text lines
- */
-export function clusterByY(words: Word[], thresholdPx: number = 10): ClusteredLine[] {
-  console.log(`🔍 Clustering ${words.length} words with ${thresholdPx}px threshold...`);
-  
-  if (words.length === 0) {
-    return [];
-  }
-  
-  // Sort words by Y-coordinate
-  const sortedWords = [...words].sort((a, b) => a.bbox.y0 - b.bbox.y0);
-  
-  const clusters: ClusteredLine[] = [];
-  let currentCluster: Word[] = [sortedWords[0]!];
-  let currentY = sortedWords[0]!.bbox.y0;
-  
-  for (let i = 1; i < sortedWords.length; i++) {
-    const word = sortedWords[i]!;
-    const yDiff = Math.abs(word.bbox.y0 - currentY);
-    
-    if (yDiff <= thresholdPx) {
-      // Add to current cluster
-      currentCluster.push(word);
-    } else {
-      // Start new cluster
-      if (currentCluster.length > 0) {
-        clusters.push(createClusteredLine(currentCluster));
-      }
-      currentCluster = [word];
-      currentY = word.bbox.y0;
-    }
-  }
-  
-  // Add final cluster
-  if (currentCluster.length > 0) {
-    clusters.push(createClusteredLine(currentCluster));
-  }
-  
-  console.log(`✅ Created ${clusters.length} text clusters`);
-  return clusters;
-}
-
-/**
- * Create a clustered line from an array of words
- * @param words - Array of words in the same line
- * @returns ClusteredLine - Structured line with text and confidence
- */
-function createClusteredLine(words: Word[]): ClusteredLine {
-  // Sort words by X-coordinate for proper text order
-  const sortedWords = [...words].sort((a, b) => a.bbox.x0 - b.bbox.x0);
-  
-  const text = sortedWords.map(w => w.text).join(' ');
-  const totalConfidence = sortedWords.reduce((sum, w) => sum + w.confidence, 0);
-  const averageConfidence = totalConfidence / sortedWords.length;
-  
-  return {
-    text,
-    confidence: averageConfidence,
-    words: sortedWords
-  };
 }
 
 /**
@@ -461,12 +404,12 @@ export async function analyzeWithGoogleVision(imageBuffer: Buffer): Promise<Clus
  * @param debugMode - Whether to save debug images and data
  * @returns Promise<OCRParserResult> - Structured OCR result with confidence metrics
  */
-export async function parseImage(imageBuffer: Buffer, debugMode = false): Promise<OCRParserResult> {
+export async function parseImage(buffer: Buffer, debugMode = false): Promise<OCRParserResult> {
   console.log('🚀 Starting advanced OCR parsing...');
   
   try {
     // Step 1: Preprocess image
-    const { buffer: processedBuffer, cropRegion } = await preprocess(imageBuffer, debugMode);
+    const { buffer: processedBuffer, cropRegion } = await preprocess(buffer, debugMode);
     
     // Step 2: Analyze with Tesseract
     console.log('🔍 Running Tesseract analysis...');
@@ -580,4 +523,87 @@ export async function parseImage(imageBuffer: Buffer, debugMode = false): Promis
     console.error('❌ OCR parsing failed:', error);
     throw new Error(`OCR parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+export async function parseImage(buffer: Buffer): Promise<string[]> {
+  // 1) Preprocess as before (dynamic Jimp import inside to keep tests happy)
+  const { preprocessedBuffer } = await (async () => {
+    const Jimp = (await import('jimp')).default;
+    let image = await Jimp.read(buffer);
+    image = image
+      .greyscale()
+      .contrast(0.7)
+      .normalize()
+      .scaleToFit(1000, 1000)
+      .gaussian(image.bitmap.width > 1 && image.bitmap.height > 1 ? 1 : 0)
+      .threshold({ max: 200 });
+    const buf = await image.getBufferAsync('image/png');
+    writeFileSync(path.resolve(__dirname, '../../debug/preprocessed.png'), buf);
+    return { preprocessedBuffer: buf };
+  })();
+
+  // 2) OCR with Tesseract
+  const worker = createWorker();
+  await worker.load();
+  await worker.loadLanguage('eng');
+  await worker.reinitialize('eng');
+  await worker.setParameters({
+    tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/',
+    tessedit_pageseg_mode: '6',
+    tessedit_ocr_engine_mode: '3'
+  });
+
+  const {
+    data: { words }
+  } = await worker.recognize(preprocessedBuffer);
+  await worker.terminate();
+
+  // 3) Determine header + disclaimer Y-bounds
+  const headerMaxY =
+    words
+      .filter(w => HEADER_REGEX.test(w.text))
+      .map(w => w.bbox.y1)
+      .reduce((max, y) => Math.max(max, y), -Infinity) || -Infinity;
+
+  const disclaimerMinY =
+    words
+      .filter(w => DISCLAIMER_REGEX.test(w.text))
+      .map(w => w.bbox.y0)
+      .reduce((min, y) => Math.min(min, y), Infinity) || Infinity;
+
+  // 4) Filter to bet-details region + confidence
+  const betWords = words.filter(
+    w =>
+      w.bbox.y0 > headerMaxY + Y_MARGIN &&
+      w.bbox.y1 < disclaimerMinY - Y_MARGIN &&
+      w.confidence > CONFIDENCE_THRESHOLD
+  );
+
+  // 5) Debug dump of filtered words
+  writeFileSync(
+    path.resolve(__dirname, '../../debug/filtered-words.json'),
+    JSON.stringify(
+      betWords.map(w => ({
+        text: w.text,
+        bbox: w.bbox,
+        confidence: w.confidence
+      })),
+      null,
+      2
+    )
+  );
+
+  // 6) Cluster by Y and rebuild lines
+  const clusters = clusterByY(betWords, 10);
+  const filteredLines = clusters.map(cluster =>
+    cluster.map(w => w.text).join(' ')
+  );
+
+  writeFileSync(
+    path.resolve(__dirname, '../../debug/filtered-lines.json'),
+    JSON.stringify(filteredLines, null, 2)
+  );
+
+  // 7) Return lines for downstream parsing (or call your parser here)
+  return filteredLines;
 } 
