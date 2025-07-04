@@ -8,6 +8,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+# Install TypeScript globally to ensure tsc is available
+RUN npm install -g typescript
+
 # Copy rest of the source
 COPY . .
 
