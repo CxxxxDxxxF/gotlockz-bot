@@ -54,18 +54,7 @@ export async function preprocess(buffer: Buffer, debugMode = false): Promise<{ b
   
   try {
     // Robust dynamic import for Jimp that handles both ESM and CommonJS
-    let Jimp: any;
-    try {
-      const JimpModule = await import('jimp');
-      Jimp = JimpModule.default || JimpModule;
-    } catch (importError) {
-      console.error('❌ Failed to import Jimp dynamically:', importError);
-      throw new Error('Jimp module not available');
-    }
-    
-    if (!Jimp || typeof Jimp.read !== 'function') {
-      throw new Error('Jimp.read is not a function - module not properly loaded');
-    }
+    const Jimp = require('jimp');
     
     let image = await Jimp.read(buffer);
     const originalWidth = image.bitmap.width;
@@ -255,14 +244,7 @@ async function detectTextRegion(image: any): Promise<{ x: number; y: number; w: 
 async function saveCropDebugVisualization(originalBuffer: Buffer, cropRegion: { x: number; y: number; w: number; h: number }): Promise<void> {
   try {
     // Robust dynamic import for Jimp
-    let Jimp: any;
-    try {
-      const JimpModule = await import('jimp');
-      Jimp = JimpModule.default || JimpModule;
-    } catch (importError) {
-      console.error('❌ Failed to import Jimp for debug visualization:', importError);
-      return; // Skip debug visualization if Jimp is not available
-    }
+    const Jimp = require('jimp');
     
     if (!Jimp || typeof Jimp.read !== 'function') {
       console.error('❌ Jimp.read not available for debug visualization');
@@ -569,14 +551,7 @@ export async function parseImageLegacy(buffer: Buffer): Promise<string[]> {
   // 1) Preprocess as before (dynamic Jimp import inside to keep tests happy)
   const { preprocessedBuffer } = await (async () => {
     // Robust dynamic import for Jimp
-    let Jimp: any;
-    try {
-      const JimpModule = await import('jimp');
-      Jimp = JimpModule.default || JimpModule;
-    } catch (importError) {
-      console.error('❌ Failed to import Jimp for legacy parsing:', importError);
-      throw new Error('Jimp module not available for legacy parsing');
-    }
+    const Jimp = require('jimp');
     
     if (!Jimp || typeof Jimp.read !== 'function') {
       throw new Error('Jimp.read is not a function for legacy parsing');
