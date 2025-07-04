@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+import Jimp from 'jimp';
 
 load_dotenv()
 

@@ -498,9 +498,22 @@ export async function parseImage(buffer: Buffer, debugMode = false): Promise<OCR
     // Step 5: Cluster words into lines
     const clusters = clusterByY(words, 10);
     
+    // List of disclaimer phrases to ignore (add more as needed)
+    const IGNORE_PHRASES = [
+      'MUST BE 21+. GAMBLING PROBLEM? CALL',
+      '1-800-GAMBLER'
+    ];
+
+    // Filter out disclaimer lines (case-insensitive)
+    const filteredClusters = clusters.filter(
+      c => !IGNORE_PHRASES.some(phrase =>
+        c.text.toUpperCase().includes(phrase)
+      )
+    );
+    
     // Step 6: Calculate average confidence
-    const totalConfidence = words.reduce((sum, w) => sum + w.confidence, 0);
-    const averageConfidence = totalConfidence / words.length;
+    const totalConfidence = filteredClusters.reduce((sum, c) => sum + c.confidence, 0);
+    const averageConfidence = totalConfidence / filteredClusters.length;
     
     console.log(`📊 Average confidence: ${averageConfidence.toFixed(1)}%`);
     
@@ -526,7 +539,7 @@ export async function parseImage(buffer: Buffer, debugMode = false): Promise<OCR
     }
     
     // Step 8: Log low-confidence clusters for debugging
-    const lowConfidenceClusters = clusters.filter((c: ClusteredLine) => c.confidence < 50);
+    const lowConfidenceClusters = filteredClusters.filter((c: ClusteredLine) => c.confidence < 50);
     if (lowConfidenceClusters.length > 0) {
       console.log('⚠️ Low-confidence clusters detected:');
       lowConfidenceClusters.forEach((cluster: ClusteredLine, index: number) => {
@@ -535,7 +548,7 @@ export async function parseImage(buffer: Buffer, debugMode = false): Promise<OCR
     }
     
     const result: OCRParserResult = {
-      lines: clusters,
+      lines: filteredClusters,
       averageConfidence,
       imageDimensions: { width: 0, height: 0 }, // Tesseract doesn't provide dimensions
       usedFallback: false,
