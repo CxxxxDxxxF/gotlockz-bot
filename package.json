@@ -12,7 +12,7 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "type-check": "tsc --noEmit",
-    "clean": "npx rimraf dist",
+    "clean": "npm exec rimraf dist",
     "prebuild": "npm run clean"
   },
   "repository": {
