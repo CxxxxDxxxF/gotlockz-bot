@@ -10,7 +10,10 @@ fi
 
 # Install dependencies
 echo "📦 Installing dependencies..."
-npm ci --omit=dev
+npm ci --omit=dev || {
+    echo "❌ npm ci failed, trying npm install..."
+    npm install --omit=dev
+}
 
 # Create logs directory if it doesn't exist
 echo "📁 Creating logs directory..."

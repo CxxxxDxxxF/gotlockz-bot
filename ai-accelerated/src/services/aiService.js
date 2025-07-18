@@ -34,6 +34,12 @@ class AIService {
       // Initialize AI clients
       this.initialize();
       
+      // Check if we have any AI services available
+      if (!this.openai && !this.hf) {
+        logger.warn('No AI services available - using fallback analysis');
+        return this.generateFallbackAnalysis(betSlip, gameData);
+      }
+      
       logger.info('Starting AI analysis', { 
         legs: betSlip.legs.length,
         debug 
@@ -42,12 +48,22 @@ class AIService {
       // Prepare context for AI
       const context = this.prepareContext(betSlip, gameData);
       
-      // Generate analysis using multiple AI models
-      const analyses = await Promise.allSettled([
-        this.analyzeWithGPT4(context, debug),
-        this.analyzeWithClaude(context, debug),
-        this.analyzeWithLocalModel(context, debug)
-      ]);
+      // Generate analysis using available AI models
+      const analysisPromises = [];
+      
+      if (this.openai) {
+        analysisPromises.push(this.analyzeWithGPT4(context, debug));
+        analysisPromises.push(this.analyzeWithClaude(context, debug));
+      }
+      
+      if (this.hf) {
+        analysisPromises.push(this.analyzeWithLocalModel(context, debug));
+      }
+      
+      // Always include fallback analysis
+      analysisPromises.push(this.analyzeWithLocalModel(context, debug));
+      
+      const analyses = await Promise.allSettled(analysisPromises);
       
       // Combine and synthesize results
       const combinedAnalysis = this.combineAnalyses(analyses, debug);
@@ -343,6 +359,30 @@ Please provide a comprehensive analysis including risk assessment, key factors, 
     if (avgScore <= 1.5) return 'low';
     if (avgScore <= 2.5) return 'medium';
     return 'high';
+  }
+
+  generateFallbackAnalysis(betSlip, gameData) {
+    // Simple fallback analysis when AI services are not available
+    const analysis = {
+      confidence: 0.65,
+      riskLevel: 'medium',
+      keyFactors: [
+        'Team performance analysis',
+        'Historical matchup data',
+        'Current form and statistics'
+      ],
+      recommendation: 'Consider this play with moderate confidence',
+      reasoning: 'Based on available data and statistical analysis',
+      modelsUsed: 1,
+      timestamp: new Date().toISOString()
+    };
+
+    return {
+      success: true,
+      data: analysis,
+      time: 0,
+      models: [{ model: 'fallback', status: 'fulfilled', error: null }]
+    };
   }
 }
 

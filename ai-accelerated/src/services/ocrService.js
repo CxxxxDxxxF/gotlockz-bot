@@ -94,7 +94,18 @@ class OCRService {
         .toBuffer();
       
       if (debug) {
-        await sharp(processed).toFile('debug/preprocessed.png');
+        try {
+          // Create debug directory if it doesn't exist
+          const fs = await import('fs');
+          const path = await import('path');
+          const debugDir = 'debug';
+          if (!fs.existsSync(debugDir)) {
+            fs.mkdirSync(debugDir, { recursive: true });
+          }
+          await sharp(processed).toFile(path.join(debugDir, 'preprocessed.png'));
+        } catch (error) {
+          logger.warn('Could not save debug image:', error.message);
+        }
       }
       
       return processed;
