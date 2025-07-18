@@ -6,6 +6,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import winston from 'winston';
 import express from 'express';
+import { setupInteractionHandler } from './handlers/interactionHandler.js';
 
 // Load environment variables
 dotenv.config();
@@ -88,31 +89,8 @@ client.once(Events.ClientReady, readyClient => {
   logger.info('GotLockz Bot is online and ready for action! 🚀');
 });
 
-// Handle slash command interactions
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) {return;}
-
-  const command = interaction.client.commands.get(interaction.commandName);
-
-  if (!command) {
-    logger.error(`No command matching ${interaction.commandName} was found.`);
-    return;
-  }
-
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    logger.error(`Error executing ${interaction.commandName}:`, error);
-
-    const errorMessage = 'There was an error while executing this command!';
-
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: errorMessage, ephemeral: true });
-    } else {
-      await interaction.reply({ content: errorMessage, ephemeral: true });
-    }
-  }
-});
+// Setup enhanced interaction handler
+setupInteractionHandler(client);
 
 // Handle errors
 process.on('unhandledRejection', error => {
