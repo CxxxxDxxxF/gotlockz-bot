@@ -1,6 +1,5 @@
 export default {
   testEnvironment: 'node',
-  extensionsToTreatAsEsm: ['.js'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },
@@ -21,5 +20,9 @@ export default {
       statements: 70
     }
   },
-  setupFilesAfterEnv: ['<rootDir>/test-setup.js']
+  setupFilesAfterEnv: ['<rootDir>/test-setup.js'],
+  transform: {},
+  transformIgnorePatterns: [
+    'node_modules/(?!(dotenv)/)'
+  ]
 }; 
