@@ -31,14 +31,15 @@ export async function execute (interaction) {
 
   try {
     switch (subcommand) {
-    case 'ping':
+    case 'ping': {
       const pingTime = Date.now();
       await interaction.reply('🏓 Pinging...');
       const pongTime = Date.now() - pingTime;
       await interaction.editReply(`🏓 Pong! Latency: ${pongTime}ms | API Latency: ${Math.round(interaction.client.ws.ping)}ms`);
       break;
+    }
 
-    case 'status':
+    case 'status': {
       await interaction.deferReply();
       const stats = await getSystemStats();
 
@@ -82,8 +83,9 @@ export async function execute (interaction) {
 
       await interaction.editReply({ embeds: [statusEmbed] });
       break;
+    }
 
-    case 'stats':
+    case 'stats': {
       await interaction.deferReply();
 
       const usageStats = {
@@ -126,8 +128,9 @@ export async function execute (interaction) {
 
       await interaction.editReply({ embeds: [usageStats] });
       break;
+    }
 
-    case 'restart':
+    case 'restart': {
       // Check if user is bot owner
       if (interaction.user.id !== process.env.OWNER_ID) {
         await interaction.reply({ content: '❌ You do not have permission to restart the bot.', ephemeral: true });
@@ -142,9 +145,11 @@ export async function execute (interaction) {
         process.exit(0);
       }, 1000);
       break;
+    }
 
-    default:
+    default: {
       await interaction.reply('❌ Unknown subcommand.');
+    }
     }
 
   } catch (error) {

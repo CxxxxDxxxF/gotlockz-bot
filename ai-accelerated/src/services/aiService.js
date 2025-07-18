@@ -213,7 +213,7 @@ class AIService {
     }
   }
 
-  async analyzeWithLocalModel (context, debug = false) {
+  analyzeWithLocalModel (context, debug = false) {
     try {
       // Placeholder for local model analysis
       // In production, you'd use a local LLM like Llama or Mistral
@@ -361,7 +361,7 @@ Please provide a comprehensive analysis including risk assessment, key factors, 
     return 'high';
   }
 
-  generateFallbackAnalysis (betSlip, gameData) {
+  generateFallbackAnalysis (_betSlip, _gameData) {
     // Simple fallback analysis when AI services are not available
     const analysis = {
       confidence: 0.65,

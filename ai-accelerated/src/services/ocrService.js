@@ -156,13 +156,13 @@ class OCRService {
     };
   }
 
-  async runEasyOCR (imageBuffer, debug = false) {
+  async runEasyOCR (imageBuffer, _debug = false) {
     // Placeholder for EasyOCR integration
     // In production, you would use a Python subprocess or API
     throw new Error('EasyOCR not implemented yet');
   }
 
-  async runPaddleOCR (imageBuffer, debug = false) {
+  async runPaddleOCR (imageBuffer, _debug = false) {
     // Placeholder for PaddleOCR integration
     // In production, you would use a Python subprocess or API
     throw new Error('PaddleOCR not implemented yet');

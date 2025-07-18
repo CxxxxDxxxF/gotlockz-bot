@@ -190,7 +190,7 @@ class WeatherService {
   }
 
   analyzeWeatherImpact (weatherData) {
-    const { temperature, humidity, windSpeed, condition } = weatherData;
+    const { temperature, windSpeed, condition } = weatherData;
 
     const impact = {
       level: 'neutral',
