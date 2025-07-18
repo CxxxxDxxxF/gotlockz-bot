@@ -2,16 +2,15 @@ services:
   - type: web
     name: gotlockz-bot
     env: node
-    plan: starter
-    repo: https://github.com/CxxxxDxxxF/gotlockz-bot
-    branch: main
-    dockerfilePath: ./Dockerfile
+    plan: free
+    buildCommand: cd ai-accelerated && npm ci
+    startCommand: cd ai-accelerated && npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: DISCORD_TOKEN
         sync: false
-      - key: CLIENT_ID
+      - key: DISCORD_CLIENT_ID
         sync: false
       - key: GUILD_ID
         sync: false
@@ -19,17 +18,7 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      - key: MLB_API_KEY
+      - key: HUGGINGFACE_API_KEY
         sync: false
-      - key: WEATHER_API_KEY
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: LOG_LEVEL
-        value: info
-      - key: PORT
-        value: 3000
-      - key: HEALTH_CHECK_INTERVAL
-        value: 30000
     healthCheckPath: /health
     autoDeploy: true 

@@ -11,7 +11,11 @@
     "dev": "cd ai-accelerated && npm run dev",
     "deploy": "cd ai-accelerated && npm run deploy",
     "test": "cd ai-accelerated && npm test",
-    "build": "cd ai-accelerated && npm run build"
+    "build": "cd ai-accelerated && npm run build",
+    "lint": "cd ai-accelerated && npm run lint",
+    "format": "cd ai-accelerated && npm run format",
+    "health": "cd ai-accelerated && npm run health",
+    "status": "cd ai-accelerated && npm run status"
   },
   "keywords": [
     "discord",
