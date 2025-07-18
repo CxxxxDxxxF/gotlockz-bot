@@ -1,0 +1,30 @@
+{
+  "name": "gotlockz-bot",
+  "version": "1.0.0",
+  "description": "AI-Accelerated MLB Discord Bot - Main Repository",
+  "private": true,
+  "workspaces": [
+    "ai-accelerated"
+  ],
+  "scripts": {
+    "start": "cd ai-accelerated && npm start",
+    "dev": "cd ai-accelerated && npm run dev",
+    "deploy": "cd ai-accelerated && npm run deploy",
+    "test": "cd ai-accelerated && npm test",
+    "build": "cd ai-accelerated && npm run build"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "mlb",
+    "betting",
+    "ai",
+    "ocr",
+    "analytics"
+  ],
+  "author": "GotLockz Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 

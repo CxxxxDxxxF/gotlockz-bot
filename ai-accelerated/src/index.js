@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import winston from 'winston';
+import express from 'express';
 
 // Load environment variables
 dotenv.config();
@@ -28,6 +29,26 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
     new winston.transports.File({ filename: 'logs/combined.log' })
   ]
+});
+
+// Create Express app for health checks
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    version: process.env.npm_package_version || '1.0.0'
+  });
+});
+
+// Start Express server
+app.listen(PORT, () => {
+  logger.info(`Health check server running on port ${PORT}`);
 });
 
 // Create a new client instance
