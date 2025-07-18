@@ -10,7 +10,10 @@
     "deploy": "node deploy-commands.js",
     "test": "jest",
     "lint": "eslint src/",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "health": "node health-check.js",
+    "status": "node deployment-status.js",
+    "setup": "node test-setup.js"
   },
   "keywords": [
     "discord",

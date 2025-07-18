@@ -59,7 +59,7 @@ console.log('   ✅ File structure check complete\n');
 
 // Test 4: Check environment variables
 console.log('4. Environment Variables Check:');
-const requiredEnvVars = ['DISCORD_TOKEN', 'CLIENT_ID'];
+const requiredEnvVars = ['DISCORD_TOKEN', 'CLIENT_ID', 'OWNER_ID'];
 const optionalEnvVars = ['OPENAI_API_KEY', 'HUGGINGFACE_API_KEY', 'GUILD_ID'];
 
 console.log('   Required:');
