@@ -16,8 +16,9 @@
 You **MUST** set these environment variables in your Render dashboard:
 
 1. **DISCORD_TOKEN** - Your Discord bot token
-2. **CLIENT_ID** - Your Discord application client ID
+2. **DISCORD_CLIENT_ID** - Your Discord application client ID
 3. **GUILD_ID** - Your Discord server ID (for development)
+4. **OWNER_ID** - Your Discord user ID (for admin commands)
 
 ### Optional Environment Variables
 
@@ -54,8 +55,9 @@ In the Render dashboard, go to your service → Environment → Add Environment 
 
 ```
 DISCORD_TOKEN=your_discord_bot_token_here
-CLIENT_ID=your_discord_client_id_here
+DISCORD_CLIENT_ID=your_discord_client_id_here
 GUILD_ID=your_discord_guild_id_here
+OWNER_ID=your_discord_user_id_here
 OPENAI_API_KEY=your_openai_api_key_here
 HUGGINGFACE_API_KEY=your_huggingface_api_key_here
 ```
@@ -96,8 +98,8 @@ Click "Create Web Service" and wait for the deployment to complete.
    - This is a TypeScript import error. The project uses JavaScript, not TypeScript.
    - Ensure all files are `.js` not `.ts`
 
-2. **"CLIENT_ID is undefined"**
-   - Make sure you've set the `CLIENT_ID` environment variable in Render
+2. **"DISCORD_CLIENT_ID is undefined"**
+   - Make sure you've set the `DISCORD_CLIENT_ID` environment variable in Render
    - Check that the value is correct (no extra spaces)
 
 3. **"Invalid Form Body" error**

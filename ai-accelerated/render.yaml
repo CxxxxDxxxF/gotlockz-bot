@@ -20,9 +20,13 @@ services:
         sync: false
       - key: HUGGINGFACE_API_KEY
         sync: false
-      - key: MLB_API_KEY
+      - key: ANALYSIS_CHANNEL_ID
         sync: false
-      - key: OPENWEATHER_API_KEY
+      - key: FREE_CHANNEL_ID
+        sync: false
+      - key: LOTTO_CHANNEL_ID
+        sync: false
+      - key: VIP_CHANNEL_ID
         sync: false
       - key: REDIS_URL
         sync: false
