@@ -1,57 +1,64 @@
 import { Client, Events, GatewayIntentBits, Collection, Routes } from 'discord.js';
 import { REST } from '@discordjs/rest';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import fs from 'fs';
-import dotenv from 'dotenv';
-import winston from 'winston';
-import express from 'express';
+import { logger, logError } from './utils/logger.js';
 import { setupInteractionHandler } from './handlers/interactionHandler.js';
+import express from 'express';
+import { getSystemStats } from './utils/systemStats.js';
 
-// Load environment variables
-dotenv.config();
-
-// Configure logging
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  defaultMeta: { service: 'gotlockz-bot' },
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    })
-    // File logging disabled for deployment - console only
-  ]
-});
-
-// Create Express app for health checks
+// Create Express app for health checks and logging
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Health check endpoint for Render
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    version: process.env.npm_package_version || '1.0.0'
-  });
+  try {
+    const stats = getSystemStats();
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      stats
+    });
+  } catch (error) {
+    logError(error, { endpoint: '/health' });
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
+
+// Logs endpoint for debugging (only in development)
+if (process.env.NODE_ENV === 'development') {
+  app.get('/logs', (req, res) => {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const logFiles = ['logs/error.log', 'logs/combined.log'];
+      const logs = {};
+      
+      logFiles.forEach(file => {
+        if (fs.existsSync(file)) {
+          logs[file] = fs.readFileSync(file, 'utf8').split('\n').slice(-50).join('\n');
+        }
+      });
+      
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+}
 
 // Start Express server
 app.listen(PORT, () => {
-  logger.info(`Health check server running on port ${PORT}`);
+  console.log(`🚀 Health check server running on port ${PORT}`);
+  logger.info('Health check server started', { port: PORT });
 });
 
-// Create a new client instance
+// Create Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -60,93 +67,117 @@ const client = new Client({
   ]
 });
 
-// Create a collection for commands
+// Global error handling
+process.on('uncaughtException', (error) => {
+  logError(error, { type: 'uncaughtException' });
+  console.error('💥 Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logError(new Error(`Unhandled Rejection: ${reason}`), { 
+    type: 'unhandledRejection',
+    promise: promise.toString()
+  });
+  console.error('💥 Unhandled Rejection:', reason);
+});
+
+// Client error handling
+client.on('error', (error) => {
+  logError(error, { type: 'client_error' });
+  console.error('💥 Discord client error:', error);
+});
+
+client.on('warn', (warning) => {
+  logger.warn('Discord client warning:', warning);
+  console.warn('⚠️ Discord client warning:', warning);
+});
+
+// Command collection
 client.commands = new Collection();
 
-// Get the directory name
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 // Load commands
-const commandsPath = join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
-for (const file of commandFiles) {
-  const filePath = join(commandsPath, file);
-  const command = await import(filePath);
-
-  if ('data' in command && 'execute' in command) {
-    client.commands.set(command.data.name, command);
-    logger.info(`Loaded command: ${command.data.name}`);
-  } else {
-    logger.warn(`The command at ${filePath} is missing a required "data" or "execute" property.`);
-  }
-}
-
-// When the client is ready, run this code (only once)
-client.once(Events.ClientReady, readyClient => {
-  logger.info(`Ready! Logged in as ${readyClient.user.tag}`);
-  logger.info('GotLockz Bot is online and ready for action! 🚀');
-});
-
-// Setup enhanced interaction handler
-setupInteractionHandler(client);
-
-// Handle errors
-process.on('unhandledRejection', error => {
-  logger.error('Unhandled promise rejection:', error);
-});
-
-process.on('uncaughtException', error => {
-  logger.error('Uncaught exception:', error);
-  process.exit(1);
-});
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT, shutting down gracefully...');
-  client.destroy();
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, shutting down gracefully...');
-  client.destroy();
-  process.exit(0);
-});
-
-// Deploy commands function
-export async function deployCommands () {
-  const commands = [];
-
-  for (const command of client.commands.values()) {
-    commands.push(command.data.toJSON());
-  }
-
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
+const loadCommands = async () => {
   try {
-    logger.info(`Started refreshing ${commands.length} application (/) commands.`);
+    console.log('📦 Loading commands...');
+    
+    const commandFiles = [
+      './src/commands/pick.js',
+      './src/commands/admin.js',
+      './src/commands/economy.js',
+      './src/commands/leveling.js',
+      './src/commands/automod.js'
+    ];
 
-    if (process.env.GUILD_ID) {
-      // Deploy to specific guild (faster for development)
-      await rest.put(
-        Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.GUILD_ID),
-        { body: commands }
-      );
-      logger.info(`Successfully reloaded ${commands.length} application (/) commands for guild ${process.env.GUILD_ID}.`);
-    } else {
-      // Deploy globally
-      await rest.put(
-        Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-        { body: commands }
-      );
-      logger.info(`Successfully reloaded ${commands.length} application (/) commands globally.`);
+    for (const file of commandFiles) {
+      try {
+        const { data, execute } = await import(file);
+        client.commands.set(data.name, { data, execute });
+        console.log(`✅ Loaded command: ${data.name}`);
+        logger.info('Command loaded', { command: data.name });
+      } catch (error) {
+        logError(error, { commandFile: file });
+        console.error(`❌ Failed to load command from ${file}:`, error.message);
+      }
     }
+
+    console.log(`✅ Loaded ${client.commands.size} commands`);
   } catch (error) {
-    logger.error('Error deploying commands:', error);
+    logError(error, { operation: 'loadCommands' });
+    throw error;
   }
-}
+};
+
+// Setup interaction handler
+const setupBot = async () => {
+  try {
+    console.log('🔧 Setting up interaction handler...');
+    setupInteractionHandler(client);
+    console.log('✅ Interaction handler setup complete');
+  } catch (error) {
+    logError(error, { operation: 'setupInteractionHandler' });
+    throw error;
+  }
+};
+
+// Bot ready event
+client.once(Events.ClientReady, async () => {
+  try {
+    console.log(`🤖 Bot logged in as ${client.user.tag}`);
+    logger.info('Bot ready', { 
+      botId: client.user.id,
+      botTag: client.user.tag,
+      guildCount: client.guilds.cache.size
+    });
+
+    // Load commands after bot is ready
+    await loadCommands();
+    await setupBot();
+
+    console.log('🎉 Bot setup complete!');
+  } catch (error) {
+    logError(error, { operation: 'botReady' });
+    console.error('💥 Bot setup failed:', error);
+    process.exit(1);
+  }
+});
+
+// Login with error handling
+const startBot = async () => {
+  try {
+    console.log('🔑 Logging in to Discord...');
+    
+    if (!process.env.DISCORD_TOKEN) {
+      throw new Error('DISCORD_TOKEN environment variable is required');
+    }
+
+    await client.login(process.env.DISCORD_TOKEN);
+    console.log('✅ Discord login successful');
+  } catch (error) {
+    logError(error, { operation: 'botLogin' });
+    console.error('💥 Failed to login to Discord:', error.message);
+    process.exit(1);
+  }
+};
 
 // Start the bot
-client.login(process.env.DISCORD_TOKEN);
+startBot();
