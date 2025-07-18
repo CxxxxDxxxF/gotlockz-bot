@@ -4,11 +4,8 @@ import { logger } from '../utils/logger.js';
 
 class AIService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
-    
-    this.hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+    this.openai = null;
+    this.hf = null;
     
     this.models = {
       gpt4: 'gpt-4',
@@ -18,10 +15,25 @@ class AIService {
     };
   }
 
+  initialize() {
+    if (!this.openai && process.env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+    }
+    
+    if (!this.hf && process.env.HUGGINGFACE_API_KEY) {
+      this.hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+    }
+  }
+
   async generateAnalysis(betSlip, gameData, debug = false) {
     const startTime = Date.now();
     
     try {
+      // Initialize AI clients
+      this.initialize();
+      
       logger.info('Starting AI analysis', { 
         legs: betSlip.legs.length,
         debug 

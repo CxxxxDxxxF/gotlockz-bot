@@ -198,5 +198,5 @@ class OCRService {
   }
 }
 
-export const ocrService = new OCRService();
+const ocrService = new OCRService();
 export const { analyzeImage } = ocrService; 
