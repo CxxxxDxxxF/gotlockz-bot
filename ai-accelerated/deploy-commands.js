@@ -1,4 +1,4 @@
-import { REST, Routes } from '@discordjs/rest';
+import { REST } from '@discordjs/rest';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -34,14 +34,14 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     if (process.env.GUILD_ID) {
       // Deploy to specific guild (faster for development)
       await rest.put(
-        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+        `/applications/${process.env.CLIENT_ID}/guilds/${process.env.GUILD_ID}/commands`,
         { body: commands }
       );
       console.log(`Successfully reloaded ${commands.length} application (/) commands for guild ${process.env.GUILD_ID}.`);
     } else {
       // Deploy globally
       await rest.put(
-        Routes.applicationCommands(process.env.CLIENT_ID),
+        `/applications/${process.env.CLIENT_ID}/commands`,
         { body: commands }
       );
       console.log(`Successfully reloaded ${commands.length} application (/) commands globally.`);
