@@ -1,8 +1,4 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { analyzeImage } from '../services/ocrService.js';
-import { getGameData } from '../services/mlbService.js';
-import { generateAnalysis } from '../services/aiService.js';
-import { createBettingMessage } from '../services/bettingService.js';
 import { rateLimiter } from '../utils/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 
@@ -68,6 +64,12 @@ export async function execute(interaction) {
       debug,
       imageUrl: image.url
     });
+    
+    // Dynamically import services to avoid sharp loading during deployment
+    const { analyzeImage } = await import('../services/ocrService.js');
+    const { getGameData } = await import('../services/mlbService.js');
+    const { generateAnalysis } = await import('../services/aiService.js');
+    const { createBettingMessage } = await import('../services/bettingService.js');
     
     // Step 1: Extract text from image using AI-powered OCR
     logger.info('Starting OCR analysis...');
