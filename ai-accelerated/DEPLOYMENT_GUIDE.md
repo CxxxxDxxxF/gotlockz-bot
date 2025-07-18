@@ -1,263 +1,165 @@
-# 🚀 Render Deployment Guide - AI-Accelerated GotLockz Bot
+# 🚀 GotLockz Bot Deployment Guide
 
-## ✅ **Prerequisites Met**
-- ✅ All APIs stored properly on Render
-- ✅ Environment variables configured
-- ✅ Health check endpoint added
-- ✅ Render configuration ready
+## Prerequisites
 
----
+- Discord Bot Token
+- Discord Application Client ID
+- Discord Guild ID (for development)
+- OpenAI API Key
+- HuggingFace API Key (optional)
+- Render account
 
-## 🚀 **Quick Deploy to Render**
+## Environment Variables Setup
 
-### **Option 1: One-Click Deploy (Recommended)**
+### Required Environment Variables
 
-1. **Click the Deploy Button**
-   ```
-   [Deploy to Render] - Coming soon
-   ```
+You **MUST** set these environment variables in your Render dashboard:
 
-2. **Configure Environment Variables**
-   - All variables are already set to `sync: false` in `render.yaml`
-   - Render will prompt you to enter the values from your existing configuration
+1. **DISCORD_TOKEN** - Your Discord bot token
+2. **CLIENT_ID** - Your Discord application client ID
+3. **GUILD_ID** - Your Discord server ID (for development)
 
-3. **Deploy**
-   - Render will automatically build and deploy your bot
-   - Commands will be deployed automatically on startup
+### Optional Environment Variables
 
-### **Option 2: Manual Deploy**
+- **OPENAI_API_KEY** - For AI analysis features
+- **HUGGINGFACE_API_KEY** - For additional AI models
+- **MLB_API_KEY** - For MLB data (optional)
+- **OPENWEATHER_API_KEY** - For weather data (optional)
+- **REDIS_URL** - For caching (optional)
+- **LOG_LEVEL** - Logging level (default: info)
+- **RATE_LIMIT_COOLDOWN** - Rate limiting (default: 12000ms)
+- **NODE_ENV** - Environment (default: production)
+- **DEBUG** - Debug mode (default: false)
 
-1. **Connect Repository**
-   - Go to [Render Dashboard](https://dashboard.render.com)
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository
+## Render Deployment Steps
 
-2. **Configure Service**
-   ```
-   Name: gotlockz-bot-ai
-   Environment: Node
-   Build Command: cd ai-accelerated && npm install
-   Start Command: cd ai-accelerated && npm run deploy && npm start
-   ```
+### 1. Connect Your Repository
 
-3. **Set Environment Variables**
-   Copy these from your existing Render configuration:
-   ```
-   DISCORD_TOKEN=your_bot_token
-   CLIENT_ID=your_client_id
-   OPENAI_API_KEY=your_openai_key
-   HUGGINGFACE_API_KEY=your_hf_key
-   MLB_API_KEY=your_mlb_key
-   OPENWEATHER_API_KEY=your_weather_key
-   REDIS_URL=your_redis_url
-   NODE_ENV=production
-   LOG_LEVEL=info
-   RATE_LIMIT_COOLDOWN=12000
-   DEBUG=false
-   ```
+1. Go to [Render Dashboard](https://dashboard.render.com)
+2. Click "New +" → "Web Service"
+3. Connect your GitHub repository
+4. Select the `ai-accelerated` directory
 
-4. **Deploy**
-   - Click "Create Web Service"
-   - Render will build and deploy automatically
+### 2. Configure Build Settings
 
----
+- **Name**: `gotlockz-bot` (or your preferred name)
+- **Environment**: `Node`
+- **Build Command**: `npm ci`
+- **Start Command**: `npm start`
+- **Root Directory**: `ai-accelerated`
 
-## 📊 **Deployment Status**
+### 3. Set Environment Variables
 
-### **Build Process**
-1. ✅ **Repository Connected**
-2. ✅ **Dependencies Installed**
-3. ✅ **Commands Deployed**
-4. ✅ **Bot Started**
-5. ✅ **Health Check Active**
+In the Render dashboard, go to your service → Environment → Add Environment Variable:
 
-### **Monitoring**
-- **Health Check**: `https://your-app.onrender.com/health`
-- **Logs**: Available in Render dashboard
-- **Metrics**: CPU, memory, and response times
-
----
-
-## 🔧 **Environment Variables Reference**
-
-### **Required Variables**
-```bash
-DISCORD_TOKEN=your_discord_bot_token
-CLIENT_ID=your_discord_client_id
+```
+DISCORD_TOKEN=your_discord_bot_token_here
+CLIENT_ID=your_discord_client_id_here
+GUILD_ID=your_discord_guild_id_here
+OPENAI_API_KEY=your_openai_api_key_here
+HUGGINGFACE_API_KEY=your_huggingface_api_key_here
 ```
 
-### **AI Services (Optional but Recommended)**
-```bash
-OPENAI_API_KEY=your_openai_api_key
-HUGGINGFACE_API_KEY=your_huggingface_api_key
-```
+### 4. Deploy
 
-### **Data APIs (Optional)**
-```bash
-MLB_API_KEY=your_mlb_api_key
-OPENWEATHER_API_KEY=your_openweather_api_key
-REDIS_URL=your_redis_url
-```
+Click "Create Web Service" and wait for the deployment to complete.
 
-### **Configuration**
-```bash
-NODE_ENV=production
-LOG_LEVEL=info
-RATE_LIMIT_COOLDOWN=12000
-DEBUG=false
-```
+## Discord Bot Setup
 
----
+### 1. Create Discord Application
 
-## 🎯 **Post-Deployment Testing**
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click "New Application"
+3. Give it a name (e.g., "GotLockz Bot")
+4. Go to "Bot" section and create a bot
+5. Copy the bot token and client ID
 
-### **1. Health Check**
-```bash
-curl https://your-app.onrender.com/health
-```
-Expected response:
+### 2. Invite Bot to Server
+
+1. Go to "OAuth2" → "URL Generator"
+2. Select scopes: `bot`, `applications.commands`
+3. Select permissions: `Send Messages`, `Use Slash Commands`, `Attach Files`
+4. Copy the generated URL and open it in a browser
+5. Select your server and authorize
+
+### 3. Get Guild ID
+
+1. Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode)
+2. Right-click your server name
+3. Click "Copy Server ID"
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Cannot find module './env'"**
+   - This is a TypeScript import error. The project uses JavaScript, not TypeScript.
+   - Ensure all files are `.js` not `.ts`
+
+2. **"CLIENT_ID is undefined"**
+   - Make sure you've set the `CLIENT_ID` environment variable in Render
+   - Check that the value is correct (no extra spaces)
+
+3. **"Invalid Form Body" error**
+   - Verify all required environment variables are set
+   - Check that your Discord bot token is valid
+   - Ensure the bot has proper permissions
+
+4. **Commands not appearing**
+   - Check the deployment logs for command registration errors
+   - Verify the bot is in your server with proper permissions
+   - Wait a few minutes for global commands to propagate
+
+### Health Check
+
+The bot includes a health check endpoint at `/health` that returns:
+
 ```json
 {
   "status": "healthy",
   "timestamp": "2024-01-01T00:00:00.000Z",
   "uptime": 123.456,
-  "memory": {...},
   "version": "1.0.0"
 }
 ```
 
-### **2. Discord Commands**
-- `/admin ping` - Test bot responsiveness
-- `/admin status` - Check system health
-- `/pick` - Test betting analysis (with image)
+### Logs
 
-### **3. Log Monitoring**
-- Check Render logs for any errors
-- Verify bot startup messages
-- Monitor command execution
+Check the Render logs for detailed error information:
 
----
+1. Go to your service in Render dashboard
+2. Click "Logs" tab
+3. Look for error messages and stack traces
 
-## 🔄 **Auto-Deployment**
+## Development
 
-### **GitHub Integration**
-- ✅ **Auto-deploy on push** to main branch
-- ✅ **Build status** monitoring
-- ✅ **Rollback** capability
+### Local Development
 
-### **Environment Updates**
-- Environment variables can be updated without redeploy
-- Changes take effect on next restart
-- No downtime for configuration changes
+1. Copy `env.example` to `.env`
+2. Fill in your environment variables
+3. Run `npm install`
+4. Run `npm run dev`
 
----
+### Testing
 
-## 📈 **Performance Monitoring**
-
-### **Render Metrics**
-- **CPU Usage**: Monitor during peak times
-- **Memory Usage**: Should stay under 2GB
-- **Response Time**: Target <5 seconds
-- **Uptime**: 99.9% availability
-
-### **Bot Metrics**
-- **Command Success Rate**: >95%
-- **OCR Accuracy**: >95%
-- **AI Response Time**: <3 seconds
-- **Error Rate**: <1%
-
----
-
-## 🛠️ **Troubleshooting**
-
-### **Common Issues**
-
-1. **Bot Not Starting**
-   ```bash
-   # Check logs in Render dashboard
-   # Verify DISCORD_TOKEN is correct
-   # Ensure CLIENT_ID matches your bot
-   ```
-
-2. **Commands Not Working**
-   ```bash
-   # Check if deploy-commands ran successfully
-   # Verify bot has proper permissions
-   # Check guild ID if using guild-specific commands
-   ```
-
-3. **AI Services Failing**
-   ```bash
-   # Verify API keys are correct
-   # Check API rate limits
-   # Monitor OpenAI/HuggingFace quotas
-   ```
-
-4. **High Memory Usage**
-   ```bash
-   # Check for memory leaks in logs
-   # Monitor image processing
-   # Consider upgrading plan if needed
-   ```
-
-### **Log Analysis**
 ```bash
-# Common log patterns to watch for:
-"Ready! Logged in as" - Bot started successfully
-"Successfully reloaded X commands" - Commands deployed
-"OCR analysis completed" - Image processing working
-"AI analysis completed" - AI services functioning
+npm test          # Run tests
+npm run lint      # Run linting
+npm run status    # Check deployment status
 ```
 
----
+## Support
 
-## 🚀 **Scaling Options**
+If you encounter issues:
 
-### **Current Plan: Starter**
-- **CPU**: 0.1 cores
-- **RAM**: 512MB
-- **Cost**: Free tier
+1. Check the logs in Render dashboard
+2. Verify all environment variables are set correctly
+3. Ensure your Discord bot has proper permissions
+4. Check that all dependencies are installed correctly
 
-### **Upgrade Options**
-- **Standard**: 0.5 cores, 1GB RAM ($7/month)
-- **Pro**: 1 core, 2GB RAM ($25/month)
-- **Custom**: Based on needs
+## Security Notes
 
-### **When to Upgrade**
-- **High CPU usage** (>80% consistently)
-- **Memory pressure** (>80% RAM usage)
-- **Slow response times** (>10 seconds)
-- **High error rates** (>5%)
-
----
-
-## 🎉 **Success Checklist**
-
-- ✅ **Repository connected to Render**
-- ✅ **Environment variables configured**
-- ✅ **Build successful**
-- ✅ **Bot online in Discord**
-- ✅ **Commands responding**
-- ✅ **Health check passing**
-- ✅ **Logs clean**
-- ✅ **Performance acceptable**
-
----
-
-## 📞 **Support**
-
-### **Render Support**
-- **Documentation**: [render.com/docs](https://render.com/docs)
-- **Status**: [status.render.com](https://status.render.com)
-- **Community**: [community.render.com](https://community.render.com)
-
-### **Bot Support**
-- **Discord**: Join our support server
-- **GitHub**: Issue tracker
-- **Documentation**: README_AI.md
-
----
-
-**🚀 Your AI-accelerated GotLockz Bot is ready to deploy on Render!**
-
-With all APIs properly stored and configured, deployment should be seamless and take only a few minutes. 
+- Never commit your `.env` file to version control
+- Keep your Discord bot token secure
+- Use environment variables for all sensitive data
+- Regularly rotate your API keys 

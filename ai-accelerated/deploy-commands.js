@@ -7,6 +7,16 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+// Validate required environment variables
+const requiredEnvVars = ['DISCORD_TOKEN', 'CLIENT_ID'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars.join(', '));
+  console.error('Please ensure these are set in your Render environment variables.');
+  process.exit(1);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -30,6 +40,8 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 (async () => {
   try {
     console.log(`Started refreshing ${commands.length} application (/) commands.`);
+    console.log(`Client ID: ${process.env.CLIENT_ID}`);
+    console.log(`Guild ID: ${process.env.GUILD_ID || 'Global deployment'}`);
 
     if (process.env.GUILD_ID) {
       // Deploy to specific guild (faster for development)
@@ -48,5 +60,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     }
   } catch (error) {
     console.error('Error deploying commands:', error);
+    process.exit(1);
   }
 })(); 
