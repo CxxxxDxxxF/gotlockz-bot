@@ -32,13 +32,9 @@
     "express": "^5.1.0",
     "winston": "^3.11.0",
     "node-cron": "^3.0.3",
-    "redis": "^4.6.0",
     "sharp": "^0.33.0",
     "tesseract.js": "^5.0.3",
-    "openai": "^5.8.2",
-    "@huggingface/inference": "^2.6.0",
-    "langchain": "^0.1.0",
-    "jimp": "^0.22.10"
+    "openai": "^5.8.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.0",
