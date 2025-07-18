@@ -383,4 +383,4 @@ class BettingService {
 }
 
 export const bettingService = new BettingService();
-export const { createBettingMessage } = bettingService;
+export const createBettingMessage = bettingService.createBettingMessage.bind(bettingService);

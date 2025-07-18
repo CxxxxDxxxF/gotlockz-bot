@@ -379,4 +379,4 @@ Please provide a comprehensive analysis including risk assessment, key factors, 
 }
 
 export const aiService = new AIService();
-export const { generateAnalysis } = aiService;
+export const { generateAnalysis, generateFallbackAnalysis } = aiService;
