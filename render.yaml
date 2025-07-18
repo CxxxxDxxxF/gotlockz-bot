@@ -5,7 +5,7 @@ services:
     plan: starter
     repo: https://github.com/CxxxxDxxxF/gotlockz-bot
     branch: main
-    buildCommand: cd ai-accelerated && npm ci --only=production
+    buildCommand: cd ai-accelerated && npm ci --omit=dev
     startCommand: cd ai-accelerated && ./deploy.sh
     envVars:
       - key: NODE_ENV

@@ -10,7 +10,7 @@ fi
 
 # Install dependencies
 echo "📦 Installing dependencies..."
-npm ci --only=production
+npm ci --omit=dev
 
 # Create logs directory if it doesn't exist
 echo "📁 Creating logs directory..."
