@@ -9,7 +9,7 @@
     "dev": "nodemon src/index.js",
     "deploy": "node deploy-commands.js",
     "cleanup": "node cleanup-commands.js",
-    "test": "jest",
+    "test": "node test-runner.js",
     "lint": "eslint src/",
     "format": "prettier --write src/",
     "health": "node health-check.js",
@@ -50,5 +50,20 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "globals": {
+      "ts-jest": {
+        "useESM": true
+      }
+    },
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "transform": {},
+    "transformIgnorePatterns": [
+      "node_modules/(?!(dotenv)/)"
+    ]
   }
 }

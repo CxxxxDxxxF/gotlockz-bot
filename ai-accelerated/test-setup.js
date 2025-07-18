@@ -1,5 +1,5 @@
 // Test setup file for Jest
-const dotenv = require('dotenv');
+import dotenv from 'dotenv';
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' });
