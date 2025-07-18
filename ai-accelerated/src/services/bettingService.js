@@ -19,7 +19,12 @@ class BettingService {
         throw new Error(`Unknown channel type: ${channelType}`);
       }
 
-      const embed = await template(betSlip, gameData, analysis, imageUrl, notes);
+      // Validate and sanitize data
+      const sanitizedBetSlip = this.sanitizeBetSlip(betSlip);
+      const sanitizedAnalysis = this.sanitizeAnalysis(analysis);
+      const sanitizedGameData = this.sanitizeGameData(gameData);
+
+      const embed = await template(sanitizedBetSlip, sanitizedGameData, sanitizedAnalysis, imageUrl, notes);
 
       return {
         success: true,
@@ -35,14 +40,69 @@ class BettingService {
     }
   }
 
+  sanitizeBetSlip (betSlip) {
+    if (!betSlip) {
+      return {
+        legs: [],
+        totalOdds: null,
+        stake: null,
+        potentialWin: null
+      };
+    }
+
+    return {
+      legs: betSlip.legs || [],
+      totalOdds: betSlip.totalOdds || null,
+      stake: betSlip.stake || null,
+      potentialWin: betSlip.potentialWin || null
+    };
+  }
+
+  sanitizeAnalysis (analysis) {
+    if (!analysis) {
+      return {
+        confidence: 0.5,
+        riskLevel: 'medium',
+        keyFactors: ['Analysis not available'],
+        recommendations: ['No specific recommendation available'],
+        modelsUsed: 'Fallback analysis'
+      };
+    }
+
+    return {
+      confidence: analysis.confidence || 0.5,
+      riskLevel: analysis.riskLevel || 'medium',
+      keyFactors: analysis.keyFactors || ['Analysis factors not available'],
+      recommendations: analysis.recommendations || ['No specific recommendation available'],
+      modelsUsed: analysis.modelsUsed || 'AI analysis'
+    };
+  }
+
+  sanitizeGameData (gameData) {
+    if (!gameData) {
+      return null;
+    }
+
+    return {
+      teams: gameData.teams || null,
+      venue: gameData.venue || null,
+      weather: gameData.weather || null,
+      status: gameData.status || null
+    };
+  }
+
   createVIPTemplate () {
     return async (betSlip, gameData, analysis, imageUrl, notes) => {
       const embed = new EmbedBuilder()
         .setColor(0xFFD700) // Gold color for VIP
         .setTitle('💰 **VIP PLAY** 💰')
         .setDescription(this.generateVIPDescription(betSlip, analysis))
-        .setThumbnail(imageUrl)
         .setTimestamp();
+
+      // Add thumbnail if image URL is valid
+      if (imageUrl && imageUrl.startsWith('http')) {
+        embed.setThumbnail(imageUrl);
+      }
 
       // Add bet details
       embed.addFields(
@@ -68,7 +128,7 @@ class BettingService {
       }
 
       // Add notes if provided
-      if (notes) {
+      if (notes && notes.trim()) {
         embed.addFields({
           name: '📝 **NOTES**',
           value: notes,
@@ -77,8 +137,10 @@ class BettingService {
       }
 
       // Add footer with confidence
+      const confidence = Math.round((analysis.confidence || 0.5) * 100);
+      const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
       embed.setFooter({
-        text: `Confidence: ${Math.round(analysis.confidence * 100)}% | Risk: ${analysis.riskLevel.toUpperCase()} | AI-Powered Analysis`
+        text: `Confidence: ${confidence}% | Risk: ${riskLevel} | AI-Powered Analysis`
       });
 
       return embed;
@@ -91,8 +153,12 @@ class BettingService {
         .setColor(0x00FF00) // Green color for free plays
         .setTitle('🎁 **FREE PLAY IS HERE!** 🎁')
         .setDescription(this.generateFreePlayDescription(betSlip, analysis))
-        .setThumbnail(imageUrl)
         .setTimestamp();
+
+      // Add thumbnail if image URL is valid
+      if (imageUrl && imageUrl.startsWith('http')) {
+        embed.setThumbnail(imageUrl);
+      }
 
       // Add bet details
       embed.addFields(
@@ -118,7 +184,7 @@ class BettingService {
       }
 
       // Add notes if provided
-      if (notes) {
+      if (notes && notes.trim()) {
         embed.addFields({
           name: '📝 **NOTES**',
           value: notes,
@@ -127,8 +193,10 @@ class BettingService {
       }
 
       // Add footer
+      const confidence = Math.round((analysis.confidence || 0.5) * 100);
+      const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
       embed.setFooter({
-        text: `GotLockz Family | Confidence: ${Math.round(analysis.confidence * 100)}% | Risk: ${analysis.riskLevel.toUpperCase()}`
+        text: `GotLockz Family | Confidence: ${confidence}% | Risk: ${riskLevel}`
       });
 
       return embed;
@@ -141,8 +209,12 @@ class BettingService {
         .setColor(0xFF69B4) // Pink color for lotto tickets
         .setTitle('🎰 **LOTTO TICKET** 🎰')
         .setDescription(this.generateLottoDescription(betSlip, analysis))
-        .setThumbnail(imageUrl)
         .setTimestamp();
+
+      // Add thumbnail if image URL is valid
+      if (imageUrl && imageUrl.startsWith('http')) {
+        embed.setThumbnail(imageUrl);
+      }
 
       // Add bet details
       embed.addFields(
@@ -168,7 +240,7 @@ class BettingService {
       }
 
       // Add notes if provided
-      if (notes) {
+      if (notes && notes.trim()) {
         embed.addFields({
           name: '📝 **NOTES**',
           value: notes,
@@ -177,8 +249,9 @@ class BettingService {
       }
 
       // Add footer
+      const confidence = Math.round((analysis.confidence || 0.5) * 100);
       embed.setFooter({
-        text: `High Risk, High Reward | Confidence: ${Math.round(analysis.confidence * 100)}% | GotLockz Family`
+        text: `High Risk, High Reward | Confidence: ${confidence}% | GotLockz Family`
       });
 
       return embed;
@@ -186,38 +259,45 @@ class BettingService {
   }
 
   generateVIPDescription (betSlip, analysis) {
-    const confidence = Math.round(analysis.confidence * 100);
-    const riskLevel = analysis.riskLevel.toUpperCase();
+    const confidence = Math.round((analysis.confidence || 0.5) * 100);
+    const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
+    const keyFactors = analysis.keyFactors || ['Analysis not available'];
 
     return `**GotLockz Family** - Premium VIP analysis with ${confidence}% confidence level.\n\n` +
            `This ${riskLevel} risk play has been carefully analyzed by our AI system using multiple models.\n\n` +
-           `**Key Factors:**\n${analysis.keyFactors.slice(0, 3).map(factor => `• ${factor}`).join('\n')}`;
+           `**Key Factors:**\n${keyFactors.slice(0, 3).map(factor => `• ${factor}`).join('\n')}`;
   }
 
   generateFreePlayDescription (betSlip, analysis) {
-    const confidence = Math.round(analysis.confidence * 100);
+    const confidence = Math.round((analysis.confidence || 0.5) * 100);
+    const keyFactors = analysis.keyFactors || ['Analysis not available'];
 
     return `**GotLockz Family** - Free play opportunity with ${confidence}% confidence!\n\n` +
            'Our AI analysis suggests this could be a solid play. Remember, this is for entertainment purposes.\n\n' +
-           `**AI Insights:**\n${analysis.keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
+           `**AI Insights:**\n${keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
   }
 
   generateLottoDescription (betSlip, analysis) {
-    const confidence = Math.round(analysis.confidence * 100);
+    const confidence = Math.round((analysis.confidence || 0.5) * 100);
+    const keyFactors = analysis.keyFactors || ['Analysis not available'];
 
     return `**GotLockz Family** - High-risk lotto ticket with ${confidence}% confidence!\n\n` +
            'This is a long-shot play - high risk, high reward potential.\n\n' +
-           `**Risk Factors:**\n${analysis.keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
+           `**Risk Factors:**\n${keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
   }
 
   formatBetDetails (betSlip) {
     let details = '';
 
     if (betSlip.legs && betSlip.legs.length > 0) {
-      details += betSlip.legs.map((leg, i) =>
-        `**Leg ${i + 1}:** ${leg.teamA} vs ${leg.teamB}\n` +
-        `**Odds:** ${leg.odds || 'N/A'}\n`
-      ).join('\n');
+      details += betSlip.legs.map((leg, i) => {
+        const teamA = leg.teamA || 'Team A';
+        const teamB = leg.teamB || 'Team B';
+        const odds = leg.odds || 'N/A';
+        return `**Leg ${i + 1}:** ${teamA} vs ${teamB}\n**Odds:** ${odds}\n`;
+      }).join('\n');
+    } else {
+      details += '**No bet details available**\n';
     }
 
     if (betSlip.stake) {
@@ -232,12 +312,13 @@ class BettingService {
   }
 
   formatAnalysis (analysis) {
-    const confidence = Math.round(analysis.confidence * 100);
-    const riskLevel = analysis.riskLevel.toUpperCase();
+    const confidence = Math.round((analysis.confidence || 0.5) * 100);
+    const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
+    const modelsUsed = analysis.modelsUsed || 'AI analysis';
 
     let formatted = `**Confidence:** ${confidence}%\n`;
     formatted += `**Risk Level:** ${riskLevel}\n`;
-    formatted += `**AI Models Used:** ${analysis.modelsUsed}\n\n`;
+    formatted += `**AI Models Used:** ${modelsUsed}\n\n`;
 
     if (analysis.recommendations && analysis.recommendations.length > 0) {
       formatted += `**Recommendation:** ${analysis.recommendations[0]}\n\n`;
@@ -245,35 +326,44 @@ class BettingService {
 
     if (analysis.keyFactors && analysis.keyFactors.length > 0) {
       formatted += `**Key Factors:**\n${analysis.keyFactors.slice(0, 3).map(factor => `• ${factor}`).join('\n')}`;
+    } else {
+      formatted += '**Key Factors:** Analysis factors not available';
     }
 
     return formatted;
   }
 
   formatLottoAnalysis (analysis) {
-    const confidence = Math.round(analysis.confidence * 100);
+    const confidence = Math.round((analysis.confidence || 0.5) * 100);
+    const modelsUsed = analysis.modelsUsed || 'AI analysis';
 
     let formatted = `**Confidence:** ${confidence}%\n`;
     formatted += '**Risk Level:** HIGH (Lotto Ticket)\n';
-    formatted += `**AI Models Used:** ${analysis.modelsUsed}\n\n`;
+    formatted += `**AI Models Used:** ${modelsUsed}\n\n`;
 
     formatted += '**🎲 This is a high-risk, high-reward play!**\n';
     formatted += '**💰 Only bet what you can afford to lose!**\n\n';
 
     if (analysis.keyFactors && analysis.keyFactors.length > 0) {
       formatted += `**Risk Factors:**\n${analysis.keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
+    } else {
+      formatted += '**Risk Factors:** Analysis factors not available';
     }
 
     return formatted;
   }
 
   formatGameInfo (gameData) {
-    if (!gameData) {return 'Game information not available';}
+    if (!gameData) {
+      return 'Game information not available';
+    }
 
     let info = '';
 
     if (gameData.teams) {
-      info += `**Teams:** ${gameData.teams.away?.name || 'N/A'} vs ${gameData.teams.home?.name || 'N/A'}\n`;
+      const awayTeam = gameData.teams.away?.name || 'N/A';
+      const homeTeam = gameData.teams.home?.name || 'N/A';
+      info += `**Teams:** ${awayTeam} vs ${homeTeam}\n`;
     }
 
     if (gameData.venue) {

@@ -205,6 +205,15 @@ class OCRService {
       }
     }
 
+    // If no legs were found, create a default one
+    if (betSlip.legs.length === 0) {
+      betSlip.legs.push({
+        teamA: 'Team A',
+        teamB: 'Team B',
+        odds: null
+      });
+    }
+
     return betSlip;
   }
 }

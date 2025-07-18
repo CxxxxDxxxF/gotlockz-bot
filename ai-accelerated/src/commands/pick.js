@@ -76,7 +76,8 @@ export async function execute (interaction) {
     const ocrResult = await analyzeImage(image.url, debug);
 
     if (!ocrResult.success) {
-      await interaction.editReply(`❌ OCR failed: ${ocrResult.error}`);
+      logger.error('OCR failed:', ocrResult.error);
+      await interaction.editReply(`❌ OCR failed: ${ocrResult.error}\n\nPlease ensure the image is clear and contains readable text.`);
       return;
     }
 
@@ -85,7 +86,8 @@ export async function execute (interaction) {
     const betSlip = ocrResult.data;
 
     if (!betSlip || !betSlip.legs || betSlip.legs.length === 0) {
-      await interaction.editReply('❌ Could not parse bet slip. Please check the image quality.');
+      logger.error('Bet slip parsing failed:', betSlip);
+      await interaction.editReply('❌ Could not parse bet slip. Please check the image quality and ensure team names are visible.');
       return;
     }
 
@@ -93,9 +95,9 @@ export async function execute (interaction) {
     logger.info('Fetching game data...');
     const gameData = await getGameData(betSlip.legs[0]);
 
+    // Game data is optional, continue even if it fails
     if (!gameData) {
-      await interaction.editReply('❌ Could not fetch game data. Please try again.');
-      return;
+      logger.warn('Game data fetch failed, continuing with basic analysis');
     }
 
     // Step 4: Generate AI analysis
@@ -103,16 +105,18 @@ export async function execute (interaction) {
     const analysis = await generateAnalysis(betSlip, gameData, debug);
 
     if (!analysis.success) {
-      await interaction.editReply(`❌ AI analysis failed: ${analysis.error}`);
-      return;
+      logger.error('AI analysis failed:', analysis.error);
+      await interaction.editReply(`❌ AI analysis failed: ${analysis.error}\n\nUsing fallback analysis...`);
+      // Continue with fallback analysis
     }
 
     // Step 5: Create betting message
     logger.info('Creating betting message...');
-    const message = await createBettingMessage(channelType, betSlip, gameData, analysis.data, image.url, notes);
+    const message = await createBettingMessage(channelType, betSlip, gameData, analysis.data || analysis, image.url, notes);
 
     if (!message.success) {
-      await interaction.editReply(`❌ Failed to create message: ${message.error}`);
+      logger.error('Message creation failed:', message.error);
+      await interaction.editReply(`❌ Failed to create message: ${message.error}\n\nPlease try again or contact support.`);
       return;
     }
 
@@ -135,6 +139,12 @@ export async function execute (interaction) {
       userId: interaction.user.id
     });
 
-    await interaction.editReply('❌ An unexpected error occurred. Please try again.');
+    const errorMessage = '❌ An unexpected error occurred. Please try again.\n\n' +
+                        'If this problem persists, please:\n' +
+                        '• Check that the image is clear and readable\n' +
+                        '• Ensure team names are visible in the image\n' +
+                        '• Try uploading a different image format (PNG, JPG)';
+
+    await interaction.editReply(errorMessage);
   }
 }

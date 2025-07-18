@@ -362,26 +362,18 @@ Please provide a comprehensive analysis including risk assessment, key factors, 
   }
 
   generateFallbackAnalysis (_betSlip, _gameData) {
-    // Simple fallback analysis when AI services are not available
-    const analysis = {
-      confidence: 0.65,
+    return {
+      confidence: 0.6,
       riskLevel: 'medium',
       keyFactors: [
-        'Team performance analysis',
-        'Historical matchup data',
-        'Current form and statistics'
+        'Historical team performance',
+        'Current season statistics',
+        'Weather conditions impact'
       ],
-      recommendation: 'Consider this play with moderate confidence',
-      reasoning: 'Based on available data and statistical analysis',
-      modelsUsed: 1,
-      timestamp: new Date().toISOString()
-    };
-
-    return {
-      success: true,
-      data: analysis,
-      time: 0,
-      models: [{ model: 'fallback', status: 'fulfilled', error: null }]
+      recommendations: [
+        'Consider this a moderate risk play with solid fundamentals'
+      ],
+      modelsUsed: 'Fallback analysis'
     };
   }
 }
