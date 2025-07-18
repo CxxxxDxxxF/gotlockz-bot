@@ -37,7 +37,6 @@
     "tesseract.js": "^5.0.3",
     "openai": "^5.8.2",
     "@huggingface/inference": "^2.6.0",
-    "onnxruntime-node": "^1.18.0",
     "langchain": "^0.1.0",
     "jimp": "^0.22.10"
   },
