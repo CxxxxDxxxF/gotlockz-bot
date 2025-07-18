@@ -153,14 +153,14 @@ export async function deployCommands() {
     if (process.env.GUILD_ID) {
       // Deploy to specific guild (faster for development)
       await rest.put(
-        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+        Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.GUILD_ID),
         { body: commands }
       );
       logger.info(`Successfully reloaded ${commands.length} application (/) commands for guild ${process.env.GUILD_ID}.`);
     } else {
       // Deploy globally
       await rest.put(
-        Routes.applicationCommands(process.env.CLIENT_ID),
+        Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
         { body: commands }
       );
       logger.info(`Successfully reloaded ${commands.length} application (/) commands globally.`);

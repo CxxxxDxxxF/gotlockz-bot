@@ -10,7 +10,7 @@ services:
         value: production
       - key: DISCORD_TOKEN
         sync: false
-      - key: CLIENT_ID
+      - key: DISCORD_CLIENT_ID
         sync: false
       - key: GUILD_ID
         sync: false

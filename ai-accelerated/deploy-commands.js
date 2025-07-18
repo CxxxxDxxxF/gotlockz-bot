@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['DISCORD_TOKEN', 'CLIENT_ID'];
+const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
@@ -40,20 +40,20 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 (async () => {
   try {
     console.log(`Started refreshing ${commands.length} application (/) commands.`);
-    console.log(`Client ID: ${process.env.CLIENT_ID}`);
+    console.log(`Client ID: ${process.env.DISCORD_CLIENT_ID}`);
     console.log(`Guild ID: ${process.env.GUILD_ID || 'Global deployment'}`);
 
     if (process.env.GUILD_ID) {
       // Deploy to specific guild (faster for development)
       await rest.put(
-        `/applications/${process.env.CLIENT_ID}/guilds/${process.env.GUILD_ID}/commands`,
+        `/applications/${process.env.DISCORD_CLIENT_ID}/guilds/${process.env.GUILD_ID}/commands`,
         { body: commands }
       );
       console.log(`Successfully reloaded ${commands.length} application (/) commands for guild ${process.env.GUILD_ID}.`);
     } else {
       // Deploy globally
       await rest.put(
-        `/applications/${process.env.CLIENT_ID}/commands`,
+        `/applications/${process.env.DISCORD_CLIENT_ID}/commands`,
         { body: commands }
       );
       console.log(`Successfully reloaded ${commands.length} application (/) commands globally.`);

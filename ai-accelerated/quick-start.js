@@ -6,7 +6,7 @@ import path from 'path';
 console.log('🚀 GotLockz Bot - Quick Start Guide\n');
 
 // Check environment variables
-const requiredEnvVars = ['DISCORD_TOKEN', 'CLIENT_ID', 'OWNER_ID'];
+const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'OWNER_ID'];
 const optionalEnvVars = ['OPENAI_API_KEY', 'HUGGINGFACE_API_KEY', 'GUILD_ID'];
 
 console.log('📋 Environment Variables Check:');

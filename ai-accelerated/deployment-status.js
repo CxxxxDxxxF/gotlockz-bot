@@ -45,7 +45,7 @@ for (const file of requiredFiles) {
 
 // Check 2: Environment variables
 console.log('\n2. Environment Variables:');
-const requiredEnvVars = ['DISCORD_TOKEN', 'CLIENT_ID', 'OWNER_ID'];
+const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'OWNER_ID'];
 const optionalEnvVars = ['OPENAI_API_KEY', 'HUGGINGFACE_API_KEY', 'GUILD_ID'];
 
 console.log('   Required:');
