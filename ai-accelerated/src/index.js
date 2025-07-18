@@ -1,5 +1,5 @@
-import { Client, Events, GatewayIntentBits, Collection } from 'discord.js';
-import { REST, Routes } from '@discordjs/rest';
+import { Client, Events, GatewayIntentBits, Collection, Routes } from 'discord.js';
+import { REST } from '@discordjs/rest';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
