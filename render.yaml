@@ -3,9 +3,6 @@ services:
     name: gotlockz-bot
     env: node
     plan: free
-    dockerfilePath: ./ai-accelerated/Dockerfile
-    buildCommand: cd ai-accelerated && npm ci
-    startCommand: cd ai-accelerated && npm start
     envVars:
       - key: NODE_ENV
         value: production
