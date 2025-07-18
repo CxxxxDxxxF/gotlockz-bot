@@ -4,14 +4,14 @@ FROM node:18-slim
 # Create app directory
 WORKDIR /app
 
-# Copy the ai-accelerated directory
-COPY ai-accelerated/ ./ai-accelerated/
-
-# Change to ai-accelerated directory
-WORKDIR /app/ai-accelerated
+# Copy package files first for better caching
+COPY ai-accelerated/package*.json ./
 
 # Install dependencies
 RUN npm ci --only=production
+
+# Copy the rest of the ai-accelerated directory
+COPY ai-accelerated/ ./
 
 # Create logs directory
 RUN mkdir -p logs
