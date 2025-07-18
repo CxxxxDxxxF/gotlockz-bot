@@ -3,7 +3,7 @@ services:
     name: gotlockz-bot-ai
     env: node
     plan: starter
-    buildCommand: cd ai-accelerated && npm ci --only=production
+    buildCommand: cd ai-accelerated && npm ci --omit=dev --prefer-offline --no-audit
     startCommand: cd ai-accelerated && ./deploy.sh
     envVars:
       - key: NODE_ENV
