@@ -1,33 +1,124 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  ci:
+  test:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
+        cache-dependency-path: ai-accelerated/package-lock.json
         
     - name: Install dependencies
+      working-directory: ai-accelerated
       run: npm ci
       
-    - name: Build project
-      run: npm run build
-      
-    - name: Type check
-      run: npm run type-check
+    - name: Run linting
+      working-directory: ai-accelerated
+      run: npm run lint
       
     - name: Run tests
-      run: npm test 
+      working-directory: ai-accelerated
+      run: npm test
+      
+    - name: Check deployment status
+      working-directory: ai-accelerated
+      run: npm run status
+      
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ai-accelerated/coverage/
+        retention-days: 30
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: ai-accelerated/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ai-accelerated
+      run: npm ci
+      
+    - name: Run security audit
+      working-directory: ai-accelerated
+      run: npm audit --audit-level=moderate
+      
+    - name: Check for vulnerabilities
+      working-directory: ai-accelerated
+      run: npm audit --audit-level=high
+
+  build:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: false
+        tags: gotlockz-bot:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-image
+        path: /tmp/buildx-cache
+        retention-days: 7
+
+  deploy:
+    needs: [test, security, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Deploy to Render
+      run: |
+        echo "🚀 Deployment triggered for ${{ github.sha }}"
+        echo "✅ All checks passed - ready for Render deployment"
+        
+    - name: Update deployment status
+      run: |
+        echo "## 🚀 Deployment Status" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Build**: Successful" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Tests**: All passing" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Security**: No vulnerabilities" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Docker**: Image built successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Next**: Render will auto-deploy from main branch" >> $GITHUB_STEP_SUMMARY 

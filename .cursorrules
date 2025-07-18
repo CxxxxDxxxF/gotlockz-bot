@@ -1,0 +1,157 @@
+# Cursor Rules for GotLockz Bot
+
+## Project Overview
+This is an AI-accelerated MLB Discord bot built with Node.js, Discord.js v14, and modern ES6 modules. The bot provides betting analysis using OCR, AI models, and real-time MLB data.
+
+## Code Style & Patterns
+
+### JavaScript/ES6 Standards
+- Use ES6 modules (import/export) consistently
+- Prefer async/await over Promises
+- Use const/let instead of var
+- Use template literals for string interpolation
+- Use destructuring for cleaner code
+
+### Error Handling
+- Always wrap async operations in try-catch blocks
+- Use structured error logging with context
+- Provide user-friendly error messages
+- Implement graceful degradation for external services
+
+### Discord.js v14 Patterns
+- Use SlashCommandBuilder for command definitions
+- Implement proper interaction handling
+- Use EmbedBuilder for rich messages
+- Follow Discord.js v14 import patterns
+
+### Service Architecture
+- Keep services modular and focused
+- Use dependency injection where appropriate
+- Implement lazy loading for heavy dependencies
+- Add comprehensive logging to all services
+
+## File Organization
+- Commands go in `src/commands/`
+- Services go in `src/services/`
+- Utilities go in `src/utils/`
+- Configuration in `src/config/`
+- Tests in `tests/` directory
+
+## Naming Conventions
+- Use camelCase for variables and functions
+- Use PascalCase for classes
+- Use kebab-case for files
+- Use UPPER_SNAKE_CASE for constants
+
+## Documentation Standards
+- Add JSDoc comments for all public functions
+- Include parameter types and return values
+- Document complex business logic
+- Keep README files updated
+
+## Testing Guidelines
+- Write unit tests for all services
+- Mock external dependencies
+- Test error scenarios
+- Maintain good test coverage
+
+## Security Considerations
+- Never log sensitive data (tokens, API keys)
+- Validate all user inputs
+- Implement rate limiting
+- Use environment variables for secrets
+
+## Performance Guidelines
+- Use caching for expensive operations
+- Implement proper cleanup for resources
+- Monitor memory usage
+- Optimize image processing operations
+
+## AI Integration Patterns
+- Use fallback mechanisms when AI services fail
+- Implement confidence scoring
+- Cache AI responses when appropriate
+- Handle rate limits gracefully
+
+## Deployment Considerations
+- Ensure all environment variables are documented
+- Test Docker builds locally
+- Verify health check endpoints
+- Monitor application logs
+
+## Common Patterns
+
+### Command Structure
+```javascript
+import { SlashCommandBuilder } from 'discord.js';
+import { logger } from '../utils/logger.js';
+
+export const data = new SlashCommandBuilder()
+  .setName('command')
+  .setDescription('Description');
+
+export async function execute(interaction) {
+  try {
+    await interaction.deferReply();
+    // Command logic here
+    await interaction.editReply('Response');
+  } catch (error) {
+    logger.error('Command failed:', error);
+    await interaction.editReply('Error message');
+  }
+}
+```
+
+### Service Pattern
+```javascript
+import { logger } from '../utils/logger.js';
+
+class ServiceName {
+  constructor() {
+    this.initialized = false;
+  }
+
+  async initialize() {
+    if (this.initialized) return;
+    // Initialization logic
+    this.initialized = true;
+  }
+
+  async process(data) {
+    try {
+      await this.initialize();
+      // Processing logic
+      return { success: true, data };
+    } catch (error) {
+      logger.error('Service failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+}
+
+export const serviceName = new ServiceName();
+```
+
+### Error Handling Pattern
+```javascript
+try {
+  const result = await riskyOperation();
+  return { success: true, data: result };
+} catch (error) {
+  logger.error('Operation failed:', {
+    error: error.message,
+    stack: error.stack,
+    context: 'additional info'
+  });
+  return { success: false, error: error.message };
+}
+```
+
+## Context for AI Assistance
+- This is a Discord bot for MLB betting analysis
+- Target audience is 21+ betting community
+- Uses AI models for analysis and OCR for image processing
+- Deployed on Render with Docker
+- Uses modern JavaScript (ES6 modules)
+- Follows Discord.js v14 patterns
+- Implements comprehensive error handling and logging 
