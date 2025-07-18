@@ -164,12 +164,8 @@ jspm_packages/
 .git
 .gitignore
 
-# Documentation
-README.md
-*.md
+# Documentation (but keep essential ones)
 docs/
-
-# Archive
 archive/
 
 # Test files
@@ -179,4 +175,10 @@ tests/
 # Development files
 .eslintrc.js
 .prettierrc
-jest.config.js 
+jest.config.js
+
+# Keep essential files
+!package-lock.json
+!ai-accelerated/package-lock.json
+!README.md
+!ai-accelerated/README_AI.md 
