@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "deploy": "node deploy-commands.js",
+    "cleanup": "node cleanup-commands.js",
     "test": "jest",
     "lint": "eslint src/",
     "format": "prettier --write src/",
