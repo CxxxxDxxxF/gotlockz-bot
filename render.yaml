@@ -2,19 +2,33 @@ services:
   - type: web
     name: gotlockz-bot
     env: node
-    plan: free
-    repo: https://github.com/cjruiz/gotlockz-bot
+    plan: starter
+    repo: https://github.com/CxxxxDxxxF/gotlockz-bot
     branch: main
-    buildCommand: npm ci && npm run build
-    startCommand: node dist/index.js
+    buildCommand: cd ai-accelerated && npm ci --only=production
+    startCommand: cd ai-accelerated && ./deploy.sh
     envVars:
-      - key: DISCORD_BOT_TOKEN
-        fromService: DISCORD_BOT_TOKEN
-      - key: DISCORD_CLIENT_ID
-        fromService: DISCORD_CLIENT_ID
-      - key: DISCORD_GUILD_ID
-        fromService: DISCORD_GUILD_ID
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: GUILD_ID
+        sync: false
       - key: OPENAI_API_KEY
-        fromService: OPENAI_API_KEY
+        sync: false
+      - key: MLB_API_KEY
+        sync: false
+      - key: WEATHER_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      - key: PORT
+        value: 3000
+      - key: HEALTH_CHECK_INTERVAL
+        value: 30000
     healthCheckPath: /health
     autoDeploy: true 

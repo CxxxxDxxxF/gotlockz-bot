@@ -4,21 +4,20 @@ FROM node:18-slim
 # Create app directory
 WORKDIR /app
 
-# Copy package manifests & install deps
-COPY package*.json ./
-RUN npm ci
+# Copy the ai-accelerated directory
+COPY ai-accelerated/ ./ai-accelerated/
 
-# Install TypeScript globally to ensure tsc is available
-RUN npm install -g typescript
+# Change to ai-accelerated directory
+WORKDIR /app/ai-accelerated
 
-# Copy rest of the source
-COPY . .
+# Install dependencies
+RUN npm ci --only=production
 
-# Build TypeScript
-RUN npm run build
+# Create logs directory
+RUN mkdir -p logs
 
 # Expose health port
 EXPOSE 3000
 
-# Start the bot
-CMD ["node", "dist/index.js"]
+# Deploy commands and start the bot
+CMD ["sh", "-c", "npm run deploy && npm start"]
