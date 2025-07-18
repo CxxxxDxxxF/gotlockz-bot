@@ -2,7 +2,7 @@ import axios from 'axios';
 import { logger } from '../utils/logger.js';
 
 class WeatherService {
-  constructor() {
+  constructor () {
     this.cache = new Map();
     this.cacheTimeout = 10 * 60 * 1000; // 10 minutes
     this.apis = [
@@ -21,61 +21,61 @@ class WeatherService {
     ];
   }
 
-  async getWeatherData(location, venue = null) {
+  async getWeatherData (location, venue = null) {
     try {
       const cacheKey = `weather_${location}`;
       const cached = this.cache.get(cacheKey);
-      
+
       if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
         logger.info('Using cached weather data', { location });
         return cached.data;
       }
 
       logger.info('Fetching weather data', { location, venue });
-      
+
       // Try multiple free APIs
       for (const api of this.apis) {
         try {
           const weatherData = await this.fetchFromAPI(api, location);
-          
+
           if (weatherData) {
             // Cache the result
             this.cache.set(cacheKey, {
               data: weatherData,
               timestamp: Date.now()
             });
-            
+
             return weatherData;
           }
         } catch (error) {
           logger.warn(`Weather API ${api.name} failed:`, error.message);
         }
       }
-      
+
       // Fallback to basic weather data
       return this.getFallbackWeather(location);
-      
+
     } catch (error) {
       logger.error('Weather service failed:', error);
       return this.getFallbackWeather(location);
     }
   }
 
-  async fetchFromAPI(api, location) {
+  async fetchFromAPI (api, location) {
     switch (api.name) {
-      case 'OpenMeteo':
-        return await this.fetchOpenMeteo(location);
-      case 'WeatherAPI':
-        return await this.fetchWeatherAPI(location);
-      default:
-        throw new Error(`Unknown weather API: ${api.name}`);
+    case 'OpenMeteo':
+      return await this.fetchOpenMeteo(location);
+    case 'WeatherAPI':
+      return await this.fetchWeatherAPI(location);
+    default:
+      throw new Error(`Unknown weather API: ${api.name}`);
     }
   }
 
-  async fetchOpenMeteo(location) {
+  async fetchOpenMeteo (location) {
     // Get coordinates for location
     const coords = await this.getCoordinates(location);
-    
+
     const response = await axios.get('https://api.open-meteo.com/v1/forecast', {
       params: {
         latitude: coords.lat,
@@ -87,7 +87,7 @@ class WeatherService {
     });
 
     const current = response.data.current;
-    
+
     return {
       temperature: current.temperature_2m,
       humidity: current.relative_humidity_2m,
@@ -99,7 +99,7 @@ class WeatherService {
     };
   }
 
-  async fetchWeatherAPI(location) {
+  async fetchWeatherAPI (location) {
     const response = await axios.get('https://api.weatherapi.com/v1/current.json', {
       params: {
         key: 'free', // Use free tier
@@ -110,7 +110,7 @@ class WeatherService {
     });
 
     const current = response.data.current;
-    
+
     return {
       temperature: current.temp_f,
       humidity: current.humidity,
@@ -122,7 +122,7 @@ class WeatherService {
     };
   }
 
-  async getCoordinates(location) {
+  async getCoordinates (location) {
     // Simple geocoding - in production, use a proper geocoding service
     const response = await axios.get('https://nominatim.openstreetmap.org/search', {
       params: {
@@ -152,7 +152,7 @@ class WeatherService {
     return fallbackCoords[location] || { lat: 40.7128, lon: -74.0060 };
   }
 
-  getWeatherCondition(code) {
+  getWeatherCondition (code) {
     // WMO weather codes for OpenMeteo
     const conditions = {
       0: 'Clear sky',
@@ -172,11 +172,11 @@ class WeatherService {
       75: 'Heavy snow',
       95: 'Thunderstorm'
     };
-    
+
     return conditions[code] || 'Unknown';
   }
 
-  getFallbackWeather(location) {
+  getFallbackWeather (location) {
     // Return basic weather data when APIs fail
     return {
       temperature: 72,
@@ -189,10 +189,10 @@ class WeatherService {
     };
   }
 
-  analyzeWeatherImpact(weatherData) {
+  analyzeWeatherImpact (weatherData) {
     const { temperature, humidity, windSpeed, condition } = weatherData;
-    
-    let impact = {
+
+    const impact = {
       level: 'neutral',
       factors: [],
       recommendation: 'Weather conditions are normal for play'
@@ -234,4 +234,4 @@ class WeatherService {
 }
 
 const weatherService = new WeatherService();
-export const { getWeatherData, analyzeWeatherImpact } = weatherService; 
+export const { getWeatherData, analyzeWeatherImpact } = weatherService;

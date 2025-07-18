@@ -24,4 +24,4 @@ export const stream = {
   write: (message) => {
     logger.info(message.trim());
   }
-}; 
+};

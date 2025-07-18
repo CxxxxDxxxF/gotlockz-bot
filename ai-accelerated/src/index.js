@@ -25,7 +25,7 @@ const logger = winston.createLogger({
         winston.format.colorize(),
         winston.format.simple()
       )
-    }),
+    })
     // File logging disabled for deployment - console only
   ]
 });
@@ -73,7 +73,7 @@ const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('
 for (const file of commandFiles) {
   const filePath = join(commandsPath, file);
   const command = await import(filePath);
-  
+
   if ('data' in command && 'execute' in command) {
     client.commands.set(command.data.name, command);
     logger.info(`Loaded command: ${command.data.name}`);
@@ -90,7 +90,7 @@ client.once(Events.ClientReady, readyClient => {
 
 // Handle slash command interactions
 client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand()) {return;}
 
   const command = interaction.client.commands.get(interaction.commandName);
 
@@ -103,9 +103,9 @@ client.on(Events.InteractionCreate, async interaction => {
     await command.execute(interaction);
   } catch (error) {
     logger.error(`Error executing ${interaction.commandName}:`, error);
-    
+
     const errorMessage = 'There was an error while executing this command!';
-    
+
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({ content: errorMessage, ephemeral: true });
     } else {
@@ -138,9 +138,9 @@ process.on('SIGTERM', () => {
 });
 
 // Deploy commands function
-export async function deployCommands() {
+export async function deployCommands () {
   const commands = [];
-  
+
   for (const command of client.commands.values()) {
     commands.push(command.data.toJSON());
   }
@@ -171,4 +171,4 @@ export async function deployCommands() {
 }
 
 // Start the bot
-client.login(process.env.DISCORD_TOKEN); 
+client.login(process.env.DISCORD_TOKEN);
