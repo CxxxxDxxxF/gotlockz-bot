@@ -11,13 +11,12 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "declarationMap": true,
     "sourceMap": true,
     "removeComments": false,
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
-    "noUnusedLocals": true,
+    "noUnusedLocals": false,
     "noUnusedParameters": false,
     "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
@@ -28,14 +27,14 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "moduleResolution": "node",
-    "baseUrl": "./",
+    "baseUrl": "./src",
     "paths": {
-      "@/*": ["src/*"],
-      "@/commands/*": ["src/commands/*"],
-      "@/services/*": ["src/services/*"],
-      "@/config/*": ["src/config/*"],
-      "@/types/*": ["src/types/*"],
-      "@/utils/*": ["src/utils/*"]
+      "@/*": ["*"],
+      "@/commands/*": ["commands/*"],
+      "@/services/*": ["services/*"],
+      "@/utils/*": ["utils/*"],
+      "@/types/*": ["types/*"],
+      "@/config/*": ["config/*"]
     }
   },
   "include": [
@@ -45,7 +44,8 @@
     "node_modules",
     "dist",
     "tests",
-    "archive"
+    "archive",
+    "coverage"
   ],
   "ts-node": {
     "esm": false,

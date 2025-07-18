@@ -4,13 +4,14 @@
  * Options:
  *   - channel_type (string, required): Type of pick to post (Free Play, VIP Pick, Lotto Ticket)
  *   - image (attachment, required): Betting slip image
- *   - description (string, optional): Additional notes
+ *   - notes (string, optional): Additional notes
  */
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { analyzeImage } from '../services/ocrService';
 import { getGameData, convertGameStatsToGameData } from '../services/mlbService';
 import { getForecast } from '../services/weatherService';
-import { allow } from '../utils/rateLimiter';
+import { RateLimiter } from '../utils/rateLimiter';
+import { Logger } from '../utils/logger';
 import { 
   createVIPPlayMessage, 
   createFreePlayMessage, 
@@ -24,7 +25,7 @@ import { generateAnalysis } from '../services/analysisService';
 export const data = new SlashCommandBuilder()
   .setName('pick')
   .setDescription('Analyze a bet slip and provide structured betting analysis')
-  .addStringOption(option =>
+  .addStringOption((option) =>
     option
       .setName('channel_type')
       .setDescription('Type of betting play to post')
@@ -35,19 +36,19 @@ export const data = new SlashCommandBuilder()
         { name: 'Lotto Ticket', value: 'lotto_ticket' }
       )
   )
-  .addAttachmentOption(option =>
+  .addAttachmentOption((option) =>
     option
       .setName('image')
       .setDescription('Bet slip image to analyze')
       .setRequired(true)
   )
-  .addStringOption(option =>
+  .addStringOption((option) =>
     option
       .setName('notes')
       .setDescription('Additional notes (optional, mainly for lotto tickets)')
       .setRequired(false)
   )
-  .addBooleanOption(option =>
+  .addBooleanOption((option) =>
     option
       .setName('debug')
       .setDescription('Enable debug mode for OCR analysis (saves debug images)')
@@ -55,12 +56,15 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+  const logger = new Logger('pick-command');
+  
   try {
     await interaction.deferReply();
     
     // Rate limiting check
-    if (!allow(interaction.user.id)) {
-      return await interaction.editReply('⏰ Rate limit exceeded. Please wait before making another pick.');
+    if (!RateLimiter.allow(interaction.user.id)) {
+      const timeRemaining = RateLimiter.getTimeRemaining(interaction.user.id);
+      return await interaction.editReply(`⏰ Rate limit exceeded. Please wait ${Math.ceil(timeRemaining / 1000)} seconds before making another pick.`);
     }
     
     const channelType = interaction.options.getString('channel_type', true);
@@ -71,6 +75,12 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     if (!image) {
       return await interaction.editReply('❌ Please provide a bet slip image.');
     }
+    
+    logger.info('Processing pick command', { 
+      channelType, 
+      userId: interaction.user.id,
+      debug 
+    });
     
     // Extract text from image
     const imageBuffer = await fetch(image.url).then(res => res.arrayBuffer()).then(buf => Buffer.from(buf));
@@ -130,12 +140,21 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     // Format for Discord
     const embed = formatBettingMessageForDiscord(bettingMessage);
     
-    return await interaction.editReply({
+    await interaction.editReply({
       content,
       embeds: [embed]
     });
-  } catch (err: any) {
-    console.error('Error in pick command:', err);
-    return await interaction.editReply(`❌ An error occurred: ${err.message}`);
+    
+    logger.info('Pick command executed successfully', { 
+      channelType, 
+      userId: interaction.user.id 
+    });
+    
+  } catch (error) {
+    logger.error('Pick command failed', { 
+      error, 
+      userId: interaction.user.id 
+    });
+    return await interaction.editReply(`❌ An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 } 

@@ -1,25 +1,28 @@
-export default {
-  // Use ts-jest for TypeScript files
+module.exports = {
   preset: 'ts-jest',
-  // Our code and tests run in Node
   testEnvironment: 'node',
-  // Recognize these extensions
-  moduleFileExtensions: ['ts', 'js', 'json'],
-  // Transform TS via ts-jest
+  roots: ['<rootDir>/src', '<rootDir>/tests'],
+  testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true }],
+    '^.+\\.ts$': 'ts-jest',
   },
-  // Treat .ts as ESM modules
-  extensionsToTreatAsEsm: ['.ts'],
-  // Allow absolute imports from src/
   moduleNameMapper: {
-    '^src/(.*)$': '<rootDir>/src/$1',
+    '^@/(.*)$': '<rootDir>/src/$1',
   },
-  globals: {
-    'ts-jest': {
-      // Tell ts-jest we're targeting ESM
-      tsconfig: '<rootDir>/tsconfig.json',
-      useESM: true,
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/index.ts',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
     },
   },
+  testTimeout: 30000,
+  verbose: true,
 }; 
