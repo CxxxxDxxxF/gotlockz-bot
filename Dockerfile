@@ -10,8 +10,11 @@ COPY . .
 # Change to ai-accelerated directory where the actual dependencies are
 WORKDIR /app/ai-accelerated
 
-# Install dependencies
-RUN npm ci --only=production
+# Debug: List files to see what was copied
+RUN ls -la
+
+# Install dependencies using npm install instead of npm ci
+RUN npm install --omit=dev
 
 # Create logs directory
 RUN mkdir -p logs
