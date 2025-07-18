@@ -13,7 +13,8 @@
     "format": "prettier --write src/",
     "health": "node health-check.js",
     "status": "node deployment-status.js",
-    "setup": "node test-setup.js"
+    "setup": "node test-setup.js",
+    "quick-start": "node quick-start.js"
   },
   "keywords": [
     "discord",
