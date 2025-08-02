@@ -31,8 +31,8 @@
           "required": true
         },
         {
-          "name": "notes",
-          "description": "Additional notes (optional, mainly for lotto tickets)",
+          "name": "units",
+          "description": "Units for VIP plays (e.g., 2u, 1.5u) - only used for VIP plays",
           "type": "STRING",
           "required": false
         },

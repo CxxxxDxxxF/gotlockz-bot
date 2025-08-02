@@ -145,21 +145,32 @@ class MLBService {
     }
   }
 
-  getDetailedGameData (_teamId) {
-    // Placeholder for detailed game data
-    return {
-      teams: {
-        away: { name: 'Team A' },
-        home: { name: 'Team B' }
-      },
-      venue: 'Stadium Name',
-      status: 'Scheduled',
-      weather: {
-        temperature: 72,
-        condition: 'Partly Cloudy',
-        windSpeed: 8
-      }
-    };
+  async getDetailedGameData(gamePk) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/game/${gamePk}`);
+      const gameData = response.data;
+      const teams = gameData.teams || {};
+      const venue = gameData.venue?.name || 'Unknown';
+      const status = gameData.status?.detailedState || 'Unknown';
+      const scheduledTime = gameData.gameDate || null;
+      return {
+        teams: {
+          away: { name: teams.away?.team?.name || 'Away' },
+          home: { name: teams.home?.team?.name || 'Home' }
+        },
+        venue,
+        status,
+        scheduledTime
+      };
+    } catch (error) {
+      logger.error('Failed to fetch detailed game data:', error);
+      return {
+        teams: { away: { name: 'Team A' }, home: { name: 'Team B' } },
+        venue: 'Stadium Name',
+        status: 'Scheduled',
+        scheduledTime: null
+      };
+    }
   }
 
   calculateTeamStats (games, _teamId) {
@@ -192,6 +203,136 @@ class MLBService {
       condition: 'Partly Cloudy',
       windSpeed: 8,
       humidity: 65
+    };
+  }
+
+  // Get MLB player ID by name and team
+  async getPlayerId(playerName, teamName) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/people/search`, {
+        params: { q: playerName },
+        timeout: 5000
+      });
+      const people = response.data.people || [];
+      // Try to match by team as well
+      let player = people.find(p => p.fullName.toLowerCase() === playerName.toLowerCase() && p.currentTeam?.name?.toLowerCase() === teamName.toLowerCase());
+      if (!player) {
+        player = people.find(p => p.fullName.toLowerCase() === playerName.toLowerCase());
+      }
+      return player ? player.id : null;
+    } catch (error) {
+      logger.error('Failed to get player ID:', error);
+      return null;
+    }
+  }
+
+  // Get recent game logs for a pitcher
+  async getPitcherGameLogs(playerId, numGames = 5) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/people/${playerId}/stats`, {
+        params: {
+          stats: 'gameLog',
+          group: 'pitching',
+          season: new Date().getFullYear()
+        },
+        timeout: 5000
+      });
+      const logs = response.data.stats?.[0]?.splits || [];
+      return logs.slice(0, numGames);
+    } catch (error) {
+      logger.error('Failed to get pitcher game logs:', error);
+      return [];
+    }
+  }
+
+  // Get key pitcher stats from game logs
+  getPitcherStatsFromLogs(logs) {
+    if (!logs.length) return null;
+    let totalK = 0, totalIP = 0;
+    const recentGames = logs.map(log => {
+      const k = parseInt(log.stat.strikeOuts || 0, 10);
+      const ip = parseFloat(log.stat.inningsPitched || 0);
+      totalK += k;
+      totalIP += ip;
+      return {
+        date: log.date,
+        opponent: log.opponent?.name || '',
+        strikeouts: k,
+        innings: ip
+      };
+    });
+    return {
+      recentGames,
+      avgK: +(totalK / logs.length).toFixed(2),
+      avgIP: +(totalIP / logs.length).toFixed(2),
+      totalK,
+      totalIP
+    };
+  }
+
+  // Get team stats for the current season
+  async getTeamStats(teamId) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/teams/${teamId}/stats`, {
+        params: {
+          stats: 'season',
+          group: 'hitting,pitching',
+          season: new Date().getFullYear()
+        },
+        timeout: 5000
+      });
+      const stats = response.data.stats || [];
+      // Extract relevant stats
+      const hitting = stats.find(s => s.group.displayName === 'hitting')?.splits?.[0]?.stat || {};
+      const pitching = stats.find(s => s.group.displayName === 'pitching')?.splits?.[0]?.stat || {};
+      return {
+        hitting,
+        pitching
+      };
+    } catch (error) {
+      logger.error('Failed to get team stats:', error);
+      return { hitting: {}, pitching: {} };
+    }
+  }
+
+  // Get recent team game logs
+  async getTeamGameLogs(teamId, numGames = 5) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/teams/${teamId}/stats`, {
+        params: {
+          stats: 'gameLog',
+          group: 'hitting,pitching',
+          season: new Date().getFullYear()
+        },
+        timeout: 5000
+      });
+      const stats = response.data.stats || [];
+      const hittingLogs = stats.find(s => s.group.displayName === 'hitting')?.splits || [];
+      const pitchingLogs = stats.find(s => s.group.displayName === 'pitching')?.splits || [];
+      return {
+        hitting: hittingLogs.slice(0, numGames),
+        pitching: pitchingLogs.slice(0, numGames)
+      };
+    } catch (error) {
+      logger.error('Failed to get team game logs:', error);
+      return { hitting: [], pitching: [] };
+    }
+  }
+
+  // Get key team stats from logs
+  getTeamStatsFromLogs(logs) {
+    if (!logs.length) return null;
+    let totalK = 0, totalPA = 0;
+    logs.forEach(log => {
+      const k = parseInt(log.stat.strikeOuts || 0, 10);
+      const pa = parseInt(log.stat.plateAppearances || 0, 10);
+      totalK += k;
+      totalPA += pa;
+    });
+    return {
+      avgK: +(totalK / logs.length).toFixed(2),
+      avgPA: +(totalPA / logs.length).toFixed(2),
+      kRate: totalPA ? +(totalK / totalPA * 100).toFixed(2) : null
     };
   }
 }

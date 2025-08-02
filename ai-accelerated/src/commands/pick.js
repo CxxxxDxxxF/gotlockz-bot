@@ -24,8 +24,8 @@ export const data = new SlashCommandBuilder()
   )
   .addStringOption(option =>
     option
-      .setName('notes')
-      .setDescription('Additional notes (optional)')
+      .setName('units')
+      .setDescription('Units for VIP plays (e.g., 2u, 1.5u) - only used for VIP plays')
       .setRequired(false)
   )
   .addBooleanOption(option =>
@@ -45,7 +45,8 @@ export async function execute (interaction) {
       commandId,
       channelType: interaction.options.getString('channel_type'),
       hasImage: !!interaction.options.getAttachment('image'),
-      hasNotes: !!interaction.options.getString('notes'),
+      hasUnits: !!interaction.options.getString('units'),
+      units: interaction.options.getString('units'),
       debug: interaction.options.getBoolean('debug') ?? false
     });
 
@@ -67,8 +68,19 @@ export async function execute (interaction) {
 
     const channelType = interaction.options.getString('channel_type');
     const image = interaction.options.getAttachment('image');
-    const notes = interaction.options.getString('notes');
+    const units = interaction.options.getString('units');
     const debug = interaction.options.getBoolean('debug') ?? false;
+
+    // Validate units option for VIP plays
+    if (channelType === 'vip_plays' && !units) {
+      await interaction.editReply('❌ Units are required for VIP plays. Please specify units (e.g., 2u, 1.5u).');
+      return;
+    }
+
+    if (channelType !== 'vip_plays' && units) {
+      await interaction.editReply('⚠️ Units option is only available for VIP plays. Please remove the units option or select VIP Play.');
+      return;
+    }
 
     if (!image) {
       logError(new Error('No image provided'), { commandId, userId: interaction.user.id });
@@ -191,7 +203,7 @@ export async function execute (interaction) {
     console.log(`📝 [${commandId}] Creating betting message...`);
     logService('betting', 'create_message', { commandId, channelType });
     
-    const message = await createBettingMessage(channelType, betSlip, gameData, analysis.data || analysis, image.url, notes);
+    const message = await createBettingMessage(channelType, betSlip, gameData, analysis.data || analysis, image.url, units);
 
     if (!message.success) {
       logError(new Error(`Message creation failed: ${message.error}`), { 

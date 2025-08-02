@@ -105,7 +105,8 @@ const loadCommands = async () => {
       './src/commands/admin.js',
       './src/commands/economy.js',
       './src/commands/leveling.js',
-      './src/commands/automod.js'
+      './src/commands/automod.js',
+      './src/commands/test-ocr.js'
     ];
 
     for (const file of commandFiles) {
