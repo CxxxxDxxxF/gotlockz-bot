@@ -154,6 +154,18 @@ client.once(Events.ClientReady, async () => {
     await loadCommands();
     await setupBot();
 
+    // Deploy commands to Discord (only in production)
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        console.log('📝 Deploying commands to Discord...');
+        const { execSync } = await import('child_process');
+        execSync('node render-deploy-commands.js', { stdio: 'inherit' });
+        console.log('✅ Commands deployed successfully');
+      } catch (deployError) {
+        console.warn('⚠️ Command deployment failed (this is okay for development):', deployError.message);
+      }
+    }
+
     console.log('🎉 Bot setup complete!');
   } catch (error) {
     logError(error, { operation: 'botReady' });
