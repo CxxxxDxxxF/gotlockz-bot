@@ -1,0 +1,19 @@
+{
+  "name": "gotlockz-image-processing",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Image processing and OCR utilities for GotLockz bot",
+  "main": "slip-parser.js",
+  "scripts": {
+    "test": "node slip-parser.test.js",
+    "test:watch": "node --watch slip-parser.test.js"
+  },
+  "dependencies": {
+    "tesseract.js": "^4.1.1",
+    "sharp": "^0.32.6"
+  },
+  "devDependencies": {},
+  "keywords": ["ocr", "image-processing", "mlb", "betting"],
+  "author": "GotLockz Team",
+  "license": "MIT"
+} 
