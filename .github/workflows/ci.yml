@@ -39,7 +39,7 @@ jobs:
       run: npm run status
       
     - name: Upload test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       if: always()
       with:
         name: test-results
@@ -95,7 +95,7 @@ jobs:
         cache-to: type=gha,mode=max
         
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: docker-image
         path: /tmp/buildx-cache
