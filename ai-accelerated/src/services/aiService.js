@@ -58,16 +58,36 @@ class AIService {
         messages: [
           {
             role: 'system',
-            content: `You are an expert sports betting analyst. Analyze bets using ONLY the data provided - do NOT make up statistics or facts. 
+            content: `You are an elite sports betting analyst who CONVINCES readers why a bet is worth taking. Your job is to SELL the pick with real stats.
 
-Your analysis should include:
-1. Quick assessment of the bet value
-2. Key factors that could affect the outcome
-3. Risk level (Low/Medium/High)
-4. Confidence rating (1-10)
+CRITICAL STAT INTERPRETATION:
+- OFFENSE: Higher yards, points, completion % = GOOD
+- DEFENSE yards allowed: LOWER = GOOD (means they don't give up yards)
+- DEFENSE yards allowed: HIGHER = BAD (means they give up lots of yards = WEAKNESS to exploit)
+- Interceptions/Sacks BY a defense = GOOD for that defense (they're creating turnovers)
+- Rankings: #1 is best, #32 is worst
 
-Keep responses concise (2-3 paragraphs max). Be direct and actionable.
-If data is limited, acknowledge that and provide general insights based on what's available.`
+WRITING STYLE:
+- Write like you're convincing a friend to tail your bet
+- NO headers, titles, bullet points, or bold text
+- Single line breaks between paragraphs
+- Confident, persuasive tone
+
+WHAT TO INCLUDE:
+- Reference the actual STAT LEADERS by name (the stars on offense)
+- Explain specific matchup advantages with rankings
+- Point out defensive weaknesses to exploit (high yards allowed = bad defense)
+- Explain WHY the odds offer value
+- Talk about home/away record if relevant
+- End with a confident closing statement
+
+DO NOT:
+- Confuse what's good vs bad for defense (giving up yards = BAD, getting INTs = GOOD)
+- Mention random players - only reference the stat leaders provided
+- Make up any stats not in the data
+- Be uncertain - you believe in this pick
+
+Write 2-3 punchy paragraphs that make readers want to bet this immediately.`
           },
           {
             role: 'user',
@@ -109,54 +129,102 @@ If data is limited, acknowledge that and provide general insights based on what'
   }
 
   buildAnalysisPrompt(betSlip, gameData) {
-    let prompt = `## BET SLIP ANALYSIS REQUEST\n\n`;
+    let prompt = `BETTING PICK TO ANALYZE:\n\n`;
 
-    // Add bet legs
-    prompt += `### BETS:\n`;
-    if (betSlip.legs && betSlip.legs.length > 0) {
-      betSlip.legs.forEach((leg, i) => {
-        prompt += `${i + 1}. ${leg.teamA || 'Team A'} vs ${leg.teamB || 'Team B'}`;
-        if (leg.odds) prompt += ` | Odds: ${leg.odds}`;
-        if (leg.spread) prompt += ` | Spread: ${leg.spread}`;
-        if (leg.type) prompt += ` | Type: ${leg.type}`;
-        prompt += `\n`;
-      });
-    } else {
-      prompt += `- Bet details from image\n`;
-    }
+    const leg = betSlip.legs?.[0] || {};
+    const pickTeam = leg.pickLine?.replace(/\s*[+-]\d+\.?\d*\s*$/, '').trim() || leg.homeTeam || 'Unknown';
+    
+    prompt += `We are betting on: ${pickTeam} ${leg.betType || 'Money Line'} (${leg.odds || 'N/A'})\n`;
+    prompt += `Game: ${leg.awayTeam || 'Away'} @ ${leg.homeTeam || 'Home'}\n\n`;
 
-    // Add stake info if available
-    if (betSlip.stake) {
-      prompt += `\nStake: $${betSlip.stake}`;
-    }
-    if (betSlip.potentialWin) {
-      prompt += ` | Potential Win: $${betSlip.potentialWin}`;
-    }
-    prompt += `\n`;
-
-    // Add game data if available
-    if (gameData) {
-      prompt += `\n### GAME DATA:\n`;
+    if (gameData && gameData.sportType === 'nfl') {
+      prompt += `=== NFL STATS TO USE IN YOUR ANALYSIS ===\n\n`;
       
-      if (gameData.teams) {
-        prompt += `- Matchup: ${gameData.teams.away?.name || 'Away'} @ ${gameData.teams.home?.name || 'Home'}\n`;
+      // Team we're betting on
+      const bettingOn = pickTeam.toLowerCase().includes(gameData.homeTeam?.name?.toLowerCase()?.split(' ').pop()) 
+        ? gameData.homeTeam 
+        : gameData.awayTeam;
+      const opponent = bettingOn === gameData.homeTeam ? gameData.awayTeam : gameData.homeTeam;
+      
+      if (bettingOn) {
+        prompt += `OUR PICK - ${bettingOn.name || pickTeam}:\n`;
+        prompt += `Record: ${bettingOn.record || 'N/A'}`;
+        if (bettingOn.homeRecord) prompt += ` | Home: ${bettingOn.homeRecord}`;
+        if (bettingOn.awayRecord) prompt += ` | Away: ${bettingOn.awayRecord}`;
+        prompt += `\n`;
+        if (bettingOn.standings) prompt += `Standings: ${bettingOn.standings}\n`;
+        
+        // Stat Leaders - the actual stars of this team
+        if (bettingOn.statLeaders?.length > 0) {
+          prompt += `OFFENSIVE STARS (stat leaders):\n`;
+          for (const leader of bettingOn.statLeaders) {
+            prompt += `- ${leader.category}: ${leader.name} (${leader.position}) - ${leader.stat}\n`;
+          }
+        }
+        
+        if (bettingOn.offense && Object.keys(bettingOn.offense).length > 0) {
+          prompt += `OFFENSIVE STATS (higher = better):\n`;
+          for (const [stat, data] of Object.entries(bettingOn.offense).slice(0, 6)) {
+            prompt += `- ${stat}: ${data.value}${data.rank ? ` (Rank #${data.rank} in NFL)` : ''}\n`;
+          }
+        }
+        if (bettingOn.defense && Object.keys(bettingOn.defense).length > 0) {
+          prompt += `DEFENSIVE STATS (for yards allowed, LOWER = better; for turnovers/sacks, HIGHER = better):\n`;
+          for (const [stat, data] of Object.entries(bettingOn.defense).slice(0, 6)) {
+            prompt += `- ${stat}: ${data.value}${data.rank ? ` (Rank #${data.rank})` : ''}\n`;
+          }
+        }
+        prompt += `\n`;
       }
-      if (gameData.venue) {
-        prompt += `- Venue: ${gameData.venue}\n`;
+
+      if (opponent) {
+        prompt += `OPPONENT - ${opponent.name}:\n`;
+        prompt += `Record: ${opponent.record || 'N/A'}\n`;
+        
+        if (opponent.offense && Object.keys(opponent.offense).length > 0) {
+          prompt += `THEIR OFFENSE (we need to stop this):\n`;
+          for (const [stat, data] of Object.entries(opponent.offense).slice(0, 5)) {
+            prompt += `- ${stat}: ${data.value}${data.rank ? ` (Rank #${data.rank})` : ''}\n`;
+          }
+        }
+        if (opponent.defense && Object.keys(opponent.defense).length > 0) {
+          prompt += `THEIR DEFENSE (weaknesses our offense can exploit - high yards allowed = weak, low sacks/INTs = weak):\n`;
+          for (const [stat, data] of Object.entries(opponent.defense).slice(0, 5)) {
+            prompt += `- ${stat}: ${data.value}${data.rank ? ` (Rank #${data.rank})` : ''}\n`;
+          }
+        }
+        prompt += `\n`;
       }
-      if (gameData.status) {
-        prompt += `- Status: ${gameData.status}\n`;
+
+      // Key matchups
+      if (gameData.keyMatchups?.length > 0) {
+        prompt += `KEY MATCHUPS:\n`;
+        gameData.keyMatchups.forEach(m => prompt += `- ${m}\n`);
+        prompt += `\n`;
       }
-      if (gameData.weather) {
-        prompt += `- Weather: ${gameData.weather.temperature}°F, ${gameData.weather.condition}, Wind: ${gameData.weather.windSpeed}mph\n`;
+
+      // Game info
+      if (gameData.gameInfo) {
+        prompt += `GAME INFO:\n`;
+        if (gameData.gameInfo.venue) prompt += `Venue: ${gameData.gameInfo.venue}\n`;
+        if (gameData.gameInfo.odds?.details) prompt += `Vegas Line: ${gameData.gameInfo.odds.details}\n`;
+        prompt += `\n`;
       }
-      if (gameData.teamStats) {
-        prompt += `\n### TEAM STATS:\n`;
-        prompt += JSON.stringify(gameData.teamStats, null, 2);
-      }
+
+    } else if (gameData) {
+      // MLB or other sport
+      prompt += `=== GAME DATA ===\n`;
+      if (gameData.awayTeam) prompt += `Away: ${gameData.awayTeam.name} (${gameData.awayTeam.record || 'N/A'})\n`;
+      if (gameData.homeTeam) prompt += `Home: ${gameData.homeTeam.name} (${gameData.homeTeam.record || 'N/A'})\n`;
+      if (gameData.venue) prompt += `Venue: ${gameData.venue}\n`;
+    } else {
+      prompt += `Limited data available - provide analysis based on general team knowledge and the odds.\n`;
     }
 
-    prompt += `\n\nProvide a concise betting analysis based on this information.`;
+    prompt += `\n=== YOUR TASK ===
+Write a CONVINCING analysis (2-3 paragraphs) explaining WHY this bet is worth taking.
+Focus on specific matchup advantages, exploit defensive weaknesses, and reference the stats above.
+Be confident - you're selling this pick to readers. End strong.`;
 
     return prompt;
   }

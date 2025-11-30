@@ -239,9 +239,39 @@ class OCRService {
       }
     }
 
-    // Look for pick line (team with spread/line)
+    // Look for pick line (team with spread/line) and bet type
     let pickLine = null;
     let betType = null;
+    
+    // First, look for bet type keywords in all lines
+    const betTypeKeywords = [
+      { pattern: /money\s*line/i, type: 'Money Line' },
+      { pattern: /moneyline/i, type: 'Money Line' },
+      { pattern: /run\s*line/i, type: 'Run Line' },
+      { pattern: /spread/i, type: 'Spread' },
+      { pattern: /first\s*5\s*innings/i, type: 'First 5 Innings' },
+      { pattern: /first\s*half/i, type: 'First Half' },
+      { pattern: /over\s+\d/i, type: 'Over' },
+      { pattern: /under\s+\d/i, type: 'Under' },
+      { pattern: /total/i, type: 'Total' },
+      { pattern: /ml/i, type: 'Money Line' }
+    ];
+    
+    for (const line of lines) {
+      for (const { pattern, type } of betTypeKeywords) {
+        if (pattern.test(line)) {
+          betType = line.trim();
+          break;
+        }
+      }
+      if (betType) break;
+    }
+    
+    // If no bet type found and we have just odds (no spread), it's a money line
+    const hasSpread = lines.some(l => /[+-]\d+\.5/.test(l));
+    if (!betType && !hasSpread) {
+      betType = 'Money Line';
+    }
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -254,27 +284,21 @@ class OCRService {
         const teamPart = spreadMatch[1].trim();
         const spreadPart = spreadMatch[2];
         
-        // Check if next line is the bet type
-        if (i + 1 < lines.length) {
-          const nextLine = lines[i + 1];
-          // Bet type lines usually contain words like "Line", "Spread", "Total", "Innings", etc.
-          if (/line|spread|total|over|under|innings|half|quarter|moneyline/i.test(nextLine) && 
-              !matchupPattern.test(nextLine)) {
-            betType = nextLine;
-          }
+        // If spread is a whole number or has .5, it's a spread/run line
+        if (/\.5/.test(spreadPart)) {
+          pickLine = this.normalizeTeamName(teamPart) + ' ' + spreadPart;
+          if (!betType) betType = 'Run Line';
+        } else {
+          pickLine = this.normalizeTeamName(teamPart) + ' ' + spreadPart;
         }
-        
-        pickLine = this.normalizeTeamName(teamPart) + ' ' + spreadPart;
         break;
       }
       
-      // Also check for moneyline (just team name, no spread)
-      if (this.isTeamName(line) && !spreadPattern.test(line)) {
+      // Also check for moneyline (just team name with no spread but has odds)
+      if (this.isTeamName(line) && !spreadPattern.test(line) && !matchupPattern.test(line)) {
         pickLine = this.normalizeTeamName(line);
-        // Check next line for bet type
-        if (i + 1 < lines.length && /moneyline|ml/i.test(lines[i + 1])) {
-          betType = lines[i + 1];
-        }
+        if (!betType) betType = 'Money Line';
+        break;
       }
     }
 

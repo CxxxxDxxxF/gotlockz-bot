@@ -171,18 +171,48 @@ export async function execute (interaction) {
 
     console.log(`✅ [${commandId}] Bet slip parsed: ${betSlip.legs.length} legs found`);
 
-    // Step 3: Get game data and statistics
+    // Step 3: Detect sport and get game data/statistics
     console.log(`🏟️ [${commandId}] Fetching game data...`);
-    logService('mlb', 'get_game_data', { commandId, legs: betSlip.legs });
     
-    const gameData = await getGameData(betSlip.legs[0]);
+    const leg = betSlip.legs[0];
+    let gameData = null;
+    let sportType = 'unknown';
+    
+    // Detect sport based on team names
+    const nflTeams = ['raiders', 'chargers', 'chiefs', 'broncos', 'cowboys', 'eagles', 'giants', 'commanders', 
+                      'packers', 'bears', 'lions', 'vikings', 'saints', 'falcons', 'buccaneers', 'panthers',
+                      'seahawks', '49ers', 'rams', 'cardinals', 'bills', 'dolphins', 'patriots', 'jets',
+                      'ravens', 'steelers', 'browns', 'bengals', 'titans', 'colts', 'jaguars', 'texans'];
+    
+    const teamText = `${leg.awayTeam} ${leg.homeTeam} ${leg.pickLine}`.toLowerCase();
+    const isNFL = nflTeams.some(team => teamText.includes(team));
+    
+    if (isNFL) {
+      sportType = 'nfl';
+      console.log(`🏈 [${commandId}] Detected NFL game, fetching NFL stats...`);
+      try {
+        const nflModule = await import('../services/nflService.js');
+        gameData = await nflModule.getMatchupData(leg.awayTeam, leg.homeTeam);
+        if (gameData) {
+          console.log(`✅ [${commandId}] NFL data fetched successfully`);
+        }
+      } catch (error) {
+        console.log(`⚠️ [${commandId}] NFL data fetch failed:`, error.message);
+      }
+    } else {
+      sportType = 'mlb';
+      console.log(`⚾ [${commandId}] Detected MLB game, fetching MLB stats...`);
+      logService('mlb', 'get_game_data', { commandId, legs: betSlip.legs });
+      gameData = await getGameData(leg);
+    }
 
     // Game data is optional, continue even if it fails
     if (!gameData) {
       console.log(`⚠️ [${commandId}] Game data fetch failed, continuing with basic analysis`);
-      logService('mlb', 'get_game_data', { commandId, result: 'failed' });
     } else {
-      console.log(`✅ [${commandId}] Game data fetched successfully`);
+      console.log(`✅ [${commandId}] Game data fetched: ${sportType.toUpperCase()}`);
+      // Add sport type to gameData for AI context
+      gameData.sportType = sportType;
     }
 
     // Step 4: Generate AI analysis

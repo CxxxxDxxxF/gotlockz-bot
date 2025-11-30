@@ -1,8 +1,9 @@
 import { logger } from '../utils/logger.js';
+import { getGameTime } from './espnService.js';
 
 /**
  * Betting Service - Creates formatted pick messages
- * Format matches GotLockz style
+ * Format matches GotLockz style - ALL BOLD
  */
 class BettingService {
   constructor() {
@@ -15,20 +16,28 @@ class BettingService {
     try {
       logger.info('Creating betting message', { channelType });
 
+      // Get game time from ESPN
+      const leg = betSlip.legs?.[0] || {};
+      let gameTime = null;
+      
+      if (leg.awayTeam && leg.homeTeam) {
+        gameTime = await getGameTime(leg.awayTeam, leg.homeTeam);
+      }
+
       let message;
       
       switch (channelType) {
         case 'vip_plays':
           this.vipPlayCount++;
-          message = this.createVIPMessage(betSlip, gameData, analysis, imageUrl, units);
+          message = this.createVIPMessage(betSlip, gameData, analysis, imageUrl, units, gameTime);
           break;
         case 'free_plays':
           this.freePlayCount++;
-          message = this.createFreePlayMessage(betSlip, gameData, analysis, imageUrl);
+          message = this.createFreePlayMessage(betSlip, gameData, analysis, imageUrl, gameTime);
           break;
         case 'lotto_ticket':
           this.lottoCount++;
-          message = this.createLottoMessage(betSlip, gameData, analysis, imageUrl);
+          message = this.createLottoMessage(betSlip, gameData, analysis, imageUrl, gameTime);
           break;
         default:
           throw new Error(`Unknown channel type: ${channelType}`);
@@ -48,25 +57,42 @@ class BettingService {
     }
   }
 
-  createVIPMessage(betSlip, gameData, analysis, imageUrl, units) {
-    const today = new Date();
-    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
-    
+  createVIPMessage(betSlip, gameData, analysis, imageUrl, units, gameTime) {
     const leg = betSlip.legs?.[0] || {};
-    const matchup = leg.matchup || 'Game TBD';
-    const fullPick = leg.fullPick || leg.pickLine || 'Pick TBD';
+    
+    // Get date from ESPN or use today
+    const dateStr = gameTime?.date || this.getTodayDate();
+    const timeStr = gameTime?.time || '';
+    
+    // Build matchup with time
+    const awayTeam = leg.awayTeam || 'Away Team';
+    const homeTeam = leg.homeTeam || 'Home Team';
+    const matchupWithTime = timeStr 
+      ? `${awayTeam} @ ${homeTeam} (${dateStr} ${timeStr})`
+      : `${awayTeam} @ ${homeTeam}`;
+    
+    // Build pick line: Team + Bet Type + (Odds) - odds only once, no duplicate
+    let pickTeam = leg.pickLine || awayTeam;
+    const betType = leg.betType || 'Money Line';
+    const odds = leg.odds || 'N/A';
+    
+    // Remove odds from pickTeam if already included (avoid duplication)
+    pickTeam = pickTeam.replace(/\s*[+-]\d{2,4}\s*$/, '').trim();
+    
+    const pickLineFormatted = `${pickTeam} ${betType} (${odds})`;
+    
     const unitSize = units || '1';
 
     // Get analysis text
     const analysisText = this.formatAnalysisText(analysis, leg, gameData);
 
-    // Build the message in the exact format
-    let content = `🔒 **VIP PLAY # ${this.vipPlayCount}** 🏆 - ${dateStr}\n\n`;
-    content += `⚾ **Game:** ${matchup}\n\n`;
-    content += `🏆 **${fullPick}**\n\n`;
-    content += `💵 **Unit Size:** ${unitSize}\n\n`;
-    content += `👇 **Analysis Below:**\n\n`;
-    content += analysisText;
+    // Build the message - wrap entire thing in ** for bold, emoji | text format
+    let content = `**# 🔒| VIP PLAY # ${this.vipPlayCount} 🏆 - ${dateStr}\n\n`;
+    content += `⚾ | Game: ${matchupWithTime}\n\n`;
+    content += `🏆 | ${pickLineFormatted}\n\n`;
+    content += `💵 | Unit Size: ${unitSize}\n\n`;
+    content += `👇 | Analysis Below:\n\n`;
+    content += `${analysisText}**`;
 
     return {
       content: content,
@@ -74,21 +100,32 @@ class BettingService {
     };
   }
 
-  createFreePlayMessage(betSlip, gameData, analysis, imageUrl) {
-    const today = new Date();
-    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
-    
+  createFreePlayMessage(betSlip, gameData, analysis, imageUrl, gameTime) {
     const leg = betSlip.legs?.[0] || {};
-    const matchup = leg.matchup || 'Game TBD';
-    const fullPick = leg.fullPick || leg.pickLine || 'Pick TBD';
+    
+    const dateStr = gameTime?.date || this.getTodayDate();
+    const timeStr = gameTime?.time || '';
+    
+    const awayTeam = leg.awayTeam || 'Away Team';
+    const homeTeam = leg.homeTeam || 'Home Team';
+    const matchupWithTime = timeStr 
+      ? `${awayTeam} @ ${homeTeam} (${dateStr} ${timeStr})`
+      : `${awayTeam} @ ${homeTeam}`;
+    
+    let pickTeam = leg.pickLine || awayTeam;
+    const betType = leg.betType || 'Money Line';
+    const odds = leg.odds || 'N/A';
+    pickTeam = pickTeam.replace(/\s*[+-]\d{2,4}\s*$/, '').trim();
+    const pickLineFormatted = `${pickTeam} ${betType} (${odds})`;
 
     const analysisText = this.formatAnalysisText(analysis, leg, gameData);
 
-    let content = `🎁 **FREE PLAY** 🎁 - ${dateStr}\n\n`;
-    content += `⚾ **Game:** ${matchup}\n\n`;
-    content += `🎯 **${fullPick}**\n\n`;
-    content += `👇 **Analysis Below:**\n\n`;
-    content += analysisText;
+    // Build the message - wrap entire thing in ** for bold, emoji | text format
+    let content = `**# 🎁| FREE PLAY 🎁 - ${dateStr}\n\n`;
+    content += `⚾ | Game: ${matchupWithTime}\n\n`;
+    content += `🎯 | ${pickLineFormatted}\n\n`;
+    content += `👇 | Analysis Below:\n\n`;
+    content += `${analysisText}**`;
 
     return {
       content: content,
@@ -96,27 +133,43 @@ class BettingService {
     };
   }
 
-  createLottoMessage(betSlip, gameData, analysis, imageUrl) {
-    const today = new Date();
-    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
-    
+  createLottoMessage(betSlip, gameData, analysis, imageUrl, gameTime) {
     const leg = betSlip.legs?.[0] || {};
-    const matchup = leg.matchup || 'Game TBD';
-    const fullPick = leg.fullPick || leg.pickLine || 'Pick TBD';
+    
+    const dateStr = gameTime?.date || this.getTodayDate();
+    const timeStr = gameTime?.time || '';
+    
+    const awayTeam = leg.awayTeam || 'Away Team';
+    const homeTeam = leg.homeTeam || 'Home Team';
+    const matchupWithTime = timeStr 
+      ? `${awayTeam} @ ${homeTeam} (${dateStr} ${timeStr})`
+      : `${awayTeam} @ ${homeTeam}`;
+    
+    let pickTeam = leg.pickLine || awayTeam;
+    const betType = leg.betType || 'Money Line';
+    const odds = leg.odds || 'N/A';
+    pickTeam = pickTeam.replace(/\s*[+-]\d{2,4}\s*$/, '').trim();
+    const pickLineFormatted = `${pickTeam} ${betType} (${odds})`;
 
     const analysisText = this.formatAnalysisText(analysis, leg, gameData);
 
-    let content = `🎰 **LOTTO TICKET** 🎰 - ${dateStr}\n\n`;
-    content += `⚾ **Game:** ${matchup}\n\n`;
-    content += `🎲 **${fullPick}**\n\n`;
-    content += `⚠️ **High Risk, High Reward!**\n\n`;
-    content += `👇 **Analysis Below:**\n\n`;
-    content += analysisText;
+    // Build the message - wrap entire thing in ** for bold, emoji | text format
+    let content = `**# 🎰| LOTTO TICKET 🎰 - ${dateStr}\n\n`;
+    content += `⚾ | Game: ${matchupWithTime}\n\n`;
+    content += `🎲 | ${pickLineFormatted}\n\n`;
+    content += `⚠️ | High Risk, High Reward!\n\n`;
+    content += `👇 | Analysis Below:\n\n`;
+    content += `${analysisText}**`;
 
     return {
       content: content,
       files: imageUrl ? [{ attachment: imageUrl, name: 'betslip.png' }] : []
     };
+  }
+
+  getTodayDate() {
+    const today = new Date();
+    return `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
   }
 
   formatAnalysisText(analysis, leg, gameData) {
@@ -133,10 +186,6 @@ class BettingService {
     
     if (gameData?.venue) {
       text += `The game is being played at ${gameData.venue}. `;
-    }
-
-    if (gameData?.weather) {
-      text += `Weather conditions: ${gameData.weather.temperature}°F, ${gameData.weather.condition}. `;
     }
 
     text += `Based on recent performance and matchup analysis, this presents a solid opportunity. `;
