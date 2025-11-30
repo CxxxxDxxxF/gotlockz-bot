@@ -338,4 +338,6 @@ class MLBService {
 }
 
 export const mlbService = new MLBService();
-export const { getGameData } = mlbService;
+
+// Export bound method to preserve 'this' context
+export const getGameData = (leg) => mlbService.getGameData(leg);

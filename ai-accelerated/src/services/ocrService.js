@@ -3,13 +3,93 @@ import sharp from 'sharp';
 import axios from 'axios';
 import { logger } from '../utils/logger.js';
 
+/**
+ * OCR Service - Optimized for Fanatics Sportsbook bet slips
+ * Extracts: Team names, spreads, odds, bet types
+ */
 class OCRService {
-  constructor () {
-    this.engines = ['tesseract', 'easyocr', 'paddleocr'];
-    this.currentEngine = 0;
+  constructor() {
+    // Team name mappings - full names preferred per user preference
+    this.teamMappings = {
+      // MLB Teams
+      'NYM': 'New York Mets', 'METS': 'New York Mets', 'NEW YORK METS': 'New York Mets',
+      'NYY': 'New York Yankees', 'YANKEES': 'New York Yankees', 'NEW YORK YANKEES': 'New York Yankees',
+      'ATL': 'Atlanta Braves', 'BRAVES': 'Atlanta Braves', 'ATLANTA BRAVES': 'Atlanta Braves',
+      'BOS': 'Boston Red Sox', 'RED SOX': 'Boston Red Sox', 'BOSTON RED SOX': 'Boston Red Sox',
+      'CHC': 'Chicago Cubs', 'CUBS': 'Chicago Cubs', 'CHICAGO CUBS': 'Chicago Cubs',
+      'CHW': 'Chicago White Sox', 'WHITE SOX': 'Chicago White Sox', 'CHICAGO WHITE SOX': 'Chicago White Sox',
+      'LAD': 'Los Angeles Dodgers', 'DODGERS': 'Los Angeles Dodgers', 'LOS ANGELES DODGERS': 'Los Angeles Dodgers',
+      'LAA': 'Los Angeles Angels', 'ANGELS': 'Los Angeles Angels', 'LOS ANGELES ANGELS': 'Los Angeles Angels',
+      'SF': 'San Francisco Giants', 'GIANTS': 'San Francisco Giants', 'SAN FRANCISCO GIANTS': 'San Francisco Giants',
+      'SD': 'San Diego Padres', 'PADRES': 'San Diego Padres', 'SAN DIEGO PADRES': 'San Diego Padres',
+      'PHI': 'Philadelphia Phillies', 'PHILLIES': 'Philadelphia Phillies', 'PHILADELPHIA PHILLIES': 'Philadelphia Phillies',
+      'MIA': 'Miami Marlins', 'MARLINS': 'Miami Marlins', 'MIAMI MARLINS': 'Miami Marlins',
+      'WSH': 'Washington Nationals', 'NATIONALS': 'Washington Nationals', 'WASHINGTON NATIONALS': 'Washington Nationals',
+      'ARI': 'Arizona Diamondbacks', 'DIAMONDBACKS': 'Arizona Diamondbacks', 'ARIZONA DIAMONDBACKS': 'Arizona Diamondbacks',
+      'COL': 'Colorado Rockies', 'ROCKIES': 'Colorado Rockies', 'COLORADO ROCKIES': 'Colorado Rockies',
+      'HOU': 'Houston Astros', 'ASTROS': 'Houston Astros', 'HOUSTON ASTROS': 'Houston Astros',
+      'TEX': 'Texas Rangers', 'RANGERS': 'Texas Rangers', 'TEXAS RANGERS': 'Texas Rangers',
+      'OAK': 'Oakland Athletics', 'ATHLETICS': 'Oakland Athletics', 'OAKLAND ATHLETICS': 'Oakland Athletics',
+      'SEA': 'Seattle Mariners', 'MARINERS': 'Seattle Mariners', 'SEATTLE MARINERS': 'Seattle Mariners',
+      'MIN': 'Minnesota Twins', 'TWINS': 'Minnesota Twins', 'MINNESOTA TWINS': 'Minnesota Twins',
+      'CLE': 'Cleveland Guardians', 'GUARDIANS': 'Cleveland Guardians', 'CLEVELAND GUARDIANS': 'Cleveland Guardians',
+      'DET': 'Detroit Tigers', 'TIGERS': 'Detroit Tigers', 'DETROIT TIGERS': 'Detroit Tigers',
+      'KC': 'Kansas City Royals', 'ROYALS': 'Kansas City Royals', 'KANSAS CITY ROYALS': 'Kansas City Royals',
+      'TB': 'Tampa Bay Rays', 'RAYS': 'Tampa Bay Rays', 'TAMPA BAY RAYS': 'Tampa Bay Rays',
+      'BAL': 'Baltimore Orioles', 'ORIOLES': 'Baltimore Orioles', 'BALTIMORE ORIOLES': 'Baltimore Orioles',
+      'TOR': 'Toronto Blue Jays', 'BLUE JAYS': 'Toronto Blue Jays', 'TORONTO BLUE JAYS': 'Toronto Blue Jays',
+      'CIN': 'Cincinnati Reds', 'REDS': 'Cincinnati Reds', 'CINCINNATI REDS': 'Cincinnati Reds',
+      'MIL': 'Milwaukee Brewers', 'BREWERS': 'Milwaukee Brewers', 'MILWAUKEE BREWERS': 'Milwaukee Brewers',
+      'PIT': 'Pittsburgh Pirates', 'PIRATES': 'Pittsburgh Pirates', 'PITTSBURGH PIRATES': 'Pittsburgh Pirates',
+      'STL': 'St. Louis Cardinals', 'CARDINALS': 'St. Louis Cardinals', 'ST. LOUIS CARDINALS': 'St. Louis Cardinals',
+      
+      // NFL Teams
+      'KC': 'Kansas City Chiefs', 'CHIEFS': 'Kansas City Chiefs', 'KANSAS CITY CHIEFS': 'Kansas City Chiefs',
+      'BUF': 'Buffalo Bills', 'BILLS': 'Buffalo Bills', 'BUFFALO BILLS': 'Buffalo Bills',
+      'MIA': 'Miami Dolphins', 'DOLPHINS': 'Miami Dolphins', 'MIAMI DOLPHINS': 'Miami Dolphins',
+      'NE': 'New England Patriots', 'PATRIOTS': 'New England Patriots', 'NEW ENGLAND PATRIOTS': 'New England Patriots',
+      'NYJ': 'New York Jets', 'JETS': 'New York Jets', 'NEW YORK JETS': 'New York Jets',
+      'NYG': 'New York Giants', 'GIANTS': 'New York Giants', 'NEW YORK GIANTS': 'New York Giants',
+      'BAL': 'Baltimore Ravens', 'RAVENS': 'Baltimore Ravens', 'BALTIMORE RAVENS': 'Baltimore Ravens',
+      'CIN': 'Cincinnati Bengals', 'BENGALS': 'Cincinnati Bengals', 'CINCINNATI BENGALS': 'Cincinnati Bengals',
+      'CLE': 'Cleveland Browns', 'BROWNS': 'Cleveland Browns', 'CLEVELAND BROWNS': 'Cleveland Browns',
+      'PIT': 'Pittsburgh Steelers', 'STEELERS': 'Pittsburgh Steelers', 'PITTSBURGH STEELERS': 'Pittsburgh Steelers',
+      'HOU': 'Houston Texans', 'TEXANS': 'Houston Texans', 'HOUSTON TEXANS': 'Houston Texans',
+      'IND': 'Indianapolis Colts', 'COLTS': 'Indianapolis Colts', 'INDIANAPOLIS COLTS': 'Indianapolis Colts',
+      'JAX': 'Jacksonville Jaguars', 'JAGUARS': 'Jacksonville Jaguars', 'JACKSONVILLE JAGUARS': 'Jacksonville Jaguars',
+      'TEN': 'Tennessee Titans', 'TITANS': 'Tennessee Titans', 'TENNESSEE TITANS': 'Tennessee Titans',
+      'DEN': 'Denver Broncos', 'BRONCOS': 'Denver Broncos', 'DENVER BRONCOS': 'Denver Broncos',
+      'LV': 'Las Vegas Raiders', 'RAIDERS': 'Las Vegas Raiders', 'LAS VEGAS RAIDERS': 'Las Vegas Raiders',
+      'LAC': 'Los Angeles Chargers', 'CHARGERS': 'Los Angeles Chargers', 'LOS ANGELES CHARGERS': 'Los Angeles Chargers',
+      'DAL': 'Dallas Cowboys', 'COWBOYS': 'Dallas Cowboys', 'DALLAS COWBOYS': 'Dallas Cowboys',
+      'PHI': 'Philadelphia Eagles', 'EAGLES': 'Philadelphia Eagles', 'PHILADELPHIA EAGLES': 'Philadelphia Eagles',
+      'WAS': 'Washington Commanders', 'COMMANDERS': 'Washington Commanders', 'WASHINGTON COMMANDERS': 'Washington Commanders',
+      'CHI': 'Chicago Bears', 'BEARS': 'Chicago Bears', 'CHICAGO BEARS': 'Chicago Bears',
+      'DET': 'Detroit Lions', 'LIONS': 'Detroit Lions', 'DETROIT LIONS': 'Detroit Lions',
+      'GB': 'Green Bay Packers', 'PACKERS': 'Green Bay Packers', 'GREEN BAY PACKERS': 'Green Bay Packers',
+      'MIN': 'Minnesota Vikings', 'VIKINGS': 'Minnesota Vikings', 'MINNESOTA VIKINGS': 'Minnesota Vikings',
+      'ATL': 'Atlanta Falcons', 'FALCONS': 'Atlanta Falcons', 'ATLANTA FALCONS': 'Atlanta Falcons',
+      'CAR': 'Carolina Panthers', 'PANTHERS': 'Carolina Panthers', 'CAROLINA PANTHERS': 'Carolina Panthers',
+      'NO': 'New Orleans Saints', 'SAINTS': 'New Orleans Saints', 'NEW ORLEANS SAINTS': 'New Orleans Saints',
+      'TB': 'Tampa Bay Buccaneers', 'BUCCANEERS': 'Tampa Bay Buccaneers', 'TAMPA BAY BUCCANEERS': 'Tampa Bay Buccaneers',
+      'ARI': 'Arizona Cardinals', 'CARDINALS': 'Arizona Cardinals', 'ARIZONA CARDINALS': 'Arizona Cardinals',
+      'LAR': 'Los Angeles Rams', 'RAMS': 'Los Angeles Rams', 'LOS ANGELES RAMS': 'Los Angeles Rams',
+      'SF': 'San Francisco 49ers', '49ERS': 'San Francisco 49ers', 'SAN FRANCISCO 49ERS': 'San Francisco 49ers',
+      'SEA': 'Seattle Seahawks', 'SEAHAWKS': 'Seattle Seahawks', 'SEATTLE SEAHAWKS': 'Seattle Seahawks'
+    };
+
+    // Lines to ignore from Fanatics bet slips
+    this.ignorePatterns = [
+      /fanatics\s*sportsbook/i,
+      /must\s*be\s*21\+/i,
+      /gambling\s*problem/i,
+      /1-800-gambler/i,
+      /bet\s*id/i,
+      /^\s*$/
+    ];
   }
 
-  async analyzeImage (imageUrl, debug = false) {
+  async analyzeImage(imageUrl, debug = false) {
     const startTime = Date.now();
 
     try {
@@ -19,37 +99,19 @@ class OCRService {
       const imageBuffer = await this.downloadImage(imageUrl);
       const processedBuffer = await this.preprocessImage(imageBuffer, debug);
 
-      // Try multiple OCR engines
-      let ocrResult = null;
-      let engineUsed = '';
+      // Run Tesseract OCR
+      const ocrResult = await this.runTesseract(processedBuffer, debug);
 
-      for (let i = 0; i < this.engines.length; i++) {
-        const engine = this.engines[(this.currentEngine + i) % this.engines.length];
-
-        try {
-          logger.info(`Trying OCR engine: ${engine}`);
-          ocrResult = await this.runOCR(engine, processedBuffer, debug);
-
-          if (ocrResult && ocrResult.confidence > 0.7) {
-            engineUsed = engine;
-            break;
-          }
-        } catch (error) {
-          logger.warn(`OCR engine ${engine} failed:`, error.message);
-        }
+      if (!ocrResult || ocrResult.confidence < 0.3) {
+        throw new Error('OCR confidence too low');
       }
 
-      if (!ocrResult) {
-        throw new Error('All OCR engines failed');
-      }
-
-      // Parse bet slip data
-      const betSlip = this.parseBetSlip(ocrResult.text);
+      // Parse Fanatics bet slip format
+      const betSlip = this.parseFanaticsBetSlip(ocrResult.text, debug);
 
       const time = Date.now() - startTime;
 
       logger.info('OCR analysis completed', {
-        engine: engineUsed,
         confidence: ocrResult.confidence,
         time: `${time}ms`,
         textLength: ocrResult.text.length
@@ -58,7 +120,6 @@ class OCRService {
       return {
         success: true,
         data: betSlip,
-        engine: engineUsed,
         confidence: ocrResult.confidence,
         time: time,
         rawText: ocrResult.text
@@ -74,39 +135,23 @@ class OCRService {
     }
   }
 
-  async downloadImage (imageUrl) {
+  async downloadImage(imageUrl) {
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
-      timeout: 10000
+      timeout: 15000
     });
     return Buffer.from(response.data);
   }
 
-  async preprocessImage (imageBuffer, debug = false) {
+  async preprocessImage(imageBuffer, debug = false) {
     try {
-      // Use Sharp for image preprocessing
       const processed = await sharp(imageBuffer)
-        .resize(1200, null, { withoutEnlargement: true }) // Resize for better OCR
-        .grayscale() // Convert to grayscale
-        .normalize() // Normalize contrast
-        .sharpen() // Sharpen edges
-        .png() // Convert to PNG
+        .resize(1400, null, { withoutEnlargement: true })
+        .grayscale()
+        .normalize()
+        .sharpen()
+        .png()
         .toBuffer();
-
-      if (debug) {
-        try {
-          // Create debug directory if it doesn't exist
-          const fs = await import('fs');
-          const path = await import('path');
-          const debugDir = 'debug';
-          if (!fs.existsSync(debugDir)) {
-            fs.mkdirSync(debugDir, { recursive: true });
-          }
-          await sharp(processed).toFile(path.join(debugDir, 'preprocessed.png'));
-        } catch (error) {
-          logger.warn('Could not save debug image:', error.message);
-        }
-      }
 
       return processed;
     } catch (error) {
@@ -115,27 +160,11 @@ class OCRService {
     }
   }
 
-  async runOCR (engine, imageBuffer, debug = false) {
-    switch (engine) {
-    case 'tesseract':
-      return await this.runTesseract(imageBuffer, debug);
-    case 'easyocr':
-      return await this.runEasyOCR(imageBuffer, debug);
-    case 'paddleocr':
-      return await this.runPaddleOCR(imageBuffer, debug);
-    default:
-      throw new Error(`Unknown OCR engine: ${engine}`);
-    }
-  }
+  async runTesseract(imageBuffer, debug = false) {
+    const worker = await Tesseract.createWorker('eng');
 
-  async runTesseract (imageBuffer, debug = false) {
-    const worker = await Tesseract.createWorker();
-    await worker.loadLanguage('eng');
-    await worker.initialize('eng');
-
-    // Configure for better text recognition
     await worker.setParameters({
-      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-/.()$%',
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-+/.()$%@ ',
       preserve_interword_spaces: '1'
     });
 
@@ -143,11 +172,7 @@ class OCRService {
     await worker.terminate();
 
     if (debug) {
-      logger.info('Tesseract result:', {
-        text: result.data.text,
-        confidence: result.data.confidence,
-        words: result.data.words.length
-      });
+      logger.info('Tesseract raw result:', { text: result.data.text });
     }
 
     return {
@@ -156,67 +181,172 @@ class OCRService {
     };
   }
 
-  async runEasyOCR (imageBuffer, _debug = false) {
-    // Placeholder for EasyOCR integration
-    // In production, you would use a Python subprocess or API
-    throw new Error('EasyOCR not implemented yet');
-  }
+  /**
+   * Parse Fanatics Sportsbook bet slip format
+   * Expected structure:
+   * Line 1: "New York Mets -0.5" (team + spread)
+   * Line 2: "Run Line - First 5 Innings" (bet type)
+   * Line 3: "Atlanta Braves at New York Mets" (matchup)
+   * Right side: "-160" (odds)
+   */
+  parseFanaticsBetSlip(text, debug = false) {
+    const lines = text.split('\n')
+      .map(line => line.trim())
+      .filter(line => {
+        // Skip empty lines and ignored patterns
+        if (!line) return false;
+        for (const pattern of this.ignorePatterns) {
+          if (pattern.test(line)) return false;
+        }
+        return true;
+      });
 
-  async runPaddleOCR (imageBuffer, _debug = false) {
-    // Placeholder for PaddleOCR integration
-    // In production, you would use a Python subprocess or API
-    throw new Error('PaddleOCR not implemented yet');
-  }
+    if (debug) {
+      logger.info('Filtered lines:', { lines });
+    }
 
-  parseBetSlip (text) {
-    // Simple bet slip parser - can be enhanced with AI
-    const lines = text.split('\n').filter(line => line.trim());
-
-    // Extract basic information
     const betSlip = {
       legs: [],
-      totalOdds: null,
-      stake: null,
-      potentialWin: null
+      rawLines: lines
     };
 
-    // Look for common patterns
+    // Look for odds pattern (+/-XXX)
+    let odds = null;
+    const oddsPattern = /([+-]\d{2,4})/;
+    
     for (const line of lines) {
-      // Look for team names and odds
-      const teamMatch = line.match(/([A-Za-z\s]+)\s+vs\s+([A-Za-z\s]+)/i);
-      if (teamMatch) {
-        betSlip.legs.push({
-          teamA: teamMatch[1].trim(),
-          teamB: teamMatch[2].trim(),
-          odds: null
-        });
-      }
-
-      // Look for odds
-      const oddsMatch = line.match(/(\+|-)?\d+(\.\d+)?/);
-      if (oddsMatch && betSlip.legs.length > 0) {
-        betSlip.legs[betSlip.legs.length - 1].odds = parseFloat(oddsMatch[0]);
-      }
-
-      // Look for stake
-      const stakeMatch = line.match(/\$(\d+(\.\d+)?)/);
-      if (stakeMatch) {
-        betSlip.stake = parseFloat(stakeMatch[1]);
+      const oddsMatch = line.match(oddsPattern);
+      if (oddsMatch) {
+        odds = oddsMatch[1];
       }
     }
 
-    // If no legs were found, create a default one
-    if (betSlip.legs.length === 0) {
+    // Look for matchup pattern "Team at Team" or "Team vs Team"
+    let matchup = null;
+    let awayTeam = null;
+    let homeTeam = null;
+    
+    const matchupPattern = /(.+?)\s+(?:at|@|vs\.?)\s+(.+)/i;
+    
+    for (const line of lines) {
+      const matchupMatch = line.match(matchupPattern);
+      if (matchupMatch && !line.includes('-') && !line.includes('+')) {
+        // This is likely the matchup line (no spread numbers)
+        awayTeam = this.normalizeTeamName(matchupMatch[1].trim());
+        homeTeam = this.normalizeTeamName(matchupMatch[2].trim());
+        matchup = `${awayTeam} @ ${homeTeam}`;
+        break;
+      }
+    }
+
+    // Look for pick line (team with spread/line)
+    let pickLine = null;
+    let betType = null;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Check if line has a team name with a spread (e.g., "New York Mets -0.5")
+      const spreadPattern = /(.+?)\s+([+-]?\d+\.?\d*)\s*$/;
+      const spreadMatch = line.match(spreadPattern);
+      
+      if (spreadMatch) {
+        const teamPart = spreadMatch[1].trim();
+        const spreadPart = spreadMatch[2];
+        
+        // Check if next line is the bet type
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1];
+          // Bet type lines usually contain words like "Line", "Spread", "Total", "Innings", etc.
+          if (/line|spread|total|over|under|innings|half|quarter|moneyline/i.test(nextLine) && 
+              !matchupPattern.test(nextLine)) {
+            betType = nextLine;
+          }
+        }
+        
+        pickLine = this.normalizeTeamName(teamPart) + ' ' + spreadPart;
+        break;
+      }
+      
+      // Also check for moneyline (just team name, no spread)
+      if (this.isTeamName(line) && !spreadPattern.test(line)) {
+        pickLine = this.normalizeTeamName(line);
+        // Check next line for bet type
+        if (i + 1 < lines.length && /moneyline|ml/i.test(lines[i + 1])) {
+          betType = lines[i + 1];
+        }
+      }
+    }
+
+    // Build the leg
+    if (pickLine || matchup) {
       betSlip.legs.push({
-        teamA: 'Team A',
-        teamB: 'Team B',
-        odds: null
+        pickLine: pickLine || 'Pick not detected',
+        betType: betType || '',
+        matchup: matchup || 'Matchup not detected',
+        awayTeam: awayTeam || 'Away Team',
+        homeTeam: homeTeam || 'Home Team',
+        odds: odds || 'N/A',
+        fullPick: pickLine && betType 
+          ? `${pickLine} ${betType} (${odds || 'N/A'})`
+          : pickLine 
+            ? `${pickLine} (${odds || 'N/A'})`
+            : 'Pick not detected'
       });
+    } else {
+      // Fallback - couldn't parse properly
+      betSlip.legs.push({
+        pickLine: 'Could not parse pick',
+        betType: '',
+        matchup: 'Could not parse matchup',
+        awayTeam: 'Team A',
+        homeTeam: 'Team B',
+        odds: odds || 'N/A',
+        fullPick: 'Could not parse - check image quality',
+        rawText: lines.join(' | ')
+      });
+    }
+
+    if (debug) {
+      logger.info('Parsed bet slip:', { betSlip });
     }
 
     return betSlip;
   }
+
+  normalizeTeamName(name) {
+    if (!name) return name;
+    
+    const upperName = name.toUpperCase().trim();
+    
+    // Check exact mapping first
+    if (this.teamMappings[upperName]) {
+      return this.teamMappings[upperName];
+    }
+    
+    // Check partial matches
+    for (const [key, fullName] of Object.entries(this.teamMappings)) {
+      if (upperName.includes(key) || key.includes(upperName)) {
+        return fullName;
+      }
+    }
+    
+    // Return original with proper casing
+    return name.trim();
+  }
+
+  isTeamName(text) {
+    if (!text) return false;
+    const upperText = text.toUpperCase().trim();
+    
+    for (const key of Object.keys(this.teamMappings)) {
+      if (upperText.includes(key)) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
-const ocrService = new OCRService();
-export const { analyzeImage } = ocrService;
+export const ocrService = new OCRService();
+export const analyzeImage = (imageUrl, debug) => ocrService.analyzeImage(imageUrl, debug);

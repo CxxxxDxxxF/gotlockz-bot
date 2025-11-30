@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { Client, Events, GatewayIntentBits, Collection, Routes } from 'discord.js';
 import { REST } from '@discordjs/rest';
 import { logger, logError } from './utils/logger.js';
@@ -101,12 +104,12 @@ const loadCommands = async () => {
     console.log('📦 Loading commands...');
     
     const commandFiles = [
-      './src/commands/pick.js',
-      './src/commands/admin.js',
-      './src/commands/economy.js',
-      './src/commands/leveling.js',
-      './src/commands/automod.js',
-      './src/commands/test-ocr.js'
+      './commands/pick.js',
+      './commands/admin.js',
+      './commands/economy.js',
+      './commands/leveling.js',
+      './commands/automod.js',
+      './commands/test-ocr.js'
     ];
 
     for (const file of commandFiles) {

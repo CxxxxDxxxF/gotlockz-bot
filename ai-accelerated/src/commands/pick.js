@@ -221,8 +221,34 @@ export async function execute (interaction) {
 
     console.log(`✅ [${commandId}] Message created successfully`);
 
-    // Step 6: Send response
-    await interaction.editReply(message.data);
+    // Step 6: Send to the appropriate channel based on channelType
+    const channelIds = {
+      vip_plays: process.env.VIP_CHANNEL_ID,
+      free_plays: process.env.FREE_CHANNEL_ID,
+      lotto_ticket: process.env.LOTTO_CHANNEL_ID
+    };
+
+    const targetChannelId = channelIds[channelType];
+    
+    if (targetChannelId) {
+      try {
+        const targetChannel = await interaction.client.channels.fetch(targetChannelId);
+        if (targetChannel) {
+          await targetChannel.send(message.data);
+          await interaction.editReply(`✅ Pick posted to <#${targetChannelId}>!`);
+          console.log(`📤 [${commandId}] Message sent to channel ${targetChannelId}`);
+        } else {
+          throw new Error('Channel not found');
+        }
+      } catch (channelError) {
+        console.error(`❌ [${commandId}] Failed to send to channel:`, channelError.message);
+        // Fallback: reply to the interaction
+        await interaction.editReply(message.data);
+      }
+    } else {
+      // No channel configured, reply to interaction
+      await interaction.editReply(message.data);
+    }
 
     const totalTime = Date.now() - startTime;
     console.log(`🎉 [${commandId}] Pick command completed successfully in ${totalTime}ms`);

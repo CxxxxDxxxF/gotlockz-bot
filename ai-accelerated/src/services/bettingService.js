@@ -1,34 +1,42 @@
-import { EmbedBuilder } from 'discord.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * Betting Service - Creates formatted pick messages
+ * Format matches GotLockz style
+ */
 class BettingService {
-  constructor () {
-    this.templates = {
-      vip_plays: this.createVIPTemplate(),
-      free_plays: this.createFreePlayTemplate(),
-      lotto_ticket: this.createLottoTemplate()
-    };
+  constructor() {
+    this.vipPlayCount = 0;
+    this.freePlayCount = 0;
+    this.lottoCount = 0;
   }
 
-  async createBettingMessage (channelType, betSlip, gameData, analysis, imageUrl, notes) {
+  async createBettingMessage(channelType, betSlip, gameData, analysis, imageUrl, units) {
     try {
       logger.info('Creating betting message', { channelType });
 
-      const template = this.templates[channelType];
-      if (!template) {
-        throw new Error(`Unknown channel type: ${channelType}`);
+      let message;
+      
+      switch (channelType) {
+        case 'vip_plays':
+          this.vipPlayCount++;
+          message = this.createVIPMessage(betSlip, gameData, analysis, imageUrl, units);
+          break;
+        case 'free_plays':
+          this.freePlayCount++;
+          message = this.createFreePlayMessage(betSlip, gameData, analysis, imageUrl);
+          break;
+        case 'lotto_ticket':
+          this.lottoCount++;
+          message = this.createLottoMessage(betSlip, gameData, analysis, imageUrl);
+          break;
+        default:
+          throw new Error(`Unknown channel type: ${channelType}`);
       }
-
-      // Validate and sanitize data
-      const sanitizedBetSlip = this.sanitizeBetSlip(betSlip);
-      const sanitizedAnalysis = this.sanitizeAnalysis(analysis);
-      const sanitizedGameData = this.sanitizeGameData(gameData);
-
-      const embed = await template(sanitizedBetSlip, sanitizedGameData, sanitizedAnalysis, imageUrl, notes);
 
       return {
         success: true,
-        data: { embeds: [embed] }
+        data: message
       };
 
     } catch (error) {
@@ -40,347 +48,104 @@ class BettingService {
     }
   }
 
-  sanitizeBetSlip (betSlip) {
-    if (!betSlip) {
-      return {
-        legs: [],
-        totalOdds: null,
-        stake: null,
-        potentialWin: null
-      };
-    }
+  createVIPMessage(betSlip, gameData, analysis, imageUrl, units) {
+    const today = new Date();
+    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
+    
+    const leg = betSlip.legs?.[0] || {};
+    const matchup = leg.matchup || 'Game TBD';
+    const fullPick = leg.fullPick || leg.pickLine || 'Pick TBD';
+    const unitSize = units || '1';
+
+    // Get analysis text
+    const analysisText = this.formatAnalysisText(analysis, leg, gameData);
+
+    // Build the message in the exact format
+    let content = `🔒 **VIP PLAY # ${this.vipPlayCount}** 🏆 - ${dateStr}\n\n`;
+    content += `⚾ **Game:** ${matchup}\n\n`;
+    content += `🏆 **${fullPick}**\n\n`;
+    content += `💵 **Unit Size:** ${unitSize}\n\n`;
+    content += `👇 **Analysis Below:**\n\n`;
+    content += analysisText;
 
     return {
-      legs: betSlip.legs || [],
-      totalOdds: betSlip.totalOdds || null,
-      stake: betSlip.stake || null,
-      potentialWin: betSlip.potentialWin || null
+      content: content,
+      files: imageUrl ? [{ attachment: imageUrl, name: 'betslip.png' }] : []
     };
   }
 
-  sanitizeAnalysis (analysis) {
-    if (!analysis) {
-      return {
-        confidence: 0.5,
-        riskLevel: 'medium',
-        keyFactors: ['Analysis not available'],
-        recommendations: ['No specific recommendation available'],
-        modelsUsed: 'Fallback analysis'
-      };
-    }
+  createFreePlayMessage(betSlip, gameData, analysis, imageUrl) {
+    const today = new Date();
+    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
+    
+    const leg = betSlip.legs?.[0] || {};
+    const matchup = leg.matchup || 'Game TBD';
+    const fullPick = leg.fullPick || leg.pickLine || 'Pick TBD';
+
+    const analysisText = this.formatAnalysisText(analysis, leg, gameData);
+
+    let content = `🎁 **FREE PLAY** 🎁 - ${dateStr}\n\n`;
+    content += `⚾ **Game:** ${matchup}\n\n`;
+    content += `🎯 **${fullPick}**\n\n`;
+    content += `👇 **Analysis Below:**\n\n`;
+    content += analysisText;
 
     return {
-      confidence: analysis.confidence || 0.5,
-      riskLevel: analysis.riskLevel || 'medium',
-      keyFactors: analysis.keyFactors || ['Analysis factors not available'],
-      recommendations: analysis.recommendations || ['No specific recommendation available'],
-      modelsUsed: analysis.modelsUsed || 'AI analysis'
+      content: content,
+      files: imageUrl ? [{ attachment: imageUrl, name: 'betslip.png' }] : []
     };
   }
 
-  sanitizeGameData (gameData) {
-    if (!gameData) {
-      return null;
-    }
+  createLottoMessage(betSlip, gameData, analysis, imageUrl) {
+    const today = new Date();
+    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear().toString().slice(-2)}`;
+    
+    const leg = betSlip.legs?.[0] || {};
+    const matchup = leg.matchup || 'Game TBD';
+    const fullPick = leg.fullPick || leg.pickLine || 'Pick TBD';
+
+    const analysisText = this.formatAnalysisText(analysis, leg, gameData);
+
+    let content = `🎰 **LOTTO TICKET** 🎰 - ${dateStr}\n\n`;
+    content += `⚾ **Game:** ${matchup}\n\n`;
+    content += `🎲 **${fullPick}**\n\n`;
+    content += `⚠️ **High Risk, High Reward!**\n\n`;
+    content += `👇 **Analysis Below:**\n\n`;
+    content += analysisText;
 
     return {
-      teams: gameData.teams || null,
-      venue: gameData.venue || null,
-      weather: gameData.weather || null,
-      status: gameData.status || null
+      content: content,
+      files: imageUrl ? [{ attachment: imageUrl, name: 'betslip.png' }] : []
     };
   }
 
-  createVIPTemplate () {
-    return async (betSlip, gameData, analysis, imageUrl, notes) => {
-      const embed = new EmbedBuilder()
-        .setColor(0xFFD700) // Gold color for VIP
-        .setTitle('💰 **VIP PLAY** 💰')
-        .setDescription(this.generateVIPDescription(betSlip, analysis))
-        .setTimestamp();
-
-      // Add thumbnail if image URL is valid
-      if (imageUrl && imageUrl.startsWith('http')) {
-        embed.setThumbnail(imageUrl);
-      }
-
-      // Add bet details
-      embed.addFields(
-        {
-          name: '🎯 **BET DETAILS**',
-          value: this.formatBetDetails(betSlip),
-          inline: false
-        },
-        {
-          name: '📊 **AI ANALYSIS**',
-          value: this.formatAnalysis(analysis),
-          inline: false
-        }
-      );
-
-      // Add game info if available
-      if (gameData) {
-        embed.addFields({
-          name: '🏟️ **GAME INFO**',
-          value: this.formatGameInfo(gameData),
-          inline: false
-        });
-      }
-
-      // Add notes if provided
-      if (notes && notes.trim()) {
-        embed.addFields({
-          name: '📝 **NOTES**',
-          value: notes,
-          inline: false
-        });
-      }
-
-      // Add footer with confidence
-      const confidence = Math.round((analysis.confidence || 0.5) * 100);
-      const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
-      embed.setFooter({
-        text: `Confidence: ${confidence}% | Risk: ${riskLevel} | AI-Powered Analysis`
-      });
-
-      return embed;
-    };
-  }
-
-  createFreePlayTemplate () {
-    return async (betSlip, gameData, analysis, imageUrl, notes) => {
-      const embed = new EmbedBuilder()
-        .setColor(0x00FF00) // Green color for free plays
-        .setTitle('🎁 **FREE PLAY IS HERE!** 🎁')
-        .setDescription(this.generateFreePlayDescription(betSlip, analysis))
-        .setTimestamp();
-
-      // Add thumbnail if image URL is valid
-      if (imageUrl && imageUrl.startsWith('http')) {
-        embed.setThumbnail(imageUrl);
-      }
-
-      // Add bet details
-      embed.addFields(
-        {
-          name: '🎯 **BET DETAILS**',
-          value: this.formatBetDetails(betSlip),
-          inline: false
-        },
-        {
-          name: '🤖 **AI INSIGHTS**',
-          value: this.formatAnalysis(analysis),
-          inline: false
-        }
-      );
-
-      // Add game info if available
-      if (gameData) {
-        embed.addFields({
-          name: '🏟️ **GAME INFO**',
-          value: this.formatGameInfo(gameData),
-          inline: false
-        });
-      }
-
-      // Add notes if provided
-      if (notes && notes.trim()) {
-        embed.addFields({
-          name: '📝 **NOTES**',
-          value: notes,
-          inline: false
-        });
-      }
-
-      // Add footer
-      const confidence = Math.round((analysis.confidence || 0.5) * 100);
-      const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
-      embed.setFooter({
-        text: `GotLockz Family | Confidence: ${confidence}% | Risk: ${riskLevel}`
-      });
-
-      return embed;
-    };
-  }
-
-  createLottoTemplate () {
-    return async (betSlip, gameData, analysis, imageUrl, notes) => {
-      const embed = new EmbedBuilder()
-        .setColor(0xFF69B4) // Pink color for lotto tickets
-        .setTitle('🎰 **LOTTO TICKET** 🎰')
-        .setDescription(this.generateLottoDescription(betSlip, analysis))
-        .setTimestamp();
-
-      // Add thumbnail if image URL is valid
-      if (imageUrl && imageUrl.startsWith('http')) {
-        embed.setThumbnail(imageUrl);
-      }
-
-      // Add bet details
-      embed.addFields(
-        {
-          name: '🎯 **BET DETAILS**',
-          value: this.formatBetDetails(betSlip),
-          inline: false
-        },
-        {
-          name: '🎲 **LOTTO ANALYSIS**',
-          value: this.formatLottoAnalysis(analysis),
-          inline: false
-        }
-      );
-
-      // Add game info if available
-      if (gameData) {
-        embed.addFields({
-          name: '🏟️ **GAME INFO**',
-          value: this.formatGameInfo(gameData),
-          inline: false
-        });
-      }
-
-      // Add notes if provided
-      if (notes && notes.trim()) {
-        embed.addFields({
-          name: '📝 **NOTES**',
-          value: notes,
-          inline: false
-        });
-      }
-
-      // Add footer
-      const confidence = Math.round((analysis.confidence || 0.5) * 100);
-      embed.setFooter({
-        text: `High Risk, High Reward | Confidence: ${confidence}% | GotLockz Family`
-      });
-
-      return embed;
-    };
-  }
-
-  generateVIPDescription (betSlip, analysis) {
-    const confidence = Math.round((analysis.confidence || 0.5) * 100);
-    const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
-    const keyFactors = analysis.keyFactors || ['Analysis not available'];
-
-    return `**GotLockz Family** - Premium VIP analysis with ${confidence}% confidence level.\n\n` +
-           `This ${riskLevel} risk play has been carefully analyzed by our AI system using multiple models.\n\n` +
-           `**Key Factors:**\n${keyFactors.slice(0, 3).map(factor => `• ${factor}`).join('\n')}`;
-  }
-
-  generateFreePlayDescription (betSlip, analysis) {
-    const confidence = Math.round((analysis.confidence || 0.5) * 100);
-    const keyFactors = analysis.keyFactors || ['Analysis not available'];
-
-    return `**GotLockz Family** - Free play opportunity with ${confidence}% confidence!\n\n` +
-           'Our AI analysis suggests this could be a solid play. Remember, this is for entertainment purposes.\n\n' +
-           `**AI Insights:**\n${keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
-  }
-
-  generateLottoDescription (betSlip, analysis) {
-    const confidence = Math.round((analysis.confidence || 0.5) * 100);
-    const keyFactors = analysis.keyFactors || ['Analysis not available'];
-
-    return `**GotLockz Family** - High-risk lotto ticket with ${confidence}% confidence!\n\n` +
-           'This is a long-shot play - high risk, high reward potential.\n\n' +
-           `**Risk Factors:**\n${keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
-  }
-
-  formatBetDetails (betSlip) {
-    let details = '';
-
-    if (betSlip.legs && betSlip.legs.length > 0) {
-      details += betSlip.legs.map((leg, i) => {
-        const teamA = leg.teamA || 'Team A';
-        const teamB = leg.teamB || 'Team B';
-        const odds = leg.odds || 'N/A';
-        return `**Leg ${i + 1}:** ${teamA} vs ${teamB}\n**Odds:** ${odds}\n`;
-      }).join('\n');
-    } else {
-      details += '**No bet details available**\n';
+  formatAnalysisText(analysis, leg, gameData) {
+    // Check if we have a real AI analysis (summary field from OpenAI)
+    if (analysis?.summary && typeof analysis.summary === 'string' && analysis.summary.length > 50) {
+      return analysis.summary;
     }
 
-    if (betSlip.stake) {
-      details += `\n**Stake:** $${betSlip.stake}`;
+    // Fallback analysis text
+    const awayTeam = leg.awayTeam || 'the away team';
+    const homeTeam = leg.homeTeam || 'the home team';
+    
+    let text = `This play focuses on ${homeTeam} at home against ${awayTeam}. `;
+    
+    if (gameData?.venue) {
+      text += `The game is being played at ${gameData.venue}. `;
     }
 
-    if (betSlip.potentialWin) {
-      details += `\n**Potential Win:** $${betSlip.potentialWin}`;
+    if (gameData?.weather) {
+      text += `Weather conditions: ${gameData.weather.temperature}°F, ${gameData.weather.condition}. `;
     }
 
-    return details || 'Bet details not available';
-  }
+    text += `Based on recent performance and matchup analysis, this presents a solid opportunity. `;
+    text += `Always manage your bankroll responsibly and bet within your means.`;
 
-  formatAnalysis (analysis) {
-    const confidence = Math.round((analysis.confidence || 0.5) * 100);
-    const riskLevel = (analysis.riskLevel || 'medium').toUpperCase();
-    const modelsUsed = analysis.modelsUsed || 'AI analysis';
-
-    let formatted = `**Confidence:** ${confidence}%\n`;
-    formatted += `**Risk Level:** ${riskLevel}\n`;
-    formatted += `**AI Models Used:** ${modelsUsed}\n\n`;
-
-    if (analysis.recommendations && analysis.recommendations.length > 0) {
-      formatted += `**Recommendation:** ${analysis.recommendations[0]}\n\n`;
-    }
-
-    if (analysis.keyFactors && analysis.keyFactors.length > 0) {
-      formatted += `**Key Factors:**\n${analysis.keyFactors.slice(0, 3).map(factor => `• ${factor}`).join('\n')}`;
-    } else {
-      formatted += '**Key Factors:** Analysis factors not available';
-    }
-
-    return formatted;
-  }
-
-  formatLottoAnalysis (analysis) {
-    const confidence = Math.round((analysis.confidence || 0.5) * 100);
-    const modelsUsed = analysis.modelsUsed || 'AI analysis';
-
-    let formatted = `**Confidence:** ${confidence}%\n`;
-    formatted += '**Risk Level:** HIGH (Lotto Ticket)\n';
-    formatted += `**AI Models Used:** ${modelsUsed}\n\n`;
-
-    formatted += '**🎲 This is a high-risk, high-reward play!**\n';
-    formatted += '**💰 Only bet what you can afford to lose!**\n\n';
-
-    if (analysis.keyFactors && analysis.keyFactors.length > 0) {
-      formatted += `**Risk Factors:**\n${analysis.keyFactors.slice(0, 2).map(factor => `• ${factor}`).join('\n')}`;
-    } else {
-      formatted += '**Risk Factors:** Analysis factors not available';
-    }
-
-    return formatted;
-  }
-
-  formatGameInfo (gameData) {
-    if (!gameData) {
-      return 'Game information not available';
-    }
-
-    let info = '';
-
-    if (gameData.teams) {
-      const awayTeam = gameData.teams.away?.name || 'N/A';
-      const homeTeam = gameData.teams.home?.name || 'N/A';
-      info += `**Teams:** ${awayTeam} vs ${homeTeam}\n`;
-    }
-
-    if (gameData.venue) {
-      info += `**Venue:** ${gameData.venue}\n`;
-    }
-
-    if (gameData.weather) {
-      info += `**Weather:** ${JSON.stringify(gameData.weather)}\n`;
-    }
-
-    if (gameData.status) {
-      info += `**Status:** ${gameData.status}`;
-    }
-
-    return info || 'Game information not available';
+    return text;
   }
 }
 
 export const bettingService = new BettingService();
-export const createBettingMessage = bettingService.createBettingMessage.bind(bettingService);
+export const createBettingMessage = (channelType, betSlip, gameData, analysis, imageUrl, units) => 
+  bettingService.createBettingMessage(channelType, betSlip, gameData, analysis, imageUrl, units);
